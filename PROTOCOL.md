@@ -132,6 +132,7 @@ A workspace has:
 - **originator** — required; `user_id` of the human who caused this workspace's creation, or `"system"` for system-initiated workspaces. Propagates unconditionally through subtrees (§4.8). At injection points, the injecting human's `user_id` overrides inheritance.
 - **visibility** — list of resources this workspace can read
 - **authority** — list of resources this workspace can modify
+- **priority** — workspace priority band
 - **mounts** — list of tools available to this workspace
 
 Workspaces form a tree. The root workspace belongs to the coordinator. Child workspaces are created for each delegated unit of work. A workspace is created for a task, closed when the task completes or fails, and never reopened. If the work needs revision, a new workspace is created. Visibility is set at creation and may be expanded by the coordinator; authority is set at creation and frozen.
@@ -883,7 +884,6 @@ Complete WACP conformance including all optional features.
 | Trail lifecycle management (compaction, archival) | §9.6 |
 | Trail signing | §11.5 |
 | Cross-scope trail anchoring | §11.5 |
-| All five observability views | §9.8 |
 | Agent migration | §6.9 |
 | Graceful termination | §6.10 |
 

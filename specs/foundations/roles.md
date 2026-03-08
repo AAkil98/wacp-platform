@@ -166,7 +166,7 @@ Applications often need roles that are close to a base role but not identical. W
 
 A derived role definition has:
 - **name** — unique identifier for this role (Identity spec §2, rule 2: opaque).
-- **extends** — the base role this derives from. Must be one of: `coordinator`, `worker`, `observer`.
+- **extends** — the base role this derives from. Must be one of: `worker`, `observer`. The coordinator role is not extensible — it is a singleton assigned by the runtime at initialization, and its capability set is already the ceiling. A derived coordinator would either be a reduced coordinator (undermining orchestration) or a renamed coordinator (no functional change). Neither is meaningful.
 - **add** — capabilities granted beyond the base role.
 - **remove** — capabilities revoked from the base role.
 - **override** — properties that replace the base role's defaults.

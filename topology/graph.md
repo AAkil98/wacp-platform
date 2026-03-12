@@ -8,7 +8,7 @@ id: wacp-spec-graph
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -23,6 +23,21 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, graph, dag, decomposition-tree, task-workspace-mapping, dependencies]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Dependency Graph](#2-the-dependency-graph)
+3. [Graph Operations](#3-graph-operations)
+4. [The Decomposition Tree](#4-the-decomposition-tree)
+5. [Task Graph to Workspace Tree Mapping](#5-task-graph-to-workspace-tree-mapping)
+6. [Graph Invariants](#6-graph-invariants)
+7. [Trail Events](#7-trail-events)
+8. [Conformance Requirements](#8-conformance-requirements)
+9. [Implementation Notes](#9-implementation-notes)
+10. [References](#10-references)
 
 ---
 
@@ -284,9 +299,9 @@ The task graph does not introduce new trail event types beyond those defined in 
 | [Workspace Tree](tree.md) | §2 (structural tree), §4 (operations), §5 (subtree as a unit) | The task graph maps to the workspace tree through task-workspace binding. The two structures are structurally independent but operationally connected. |
 | [Workspace](../primitives/workspace.md) | §4 (creation, directive), §5 (workspace tree), §6 (resource management) | Workspaces are the execution containers for tasks. The task-workspace mapping connects the plan to its execution. |
 | [Identity](../foundations/identity.md) | §2 (identifier rules) | Task IDs, graph IDs, workspace IDs referenced in graph operations. |
-| [PROTOCOL.md](../../PROTOCOL.md) | §4.6 (task primitive, DAG) | Canonical task graph definition. |
+| [PROTOCOL.md](../PROTOCOL.md) | §4.6 (task primitive, DAG) | Canonical task graph definition. |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

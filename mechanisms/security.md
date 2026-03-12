@@ -8,7 +8,7 @@ id: wacp-spec-security
 type: constituent-spec
 tier: abstract
 category: mechanisms
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -28,6 +28,22 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, security, integrity, authentication, confidentiality, non-repudiation, threat-model]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Threat Model](#2-threat-model)
+3. [Identity and Authentication](#3-identity-and-authentication)
+4. [Message Integrity](#4-message-integrity)
+5. [Trail Integrity](#5-trail-integrity)
+6. [Confidentiality](#6-confidentiality)
+7. [Non-Repudiation](#7-non-repudiation)
+8. [Physical Resource Protection](#8-physical-resource-protection)
+9. [Trail Events](#9-trail-events)
+10. [Conformance Requirements](#10-conformance-requirements)
+11. [Implementation Notes](#11-implementation-notes)
 
 ---
 
@@ -422,4 +438,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

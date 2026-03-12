@@ -8,7 +8,7 @@ id: wacp-spec-causation
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -24,6 +24,22 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, causation, originator, coordinator-model, causal-tree, causal-forest, mixed-tree]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Originator Field](#2-the-originator-field)
+3. [The Causal Forest](#3-the-causal-forest)
+4. [The Coordinator Model as Topology](#4-the-coordinator-model-as-topology)
+5. [Causal Tree Operations](#5-causal-tree-operations)
+6. [Relationship to Other Topology Specs](#6-relationship-to-other-topology-specs)
+7. [Invariants](#7-invariants)
+8. [Trail Events](#8-trail-events)
+9. [Conformance Requirements](#9-conformance-requirements)
+10. [Implementation Notes](#10-implementation-notes)
+11. [References](#11-references)
 
 ---
 
@@ -229,9 +245,9 @@ Causal attribution queries — "show me everything user X caused" — are trail 
 | [User](../primitives/user.md) | §3.4 (state transitions), §3.5 (coordinator notification), §5 (originator propagation rules), §7 (coordinator model — user-side implications) | User spec defines originator rules; this spec defines causation topology |
 | [Human-Highway](../mechanisms/human-highway.md) | §2.3 (injection), §2.4 (escalation routing) | Human injection is the mechanism that sets originator to `user_id` |
 | [Identity](../foundations/identity.md) | §2 (identifier rules) | `user_id` follows identity rules |
-| [PROTOCOL.md](../../PROTOCOL.md) | §4.8 (originator, coordinator model) | Canonical definition of originator and coordinator model |
+| [PROTOCOL.md](../PROTOCOL.md) | §4.8 (originator, coordinator model) | Canonical definition of originator and coordinator model |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

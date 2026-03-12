@@ -8,7 +8,7 @@ id: wacp-spec-task
 type: constituent-spec
 tier: abstract
 category: primitives
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -22,6 +22,21 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, task, decomposition, dag, allocation, planning, work-unit]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Task Schema](#2-task-schema)
+3. [Task Graph (DAG)](#3-task-graph-dag)
+4. [Task Lifecycle](#4-task-lifecycle)
+5. [Task-Workspace Binding](#5-task-workspace-binding)
+6. [Resource Estimation and Allocation](#6-resource-estimation-and-allocation)
+7. [Decomposition](#7-decomposition)
+8. [Trail Events](#8-trail-events)
+9. [Conformance Requirements](#9-conformance-requirements)
+10. [Implementation Notes](#10-implementation-notes)
 
 ---
 
@@ -377,4 +392,4 @@ Three tiers: **Core** (minimum viable task support), **Standard** (full lifecycl
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

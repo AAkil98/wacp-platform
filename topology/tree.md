@@ -8,7 +8,7 @@ id: wacp-spec-tree
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -24,6 +24,21 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, tree, structural-tree, causal-tree, operations, invariants]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Structural Tree](#2-the-structural-tree)
+3. [The Causal Tree](#3-the-causal-tree)
+4. [Tree Operations](#4-tree-operations)
+5. [Subtree as a Unit](#5-subtree-as-a-unit)
+6. [Tree Invariants](#6-tree-invariants)
+7. [Trail Events](#7-trail-events)
+8. [Conformance Requirements](#8-conformance-requirements)
+9. [Implementation Notes](#9-implementation-notes)
+10. [References](#10-references)
 
 ---
 
@@ -336,9 +351,9 @@ The tree spec does not duplicate these events. It defines the operations that pr
 | [User](../primitives/user.md) | §3.5 (coordinator notification on state change), §4 (ownership, reparenting), §5 (originator propagation) | Ownership boundaries determine cascade scope. Originator defines the causal tree. |
 | [Identity](../foundations/identity.md) | §2 (identifier rules) | Workspace IDs, user IDs referenced in tree operations |
 | [Causation](causation.md) | §3 (causal forest), §4 (coordinator model as topology), §7 (invariants CA-4, CA-5, CA-6) | Full formalization of the causal tree introduced in §3 of this spec |
-| [PROTOCOL.md](../../PROTOCOL.md) | §4.8 (originator, coordinator model), §6.5 (workspace tree) | Canonical tree definition and coordinator model declaration |
+| [PROTOCOL.md](../PROTOCOL.md) | §4.8 (originator, coordinator model), §6.5 (workspace tree) | Canonical tree definition and coordinator model declaration |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

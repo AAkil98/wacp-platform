@@ -8,7 +8,7 @@ id: wacp-spec-trail
 type: constituent-spec
 tier: abstract
 category: primitives
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -30,6 +30,22 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, trail, audit, observability, history, integrity, storage]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Trail Entry Schema](#2-trail-entry-schema)
+3. [Scopes](#3-scopes)
+4. [Integrity Invariants](#4-integrity-invariants)
+5. [Querying](#5-querying)
+6. [Observability Views](#6-observability-views)
+7. [Storage Model](#7-storage-model)
+8. [Compaction and Retention](#8-compaction-and-retention)
+9. [Event Registry](#9-event-registry)
+10. [Conformance Requirements](#10-conformance-requirements)
+11. [Implementation Notes](#11-implementation-notes)
 
 ---
 
@@ -313,7 +329,7 @@ The event registry is the consolidated index of every trail event type defined a
 | `signal_emitted` | Signal lifecycle |
 | `signal_delivered` | Signal lifecycle |
 
-**Envelope events** (Envelope spec, §10) — 5 events:
+**Envelope events** (Envelope spec, §10) — 9 events:
 
 | Event | Category |
 |-------|----------|
@@ -322,6 +338,10 @@ The event registry is the consolidated index of every trail event type defined a
 | `envelope_rejected` | Envelope lifecycle |
 | `envelope_undeliverable` | Envelope lifecycle |
 | `envelope_redelivered` | Envelope lifecycle |
+| `port_right_created` | Port right lifecycle |
+| `port_right_transferred` | Port right lifecycle |
+| `port_right_revoked` | Port right lifecycle |
+| `port_right_consumed` | Port right lifecycle |
 
 **Checkpoint events** (Checkpoint spec, §7) — 3 events:
 
@@ -387,7 +407,7 @@ Note: `authentication_failed` is listed under User events (above) since credenti
 | `trail_access_denied` | Access control |
 | `trail_snapshot_created` | Storage lifecycle |
 
-**Total: 68 unique event types** across 11 sources (8 primitive specs + 2 mechanism specs + trail-own). The `conflict_detected` and `conflict_resolved` events appear in both Workspace and Integration specs — they are the same events, defined in Workspace §13 (where the state transition occurs) and referenced in Integration §8 (where the cause originates). The `workspace_ownership_transferred` and `workspace_reparented` events appear in both Workspace §13 and User §8 — they are workspace events triggered by ownership operations; listed under Workspace, not duplicated under User. The `authentication_failed` event appears in both User §8 and Security §9 — the User spec lists it; the Security spec defines the canonical schema. The registry counts each once.
+**Total: 72 unique event types** across 11 sources (8 primitive specs + 2 mechanism specs + trail-own). The `conflict_detected` and `conflict_resolved` events appear in both Workspace and Integration specs — they are the same events, defined in Workspace §13 (where the state transition occurs) and referenced in Integration §8 (where the cause originates). The `workspace_ownership_transferred` and `workspace_reparented` events appear in both Workspace §13 and User §8 — they are workspace events triggered by ownership operations; listed under Workspace, not duplicated under User. The `authentication_failed` event appears in both User §8 and Security §9 — the User spec lists it; the Security spec defines the canonical schema. The port right events are defined in Envelope spec §10 alongside envelope events. The registry counts each once.
 
 **Registry growth.** New event types are added only through new protocol versions or new specs. The Infrastructure, System, and Runtime tiers will add their own trail events when those specs are drafted — the registry will grow accordingly. Within a protocol version, the registry is frozen.
 
@@ -444,4 +464,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

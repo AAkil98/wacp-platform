@@ -8,7 +8,7 @@ id: wacp-spec-visibility
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -24,6 +24,23 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, visibility, information-flow, access-control, authority, directed-graph]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Visibility Graph](#2-the-visibility-graph)
+3. [Default Visibility and the Structural Tree](#3-default-visibility-and-the-structural-tree)
+4. [Dynamic Visibility Grants](#4-dynamic-visibility-grants)
+5. [Write-Access Scope (Authority)](#5-write-access-scope-authority)
+6. [Visibility Graph and Other Topologies](#6-visibility-graph-and-other-topologies)
+7. [Information Flow](#7-information-flow)
+8. [Invariants](#8-invariants)
+9. [Trail Events](#9-trail-events)
+10. [Conformance Requirements](#10-conformance-requirements)
+11. [Implementation Notes](#11-implementation-notes)
+12. [References](#12-references)
 
 ---
 
@@ -242,9 +259,9 @@ The visibility graph's full history is reconstructable from these events: start 
 | [Workspace Tree](tree.md) | §2.2 (node lifecycle), §5.2 (unit of containment), §6 (invariant T-7: containment) | Default visibility follows the structural tree; containment derived from tree structure |
 | [Communication Topology](channels.md) | §2 (port rights graph) | Port rights and visibility are independent access dimensions |
 | [Roles](../foundations/roles.md) | §3 (permission matrix), §6 (access column) | Roles determine initial visibility scope |
-| [PROTOCOL.md](../../PROTOCOL.md) | §3.4 (context is scoped), §6.8 (visibility and authority) | Canonical visibility model |
+| [PROTOCOL.md](../PROTOCOL.md) | §3.4 (context is scoped), §6.8 (visibility and authority) | Canonical visibility model |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

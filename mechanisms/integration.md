@@ -8,7 +8,7 @@ id: wacp-spec-integration
 type: constituent-spec
 tier: abstract
 category: mechanisms
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -23,6 +23,21 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, integration, merge, conflict, salvage, coordination]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Integration Process](#2-integration-process)
+3. [Merge Strategies](#3-merge-strategies)
+4. [Integration Ordering](#4-integration-ordering)
+5. [Conflict Detection](#5-conflict-detection)
+6. [Conflict Resolution](#6-conflict-resolution)
+7. [Salvage Integration](#7-salvage-integration)
+8. [Trail Events](#8-trail-events)
+9. [Conformance Requirements](#9-conformance-requirements)
+10. [Implementation Notes](#10-implementation-notes)
 
 ---
 
@@ -332,4 +347,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

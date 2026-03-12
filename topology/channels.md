@@ -8,7 +8,7 @@ id: wacp-spec-channels
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -27,6 +27,21 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, channels, port-rights, communication-graph, envelope-threads, conversation]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Port Rights Graph](#2-the-port-rights-graph)
+3. [Channels](#3-channels)
+4. [Envelope Threads](#4-envelope-threads)
+5. [Communication Topology and the Structural Tree](#5-communication-topology-and-the-structural-tree)
+6. [Invariants](#6-invariants)
+7. [Trail Events](#7-trail-events)
+8. [Conformance Requirements](#8-conformance-requirements)
+9. [Implementation Notes](#9-implementation-notes)
+10. [References](#10-references)
 
 ---
 
@@ -292,9 +307,9 @@ The port rights graph's full history is reconstructable from these trail events.
 | [Workspace Tree](tree.md) | §2 (structural tree), §4.1 (traversal) | The structural tree determines signal topology; the port rights graph is independent but initially correlated |
 | [Workspace](../primitives/workspace.md) | §4 (creation, initial rights), §6 (workspace components: inbox) | Workspaces are the nodes of the communication graph |
 | [Roles](../foundations/roles.md) | §3 (permission matrix) | The permission matrix determines the initial port rights graph |
-| [PROTOCOL.md](../../PROTOCOL.md) | §4.2 (envelope, delivery), §5.5 (permission matrix), §5.6 (port rights) | Canonical communication model definition |
+| [PROTOCOL.md](../PROTOCOL.md) | §4.2 (envelope, delivery), §5.5 (permission matrix), §5.6 (port rights) | Canonical communication model definition |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

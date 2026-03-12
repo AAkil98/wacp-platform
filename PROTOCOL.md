@@ -3,7 +3,7 @@
 ```yaml
 id: wacp-protocol
 type: protocol
-status: draft
+status: complete
 created: 2026-02-23
 revised: 2026-02-24
 authors:

@@ -8,7 +8,7 @@ id: wacp-spec-recovery
 type: constituent-spec
 tier: abstract
 category: mechanisms
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -25,6 +25,17 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, recovery, failure, degraded-mode, restart, trail-replay, resilience]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Failure Response](#2-failure-response)
+3. [The Recovery Procedure](#3-the-recovery-procedure)
+4. [Trail Events](#4-trail-events)
+5. [Conformance Requirements](#5-conformance-requirements)
+6. [Implementation Notes](#6-implementation-notes)
 
 ---
 
@@ -114,9 +125,9 @@ The protocol does not require the runtime to halt immediately on trail write fai
 
 Transport failures escalate through three levels:
 
-1. **Transient failure.** The redelivery mechanism handles transient transport failures (Transport spec, §7). Bounded retries with backoff. If the transport recovers within the retry window, delivery succeeds transparently.
+1. **Transient failure.** The redelivery mechanism handles transient transport failures (Envelope spec, §7). Bounded retries with backoff. If the transport recovers within the retry window, delivery succeeds transparently.
 
-2. **Persistent failure.** If all redelivery attempts exhaust, the runtime records `envelope_delivery_failed` and notifies the sender (Transport spec, §7.2). The coordinator decides how to respond — abort the target workspace, retry with a new workspace, or escalate.
+2. **Persistent failure.** If all redelivery attempts exhaust, the runtime records `envelope_undeliverable` and notifies the sender (Envelope spec, §7.1). The coordinator decides how to respond — abort the target workspace, retry with a new workspace, or escalate.
 
 3. **Total transport failure.** If the transport is completely unavailable (no messages can be delivered anywhere), the system is effectively frozen. Liveness warnings fire for all active workspaces as they stop producing trail entries. Timeouts eventually fail workspaces that receive no input. The coordinator, observing cascading liveness warnings and timeouts, should recognize the systemic failure pattern (§2.2) and escalate.
 
@@ -179,25 +190,24 @@ Messages that were in flight when the crash occurred — validated but not deliv
 
 | Trail state | Recovery action |
 |-------------|-----------------|
-| `envelope_created` only | Never delivered. Re-evaluate target workspace state: deliver to inbox if accepting, place in channel queue if deferring, record as `envelope_undeliverable` if rejecting (Transport spec, §2.1). |
-| `envelope_created` + `envelope_delivered`, no `acknowledged` | Delivered but not acknowledged. Resume acknowledgment timeout tracking — normal redelivery (Transport spec, §7.2) takes over if the ack does not arrive. |
+| `envelope_created` only | Never delivered. Re-evaluate target workspace state: deliver to inbox if accepting, place in channel queue if deferring, record as `envelope_undeliverable` if rejecting (Envelope spec, §4, rule 2). |
+| `envelope_created` + `envelope_delivered`, no `acknowledged` | Delivered but not acknowledged. Resume acknowledgment timeout tracking — normal redelivery (Envelope spec, §7.1) takes over if the ack does not arrive. |
 | `envelope_created` + `envelope_delivered` + `acknowledged` | Fully processed. No action. |
-| `envelope_created` + `envelope_undeliverable` | Permanently rejected. No action. |
-| `envelope_created` + `envelope_delivery_failed` | Transport exhausted. No action. |
+| `envelope_created` + `envelope_undeliverable` | Permanently rejected or transport exhausted. No action. |
 
 For envelopes in the first case (`created` only), the recovery procedure performs a fresh delivery attempt. If the envelope was partially delivered — it reached the inbox but the `envelope_delivered` trail entry was not written — the runtime checks the inbox before placement to prevent duplication. This inbox check is a recovery-specific operation; during normal operation, the write-ahead invariant ensures the trail entry precedes inbox placement, making this check unnecessary.
 
-**Signal recovery.** For each signal with a `signal_emitted` entry but no corresponding `signal_delivered` entry, the signal is placed back in the workspace's signal queue (Transport spec, §5.4). Normal signal retry (Transport spec, §7.4) begins from there.
+**Signal recovery.** For each signal with a `signal_emitted` entry but no corresponding `signal_delivered` entry, the signal is placed back in the parent workspace's signal queue (Signal spec, §3). Normal signal delivery resumes from there.
 
 Signals that represent state-changing events (`complete`, `failed`, `blocked`) are additionally processed for their workspace state effects — if the signal was emitted and recorded but its corresponding workspace state transition was not, the recovery procedure triggers that transition (§3.2, in-flight transitions).
 
 **Ordering during recovery.** Recovery redelivery respects the same ordering invariants as normal delivery:
 
 - Multiple envelopes in the same channel are redelivered in creation-timestamp order.
-- Redelivery for a channel completes before new envelopes in that channel are accepted — recovery deliveries and new deliveries are not interleaved within a channel.
-- Signals are re-queued in emission order within each workspace's signal queue.
+- Redelivery for a channel completes before new envelopes in that channel are accepted — recovery deliveries and new deliveries are not interleaved within a channel (Envelope spec, §7.2).
+- Signals are re-queued in emission order within each workspace's signal queue (Signal spec, §4).
 
-**Idempotent recovery.** The recovery procedure produces the same result regardless of how many times it is executed. A crash during recovery does not corrupt state. This is possible because recovery operates on trail data (immutable, append-only) and uses deduplication to prevent double delivery. A redelivered envelope is caught by the per-workspace deduplication set (Transport spec, §7.3). A reprocessed state-changing signal is caught by the workspace state machine (a transition that has already occurred cannot occur again). Every recovery operation is idempotent against the trail's immutable record.
+**Idempotent recovery.** The recovery procedure produces the same result regardless of how many times it is executed. A crash during recovery does not corrupt state. This is possible because recovery operates on trail data (immutable, append-only) and uses deduplication to prevent double delivery. A redelivered envelope is caught by the per-workspace deduplication set (Envelope spec, §7.3). A reprocessed state-changing signal is caught by the workspace state machine (a transition that has already occurred cannot occur again). Every recovery operation is idempotent against the trail's immutable record.
 
 ### 3.4 Timer Reconstruction
 
@@ -315,4 +325,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

@@ -8,7 +8,7 @@ id: wacp-spec-checkpoint
 type: constituent-spec
 tier: abstract
 category: primitives
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -21,6 +21,20 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, checkpoint, progress, artifact, immutability, chain]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Checkpoint Types](#2-checkpoint-types)
+3. [Schema](#3-schema)
+4. [Checkpoint Rules](#4-checkpoint-rules)
+5. [Checkpoint Chains](#5-checkpoint-chains)
+6. [Resource Tracking](#6-resource-tracking)
+7. [Trail Events](#7-trail-events)
+8. [Conformance Requirements](#8-conformance-requirements)
+9. [Implementation Notes](#9-implementation-notes)
 
 ---
 
@@ -113,7 +127,7 @@ This is the protocol's strongest immutability guarantee. Envelopes are immutable
 
 **Rule 2: Only the final checkpoint matters for integration.** When the coordinator integrates a workspace (Integration spec), it uses the most recent checkpoint with `status: final`. This checkpoint is also set as the task's `checkpoint_ref` when the task reaches `completed` status (Task spec, §2) — the task's deliverable is the workspace's final checkpoint. All provisional checkpoints are preserved in the trail for audit but are not included in the integration. If no `final` checkpoint exists when the workspace completes, normal integration cannot proceed — the coordinator may salvage a provisional checkpoint through salvage integration (Integration spec) or fail the workspace.
 
-**Rule 3: Checkpoints must be type-compatible with the role.** The runtime rejects checkpoints whose type is not permitted for the workspace's role. Which types each role may produce is defined in the permission matrix (Roles spec, §6) and extensible through the taxonomy. Base roles produce base types — workers and observers create `artifact` and `observation` checkpoints. Derived roles may produce additional types registered through the taxonomy. Enforcement happens at creation, not after the fact — an unauthorized checkpoint is never recorded.
+**Rule 3: Checkpoints must be type-compatible with the role.** The runtime rejects checkpoints whose type is not permitted for the workspace's role. Which types each role may produce is defined in the permission matrix (Roles spec, §6) and extensible through the taxonomy. Base roles produce base types — workers create `artifact` checkpoints and observers create `observation` checkpoints. Derived roles may produce additional types registered through the taxonomy. Enforcement happens at creation, not after the fact — an unauthorized checkpoint is never recorded.
 
 **Rule 4: Confidence is information, not a gate.** A checkpoint with `confidence: low` is a valid checkpoint. The protocol does not block it, delay it, or treat it differently from a `confidence: high` checkpoint. But the coordinator can read confidence levels across all workspaces and use them to decide whether to proceed, request revision, or reassign. Low confidence is a signal from the agent that says "I have reservations" — the coordinator decides what to do with that information.
 
@@ -233,4 +247,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

@@ -8,7 +8,7 @@ id: wacp-spec-signal
 type: constituent-spec
 tier: abstract
 category: primitives
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -66,8 +66,8 @@ Eleven signals, four categories. Each signal has a defined emitter set (Roles sp
 
 | Signal | Emitter | Meaning | State effect |
 |--------|---------|---------|--------------|
-| `blocked` | Any agent | Cannot continue, reason attached | Triggers `active` → `blocked` |
-| `checkpoint` | Any agent | New checkpoint available for reading | None (stays `active`) |
+| `blocked` | Worker (and derived roles) | Cannot continue, reason attached | Triggers `active` → `blocked` |
+| `checkpoint` | Worker (and derived roles) | New checkpoint available for reading | None (stays `active`) |
 | `integrate` | Coordinator | Merge operation initiated | Marks integration start |
 | `acknowledged` | Runtime | Envelope received by target | None (delivery confirmation) |
 | `suspend` | Coordinator | Workspace paused to reclaim resources or reprioritize | Triggers → `suspended` (Workspace spec §3) |
@@ -281,4 +281,4 @@ These notes are non-normative. They capture practical guidance for implementers.
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

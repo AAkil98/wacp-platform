@@ -8,7 +8,7 @@ id: wacp-spec-human-highway
 type: constituent-spec
 tier: abstract
 category: mechanisms
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -26,6 +26,22 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, human-highway, supervisory-control, gates, injection, escalation, autonomy]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [The Four Capabilities](#2-the-four-capabilities)
+3. [Gate Schema and Mechanics](#3-gate-schema-and-mechanics)
+4. [Task Approval Gate](#4-task-approval-gate)
+5. [Autonomy Spectrum](#5-autonomy-spectrum)
+6. [Edge Cases and Invariants](#6-edge-cases-and-invariants)
+7. [Interface Boundary](#7-interface-boundary)
+8. [Trail Events](#8-trail-events)
+9. [Conformance Requirements](#9-conformance-requirements)
+10. [Implementation Notes](#10-implementation-notes)
+11. [References](#11-references)
 
 ---
 
@@ -518,4 +534,4 @@ This spec depends on seven WACP specs. Cross-references are inline throughout; t
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

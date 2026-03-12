@@ -8,7 +8,7 @@ id: wacp-spec-ownership
 type: constituent-spec
 tier: abstract
 category: topology
-status: draft
+status: complete
 created: 2026-02-24
 lineage: PROTOCOL.md (wacp-v0.1)
 protocol_sections:
@@ -24,6 +24,22 @@ authors:
   - Claude Opus 4.6 (co-author)
 tags: [wacp, topology, ownership, domains, partition, failure-boundary, transfer, escalation-routing]
 ```
+
+---
+
+## Table of Contents
+
+1. [Purpose](#1-purpose)
+2. [Ownership as a Partition](#2-ownership-as-a-partition)
+3. [Domain Structure](#3-domain-structure)
+4. [Transfer](#4-transfer)
+5. [Failure Cascade and Ownership](#5-failure-cascade-and-ownership)
+6. [Escalation Routing](#6-escalation-routing)
+7. [Invariants](#7-invariants)
+8. [Trail Events](#8-trail-events)
+9. [Conformance Requirements](#9-conformance-requirements)
+10. [Implementation Notes](#10-implementation-notes)
+11. [References](#11-references)
 
 ---
 
@@ -237,9 +253,9 @@ Ownership operations produce events defined in other specs:
 | [Workspace](../primitives/workspace.md) | §4 (creation, owner field), §5 (tree, ownership-bounded cascade), §13 (trail events) | Workspaces carry the owner field |
 | [User](../primitives/user.md) | §3.1 (user states — affects escalation delivery), §4 (ownership rules, reparenting, transfer), §4.5 (transfer constraints and trail event) | User spec defines ownership rules; this spec defines ownership topology |
 | [Human-Highway](../mechanisms/human-highway.md) | §2.4 (escalation routing) | Escalation routing follows ownership |
-| [PROTOCOL.md](../../PROTOCOL.md) | §4.8 (ownership rules), §6.5 (ownership-bounded cascade) | Canonical ownership definition |
+| [PROTOCOL.md](../PROTOCOL.md) | §4.8 (ownership rules), §6.5 (ownership-bounded cascade) | Canonical ownership definition |
 
 ---
 
 *WACP constituent specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../../TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](../PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../TAXONOMY.md)*

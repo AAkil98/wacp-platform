@@ -31,7 +31,7 @@ tags: [coordination, multi-agent, protocol]
 
 ## 1. Scope and Purpose
 
-WACP (Workspace Agent Coordination Protocol) defines the rules by which autonomous agents coordinate work. It is a coordination protocol — it specifies what agents say, how they communicate, and the structures they operate within. It does not specify how the underlying system schedules, allocates, or manages resources; that is the domain of the operating system layer.
+WACP (Workspace Agent Coordination Protocol) defines the rules by which autonomous agents coordinate work. It is a coordination protocol — it specifies what agents say, how they communicate, and the structures they operate within. It does not specify how the underlying system schedules, allocates, or manages resources; that is the domain of the runtime layer.
 
 The protocol answers five questions:
 
@@ -41,7 +41,7 @@ The protocol answers five questions:
 4. **How is work organized?** — Tasks: units of work forming dependency graphs.
 5. **What happened?** — The trail: an append-only audit log.
 
-WACP is deliberately silent on execution. It does not define how inference is scheduled, how context is managed, or how physical resources are consumed. It defines the coordination surface — the contracts between agents, between agents and the coordinator, and between all parties and the audit record. An operating system implements these contracts; the protocol only specifies them.
+WACP is deliberately silent on execution. It does not define how inference is scheduled, how context is managed, or how physical resources are consumed. It defines the coordination surface — the contracts between agents, between agents and the coordinator, and between all parties and the audit record. The runtime implements these contracts; the protocol only specifies them.
 
 ---
 
@@ -761,7 +761,7 @@ The protocol's coordination mechanisms — roles, permissions, visibility, autho
 
 ### 11.1 Trust Root
 
-The runtime is the trust root. The runtime delivers envelopes, enforces the permission matrix, manages workspace lifecycles, writes trail entries, and enforces budgets. The protocol assumes the runtime is correct and uncompromised — the same trust model as an operating system kernel. If the runtime is compromised, all guarantees collapse. Defending against a compromised runtime is out of scope.
+The runtime is the trust root. The runtime delivers envelopes, enforces the permission matrix, manages workspace lifecycles, writes trail entries, and enforces budgets. The protocol assumes the runtime is correct and uncompromised — similar to a kernel trust model. If the runtime is compromised, all guarantees collapse. Defending against a compromised runtime is out of scope.
 
 ### 11.2 Threat Actors
 

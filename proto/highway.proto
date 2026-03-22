@@ -1,0 +1,190 @@
+syntax = "proto3";
+package wacp.v1;
+
+import "primitives.proto";
+
+// Highway-facing gRPC service. Multiple simultaneous human connections.
+service HighwayService {
+    // --- Connection lifecycle ---
+
+    // Authenticate a human user.
+    rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
+
+    // --- Actions (unary) ---
+
+    // Inject an envelope into any workspace.
+    rpc InjectEnvelope(InjectEnvelopeRequest) returns (InjectEnvelopeResponse);
+
+    // Respond to a gate event (approve, reject, modify).
+    rpc RespondToGate(GateResponse) returns (GateResponseAck);
+
+    // Respond to an escalation.
+    rpc RespondToEscalation(EscalationResponse) returns (EscalationResponseAck);
+
+    // Query the global trail.
+    rpc QueryTrail(HighwayQueryTrailRequest) returns (QueryTrailResponse);
+
+    // Read a workspace's current state.
+    rpc GetWorkspace(GetWorkspaceRequest) returns (WorkspaceView);
+
+    // Read the task graph.
+    rpc GetTaskGraph(GetTaskGraphRequest) returns (TaskGraphView);
+
+    // Read a checkpoint's payload.
+    rpc GetCheckpoint(GetCheckpointRequest) returns (CheckpointView);
+
+    // --- Observations (server-streaming) ---
+
+    // Stream trail entries in real time.
+    rpc StreamTrail(StreamTrailRequest) returns (stream TrailEntry);
+
+    // Stream gate events as they occur.
+    rpc StreamGates(StreamGatesRequest) returns (stream GateEvent);
+
+    // Stream escalation events.
+    rpc StreamEscalations(StreamEscalationsRequest) returns (stream EscalationEvent);
+
+    // Stream workspace state changes.
+    rpc StreamWorkspaceChanges(StreamWorkspaceChangesRequest) returns (stream WorkspaceStateChange);
+}
+
+// --- Request/Response messages ---
+
+message AuthenticateRequest {
+    string auth_token = 1;
+}
+
+message AuthenticateResponse {
+    string user_id = 1;
+    repeated string capabilities = 2;
+}
+
+message InjectEnvelopeRequest {
+    string to_workspace = 1;
+    string type = 2;
+    bytes payload = 3;
+    EnvelopePriority priority = 4;
+    string client_request_id = 5;
+}
+
+message InjectEnvelopeResponse {
+    string envelope_id = 1;
+    Timestamp timestamp = 2;
+    string client_request_id = 3;
+}
+
+message GateEvent {
+    string gate_id = 1;
+    GateType type = 2;
+    bytes subject = 3;         // the full object awaiting approval (serialized)
+    string workspace_id = 4;
+    string task_id = 5;
+    uint64 timeout_ms = 6;
+    string fallback_action = 7;
+    Timestamp created_at = 8;
+}
+
+message GateResponse {
+    string gate_id = 1;
+    GateDecision decision = 2;
+    bytes modifications = 3;   // for MODIFY: the altered fields
+    string client_request_id = 4;
+}
+
+message GateResponseAck {
+    string gate_id = 1;
+    bool applied = 2;          // false if gate already resolved
+    string client_request_id = 3;
+}
+
+message EscalationEvent {
+    string escalation_id = 1;
+    string workspace_id = 2;
+    string owner = 3;          // user_id of workspace owner
+    bytes context = 4;
+    Timestamp created_at = 5;
+}
+
+message EscalationResponse {
+    string escalation_id = 1;
+    oneof action {
+        Envelope feedback = 2;
+        bool abort = 3;
+        bool delegate_to_coordinator = 4;
+    }
+    string client_request_id = 5;
+}
+
+message EscalationResponseAck {
+    string escalation_id = 1;
+    bool applied = 2;
+    string client_request_id = 3;
+}
+
+message HighwayQueryTrailRequest {
+    string workspace_id = 1;   // empty for global trail
+    string event_type = 2;
+    string actor = 3;
+    Timestamp from = 4;
+    Timestamp to = 5;
+    uint32 limit = 6;
+    string client_request_id = 7;
+}
+
+message GetWorkspaceRequest {
+    string workspace_id = 1;
+}
+
+message WorkspaceView {
+    string id = 1;
+    WorkspaceState state = 2;
+    string role = 3;
+    string parent = 4;
+    string owner = 5;
+    string originator = 6;
+    string task_id = 7;
+    ResourceUsage current_usage = 8;
+    ResourceBudget budget = 9;
+    uint32 checkpoint_count = 10;
+    Timestamp created_at = 11;
+    Timestamp last_activity = 12;
+}
+
+message GetTaskGraphRequest {}
+
+message TaskGraphView {
+    repeated Task tasks = 1;
+}
+
+message GetCheckpointRequest {
+    string checkpoint_id = 1;
+}
+
+message CheckpointView {
+    Checkpoint metadata = 1;
+    bytes payload = 2;
+}
+
+message StreamTrailRequest {
+    string workspace_id = 1;   // empty for global trail
+    string event_type = 2;     // empty for all types
+    bool from_beginning = 3;   // true = replay history then stream live
+}
+
+message StreamGatesRequest {}
+
+message StreamEscalationsRequest {
+    string user_id = 1;        // empty for all escalations the user owns
+}
+
+message StreamWorkspaceChangesRequest {
+    string workspace_id = 1;   // empty for all workspaces
+}
+
+message WorkspaceStateChange {
+    string workspace_id = 1;
+    WorkspaceState previous = 2;
+    WorkspaceState current = 3;
+    string trigger = 4;
+    Timestamp timestamp = 5;
+}

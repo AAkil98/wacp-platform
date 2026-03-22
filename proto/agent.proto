@@ -1,0 +1,125 @@
+syntax = "proto3";
+package wacp.v1;
+
+import "primitives.proto";
+
+// Agent-facing gRPC service. One connection per workspace.
+service AgentService {
+    // --- Connection lifecycle ---
+
+    // Bind to a workspace. Called once after connection.
+    rpc Bind(BindRequest) returns (BindResponse);
+
+    // --- Actions (unary) ---
+
+    // Send an envelope to another workspace.
+    rpc SendEnvelope(SendEnvelopeRequest) returns (SendEnvelopeResponse);
+
+    // Emit a signal declaring a state change.
+    rpc EmitSignal(EmitSignalRequest) returns (EmitSignalResponse);
+
+    // Create a checkpoint recording progress.
+    rpc CreateCheckpoint(CreateCheckpointRequest) returns (CreateCheckpointResponse);
+
+    // Query the local trail.
+    rpc QueryTrail(QueryTrailRequest) returns (QueryTrailResponse);
+
+    // Read a resource within the visibility set.
+    rpc ReadResource(ReadResourceRequest) returns (ReadResourceResponse);
+
+    // --- Observations (server-streaming) ---
+
+    // Receive envelopes as they arrive in the inbox.
+    rpc ReceiveEnvelopes(ReceiveEnvelopesRequest) returns (stream Envelope);
+
+    // Receive coordinator commands (feedback, visibility grants).
+    rpc ReceiveCommands(ReceiveCommandsRequest) returns (stream Command);
+}
+
+// --- Request/Response messages ---
+
+message BindRequest {
+    string workspace_id = 1;
+    string auth_token = 2;
+    string client_request_id = 3;
+}
+
+message BindResponse {
+    string workspace_id = 1;
+    WorkspaceState state = 2;
+    string role = 3;           // effective role name
+    Envelope directive = 4;    // the task assignment
+    bytes context = 5;         // read-only info from coordinator
+    repeated string visibility = 6;
+    repeated string authority = 7;
+    ResourceBudget budget = 8;
+}
+
+message SendEnvelopeRequest {
+    string to_workspace = 1;
+    string type = 2;
+    bytes payload = 3;
+    string in_reply_to = 4;
+    EnvelopePriority priority = 5;
+    string client_request_id = 6;
+}
+
+message SendEnvelopeResponse {
+    string envelope_id = 1;    // runtime-assigned
+    Timestamp timestamp = 2;
+    string client_request_id = 3;
+}
+
+message EmitSignalRequest {
+    SignalType type = 1;
+    string reason = 2;         // required for BLOCKED and FAILED
+    bytes context = 3;         // required for ESCALATION
+    string client_request_id = 4;
+}
+
+message EmitSignalResponse {
+    Timestamp timestamp = 1;
+    string client_request_id = 2;
+}
+
+message CreateCheckpointRequest {
+    string type = 1;           // "artifact", "observation", or taxonomy-registered
+    bytes payload = 2;
+    string intent = 3;
+    CheckpointStatus status = 4;
+    Confidence confidence = 5;
+    ResourceUsage resource_usage = 6;
+    string client_request_id = 7;
+}
+
+message CreateCheckpointResponse {
+    string checkpoint_id = 1;  // runtime-assigned
+    string content_hash = 2;   // SHA-256 of payload
+    Timestamp timestamp = 3;
+    string client_request_id = 4;
+}
+
+message QueryTrailRequest {
+    string workspace_id = 1;   // must be within visibility set, or own workspace
+    string event_type = 2;     // filter by event type (empty = all)
+    Timestamp from = 3;
+    Timestamp to = 4;
+    uint32 limit = 5;          // max entries to return (0 = default 100)
+    string client_request_id = 6;
+}
+
+// QueryTrailResponse is in primitives.proto (shared with highway)
+
+message ReadResourceRequest {
+    string resource_id = 1;    // must be within visibility set
+    string client_request_id = 2;
+}
+
+message ReadResourceResponse {
+    bytes content = 1;
+    string client_request_id = 2;
+}
+
+message ReceiveEnvelopesRequest {}
+
+message ReceiveCommandsRequest {}

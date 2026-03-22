@@ -1,0 +1,223 @@
+syntax = "proto3";
+package wacp.v1;
+
+// --- Enums (closed sets, per PROTOCOL.md §12.5) ---
+
+enum SignalType {
+    SIGNAL_TYPE_UNSPECIFIED = 0;
+    SIGNAL_TYPE_READY = 1;
+    SIGNAL_TYPE_STARTED = 2;
+    SIGNAL_TYPE_BLOCKED = 3;
+    SIGNAL_TYPE_CHECKPOINT = 4;
+    SIGNAL_TYPE_COMPLETE = 5;
+    SIGNAL_TYPE_FAILED = 6;
+    SIGNAL_TYPE_INTEGRATE = 7;
+    SIGNAL_TYPE_ACKNOWLEDGED = 8;
+    SIGNAL_TYPE_ESCALATION = 9;
+    SIGNAL_TYPE_SUSPEND = 10;
+    SIGNAL_TYPE_MIGRATE = 11;
+}
+
+enum WorkspaceState {
+    WORKSPACE_STATE_UNSPECIFIED = 0;
+    WORKSPACE_STATE_IDLE = 1;
+    WORKSPACE_STATE_ACTIVE = 2;
+    WORKSPACE_STATE_BLOCKED = 3;
+    WORKSPACE_STATE_SUSPENDED = 4;
+    WORKSPACE_STATE_MIGRATING = 5;
+    WORKSPACE_STATE_INTEGRATING = 6;
+    WORKSPACE_STATE_CONFLICTED = 7;
+    WORKSPACE_STATE_CLOSED = 8;
+    WORKSPACE_STATE_FAILED = 9;
+}
+
+enum EnvelopeState {
+    ENVELOPE_STATE_UNSPECIFIED = 0;
+    ENVELOPE_STATE_CREATED = 1;
+    ENVELOPE_STATE_VALIDATED = 2;
+    ENVELOPE_STATE_DELIVERED = 3;
+    ENVELOPE_STATE_ACKNOWLEDGED = 4;
+    ENVELOPE_STATE_REJECTED = 5;
+}
+
+enum TaskStatus {
+    TASK_STATUS_UNSPECIFIED = 0;
+    TASK_STATUS_DRAFT = 1;
+    TASK_STATUS_PENDING = 2;
+    TASK_STATUS_ASSIGNED = 3;
+    TASK_STATUS_IN_PROGRESS = 4;
+    TASK_STATUS_COMPLETED = 5;
+    TASK_STATUS_FAILED = 6;
+    TASK_STATUS_INTEGRATED = 7;
+    TASK_STATUS_CANCELLED = 8;
+}
+
+enum CheckpointStatus {
+    CHECKPOINT_STATUS_UNSPECIFIED = 0;
+    CHECKPOINT_STATUS_PROVISIONAL = 1;
+    CHECKPOINT_STATUS_FINAL = 2;
+}
+
+enum Confidence {
+    CONFIDENCE_UNSPECIFIED = 0;
+    CONFIDENCE_HIGH = 1;
+    CONFIDENCE_MEDIUM = 2;
+    CONFIDENCE_LOW = 3;
+}
+
+enum EnvelopePriority {
+    ENVELOPE_PRIORITY_UNSPECIFIED = 0;
+    ENVELOPE_PRIORITY_NORMAL = 1;
+    ENVELOPE_PRIORITY_URGENT = 2;
+    ENVELOPE_PRIORITY_BLOCKING = 3;
+}
+
+enum EnvelopeOrigin {
+    ENVELOPE_ORIGIN_UNSPECIFIED = 0;
+    ENVELOPE_ORIGIN_AGENT = 1;
+    ENVELOPE_ORIGIN_HUMAN = 2;
+}
+
+enum ErrorCategory {
+    ERROR_CATEGORY_UNSPECIFIED = 0;
+    ERROR_CATEGORY_PERMISSION_DENIED = 1;
+    ERROR_CATEGORY_ILLEGAL_TRANSITION = 2;
+    ERROR_CATEGORY_VALIDATION_FAILED = 3;
+    ERROR_CATEGORY_BUDGET_EXCEEDED = 4;
+    ERROR_CATEGORY_TIMEOUT = 5;
+    ERROR_CATEGORY_NOT_FOUND = 6;
+    ERROR_CATEGORY_DELIVERY_FAILED = 7;
+    ERROR_CATEGORY_INTERNAL = 8;
+}
+
+enum GateType {
+    GATE_TYPE_UNSPECIFIED = 0;
+    GATE_TYPE_TASK_APPROVAL = 1;
+    GATE_TYPE_WORKSPACE_CREATE = 2;
+    GATE_TYPE_ENVELOPE_DELIVERY = 3;
+    GATE_TYPE_INTEGRATION = 4;
+    GATE_TYPE_CONFLICT_RESOLUTION = 5;
+    GATE_TYPE_WORKSPACE_ABORT = 6;
+}
+
+enum GateDecision {
+    GATE_DECISION_UNSPECIFIED = 0;
+    GATE_DECISION_APPROVE = 1;
+    GATE_DECISION_REJECT = 2;
+    GATE_DECISION_MODIFY = 3;
+}
+
+// --- Core messages ---
+
+message Timestamp {
+    uint64 physical_us = 1;    // microseconds since Unix epoch
+    uint32 logical = 2;        // logical counter (16-bit range, stored as uint32)
+}
+
+message Envelope {
+    string id = 1;             // runtime-assigned
+    string from_workspace = 2;
+    string to_workspace = 3;
+    string type = 4;           // open set: "directive", "feedback", "query", or taxonomy-registered
+    bytes payload = 5;
+    string in_reply_to = 6;    // envelope id, empty if unsolicited
+    Timestamp timestamp = 7;   // runtime-assigned
+    EnvelopePriority priority = 8;
+    EnvelopeOrigin origin = 9; // runtime-assigned, immutable
+}
+
+message Signal {
+    SignalType type = 1;
+    string workspace_id = 2;
+    Timestamp timestamp = 3;   // runtime-assigned
+    string reason = 4;         // for BLOCKED and FAILED
+    bytes context = 5;         // for ESCALATION
+}
+
+message Checkpoint {
+    string id = 1;             // runtime-assigned
+    string workspace_id = 2;
+    string type = 3;           // open set: "artifact", "observation", or taxonomy-registered
+    bytes payload = 4;         // content or reference to content-addressed blob
+    string content_hash = 5;   // SHA-256 hex of payload
+    string intent = 6;
+    string parent_checkpoint = 7; // checkpoint id, empty for first
+    CheckpointStatus status = 8;
+    Confidence confidence = 9;
+    Timestamp timestamp = 10;  // runtime-assigned
+    ResourceUsage resource_usage = 11;
+}
+
+message Task {
+    string id = 1;             // runtime-assigned
+    string name = 2;
+    string description = 3;
+    repeated string depends_on = 4;
+    string parent_task = 5;    // empty for root tasks
+    TaskStatus status = 6;
+    string workspace_ref = 7;
+    repeated string workspace_history = 8;
+    string checkpoint_ref = 9;
+}
+
+message TrailEntry {
+    string id = 1;             // runtime-assigned
+    Timestamp timestamp = 2;
+    string workspace_id = 3;   // empty for system-level events
+    string actor = 4;          // role name, "protocol", or user_id
+    string event_type = 5;
+    bytes body = 6;            // type-specific payload
+    uint64 sequence_number = 7; // global sequence
+    bytes chain_hash = 8;      // SHA-256 hash chain link
+}
+
+message ResourceUsage {
+    uint64 tokens = 1;
+    uint64 wall_time_ms = 2;
+    uint64 storage_bytes = 3;
+    uint64 network_bytes = 4;
+    uint64 cost_micros = 5;    // cost in microdollars
+}
+
+message ResourceBudget {
+    uint64 max_tokens = 1;
+    uint64 max_wall_time_ms = 2;
+    uint64 max_storage_bytes = 3;
+    uint64 max_network_bytes = 4;
+    uint64 max_cost_micros = 5;
+    float warning_threshold = 6; // 0.0–1.0, default 0.8
+}
+
+message QueryTrailResponse {
+    repeated TrailEntry entries = 1;
+    bool has_more = 2;
+    string client_request_id = 3;
+}
+
+message ProtocolError {
+    ErrorCategory category = 1;
+    string rule = 2;           // protocol section reference (e.g., "§5.5")
+    string message = 3;        // human-readable explanation
+    string request_id = 4;     // echoed client_request_id
+}
+
+message Command {
+    oneof command {
+        Envelope feedback = 1;
+        VisibilityGrant visibility_grant = 2;
+        GracefulTermination graceful_termination = 3;
+        BudgetUpdate budget_update = 4;
+    }
+}
+
+message VisibilityGrant {
+    repeated string resource_ids = 1;
+}
+
+message GracefulTermination {
+    uint64 grace_period_ms = 1;
+}
+
+message BudgetUpdate {
+    ResourceBudget new_budget = 1;
+}

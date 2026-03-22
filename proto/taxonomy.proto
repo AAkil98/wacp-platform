@@ -1,0 +1,32 @@
+syntax = "proto3";
+package wacp.v1;
+
+// Taxonomy configuration messages.
+// Not a runtime service — used for serialization of taxonomy definitions.
+
+message TaxonomyDefinition {
+    string id = 1;
+    string version = 2;
+    string protocol_version = 3;
+    repeated RoleDefinition roles = 4;
+    repeated EnvelopeTypeDefinition envelope_types = 5;
+    repeated CheckpointTypeDefinition checkpoint_types = 6;
+}
+
+message RoleDefinition {
+    string name = 1;
+    string extends = 2;        // base role name (coordinator, worker, or observer)
+    repeated string add_capabilities = 3;
+    repeated string remove_capabilities = 4;
+}
+
+message EnvelopeTypeDefinition {
+    string name = 1;
+    repeated string sender_roles = 2;
+    repeated string receiver_roles = 3;
+}
+
+message CheckpointTypeDefinition {
+    string name = 1;
+    repeated string allowed_roles = 2;
+}

@@ -1,0 +1,20 @@
+[package]
+name = "wacp-transport"
+description = "WACP — Transport abstraction"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[build-dependencies]
+tonic-build = "0.13"

@@ -1,0 +1,346 @@
+use std::fs;
+use std::net::SocketAddr;
+
+use tokio::sync::mpsc;
+use wacp_coordinator::Coordinator;
+use wacp_permissions::PermissionEngine;
+use wacp_recovery::RecoveryEngine;
+use wacp_taxonomy::Taxonomy;
+use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
+use wacp_transport::{start_grpc_server, GrpcServerConfig};
+use wacp_types::*;
+use wacp_workspace::WorkspaceEvent;
+
+use crate::config::RuntimeConfig;
+
+/// Errors during runtime initialization.
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeError {
+    #[error("taxonomy error: {0}")]
+    Taxonomy(String),
+    #[error("storage error: {0}")]
+    Storage(String),
+    #[error("recovery error: {0}")]
+    Recovery(String),
+    #[error("transport error: {0}")]
+    Transport(String),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// The initialized runtime — owns all components.
+pub struct Runtime {
+    pub config: RuntimeConfig,
+    pub coordinator: Coordinator,
+    pub taxonomy: Taxonomy,
+    pub permissions: PermissionEngine,
+    pub event_rx: mpsc::Receiver<WorkspaceEvent>,
+    pub agent_request_rx: Option<mpsc::Receiver<wacp_transport::AgentRequest>>,
+    pub highway_request_rx: Option<mpsc::Receiver<wacp_transport::HighwayRequest>>,
+}
+
+impl Runtime {
+    /// Full initialization sequence — production mode with filesystem storage and gRPC.
+    pub async fn init(config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        // 1. Create data directories.
+        fs::create_dir_all(config.data_dir.join("trail"))?;
+        fs::create_dir_all(config.data_dir.join("checkpoints"))?;
+        fs::create_dir_all(config.data_dir.join("snapshots"))?;
+
+        // 2. Load taxonomy.
+        let taxonomy = Self::load_taxonomy(&config)?;
+
+        // 3. Open trail storage with crash recovery.
+        let trail = FileTrailStorage::recover(FileTrailConfig {
+            dir: config.data_dir.join("trail"),
+            max_segment_size: config.max_segment_size,
+        })
+        .map_err(|e| RuntimeError::Storage(e.to_string()))?;
+
+        // 4. Run recovery — reconstruct state from trail.
+        let recovered = RecoveryEngine::recover(&trail)
+            .map_err(|e| RuntimeError::Recovery(e.to_string()))?;
+
+        eprintln!(
+            "recovery: {} workspaces, {} tasks, {} in-flight envelopes, last_seq={}",
+            recovered.workspace_states.len(),
+            recovered.task_statuses.len(),
+            recovered.in_flight_envelopes.len(),
+            recovered.last_sequence,
+        );
+
+        // 5. Build permission engine from taxonomy.
+        let permissions = PermissionEngine::new(&taxonomy);
+
+        // 6. Create coordinator.
+        let root_id = WorkspaceId::from("ws-root");
+        let owner = UserId::from("system");
+        let (event_tx, event_rx) = mpsc::channel(256);
+        let coordinator = Coordinator::new(root_id, owner, event_tx);
+
+        // 7. Start gRPC server on configured ports.
+        let grpc_handles = start_grpc_server(GrpcServerConfig {
+            agent_addr: SocketAddr::from(([0, 0, 0, 0], config.agent_port)),
+            highway_addr: SocketAddr::from(([0, 0, 0, 0], config.highway_port)),
+        })
+        .await
+        .map_err(|e| RuntimeError::Transport(e.to_string()))?;
+
+        eprintln!(
+            "gRPC: agent service on :{}, highway service on :{}",
+            config.agent_port, config.highway_port
+        );
+
+        Ok(Runtime {
+            config,
+            coordinator,
+            taxonomy,
+            permissions,
+            event_rx,
+            agent_request_rx: Some(grpc_handles.agent_request_rx),
+            highway_request_rx: Some(grpc_handles.highway_request_rx),
+        })
+    }
+
+    /// Initialize with in-memory storage for testing (no gRPC, no filesystem).
+    pub fn init_in_memory(config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        let taxonomy = Self::load_taxonomy(&config)?;
+
+        let trail = InMemoryTrailStorage::new();
+        let _recovered = RecoveryEngine::recover(&trail)
+            .map_err(|e| RuntimeError::Recovery(e.to_string()))?;
+
+        let permissions = PermissionEngine::new(&taxonomy);
+
+        let root_id = WorkspaceId::from("ws-root");
+        let owner = UserId::from("system");
+        let (event_tx, event_rx) = mpsc::channel(256);
+        let coordinator = Coordinator::new(root_id, owner, event_tx);
+
+        Ok(Runtime {
+            config,
+            coordinator,
+            taxonomy,
+            permissions,
+            event_rx,
+            agent_request_rx: None,
+            highway_request_rx: None,
+        })
+    }
+
+    /// Run the coordinator event processing loop until shutdown.
+    pub async fn run(&mut self) {
+        eprintln!("wacp-runtime: entering event loop");
+
+        loop {
+            tokio::select! {
+                biased;
+
+                // Process workspace events (signals, state changes, terminations).
+                Some(event) = self.event_rx.recv() => {
+                    self.coordinator.handle_event(&event);
+                }
+
+                // Process gRPC agent requests if server is running.
+                Some(req) = async {
+                    if let Some(ref mut rx) = self.agent_request_rx {
+                        rx.recv().await
+                    } else {
+                        std::future::pending().await
+                    }
+                } => {
+                    self.handle_agent_request(req).await;
+                }
+
+                // Process gRPC highway requests if server is running.
+                Some(req) = async {
+                    if let Some(ref mut rx) = self.highway_request_rx {
+                        rx.recv().await
+                    } else {
+                        std::future::pending().await
+                    }
+                } => {
+                    self.handle_highway_request(req).await;
+                }
+
+                // Shutdown signal.
+                _ = tokio::signal::ctrl_c() => {
+                    eprintln!("wacp-runtime: received shutdown signal");
+                    break;
+                }
+            }
+        }
+
+        self.shutdown().await;
+    }
+
+    /// Graceful shutdown — abort all active workspaces, wait for termination.
+    pub async fn shutdown(&mut self) {
+        eprintln!("wacp-runtime: shutting down...");
+
+        let active: Vec<WorkspaceId> = self
+            .coordinator
+            .tree
+            .active_workspaces()
+            .into_iter()
+            .filter(|id| id.as_ref() != "ws-root")
+            .cloned()
+            .collect();
+
+        for ws_id in &active {
+            self.coordinator.abort_workspace(ws_id).await;
+        }
+
+        // Drain remaining events.
+        while let Ok(event) =
+            tokio::time::timeout(std::time::Duration::from_millis(500), self.event_rx.recv()).await
+        {
+            if let Some(e) = event {
+                self.coordinator.handle_event(&e);
+            } else {
+                break;
+            }
+        }
+
+        eprintln!("wacp-runtime: shutdown complete");
+    }
+
+    /// Handle an agent gRPC request by forwarding to the coordinator.
+    async fn handle_agent_request(&mut self, req: wacp_transport::AgentRequest) {
+        use wacp_transport::AgentRequest;
+
+        match req {
+            AgentRequest::Bind { request, reply } => {
+                // Bind: look up workspace, return its state.
+                let ws_id = WorkspaceId::from(request.workspace_id.as_str());
+                if let Some(node) = self.coordinator.tree.get(&ws_id) {
+                    let response = wacp_transport::wacp_v1::BindResponse {
+                        workspace_id: ws_id.to_string(),
+                        state: node.status as i32,
+                        role: String::new(),
+                        directive: None,
+                        context: vec![],
+                        visibility: vec![],
+                        authority: vec![],
+                        budget: None,
+                    };
+                    let _ = reply.send(Ok(response));
+                } else {
+                    let _ = reply.send(Err(tonic::Status::not_found("workspace not found")));
+                }
+            }
+            AgentRequest::EmitSignal {
+                workspace_id: _,
+                request,
+                reply,
+            } => {
+                let response = wacp_transport::wacp_v1::EmitSignalResponse {
+                    timestamp: None,
+                    client_request_id: request.client_request_id,
+                };
+                let _ = reply.send(Ok(response));
+            }
+            AgentRequest::SendEnvelope { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::unimplemented(
+                    "envelope routing via gRPC pending full wiring",
+                )));
+            }
+            AgentRequest::CreateCheckpoint { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::unimplemented(
+                    "checkpoint creation via gRPC pending full wiring",
+                )));
+            }
+            AgentRequest::QueryTrail { reply, .. } => {
+                let response = wacp_transport::wacp_v1::QueryTrailResponse {
+                    entries: vec![],
+                    has_more: false,
+                    client_request_id: String::new(),
+                };
+                let _ = reply.send(Ok(response));
+            }
+            AgentRequest::SubscribeEnvelopes { .. } => {}
+            AgentRequest::SubscribeCommands { .. } => {}
+        }
+    }
+
+    /// Handle a highway gRPC request.
+    async fn handle_highway_request(&mut self, req: wacp_transport::HighwayRequest) {
+        use wacp_transport::HighwayRequest;
+
+        match req {
+            HighwayRequest::Authenticate { request, reply } => {
+                let response = wacp_transport::wacp_v1::AuthenticateResponse {
+                    user_id: format!("user-{}", request.auth_token),
+                    capabilities: vec!["observe".into(), "inject".into(), "gate".into()],
+                };
+                let _ = reply.send(Ok(response));
+            }
+            HighwayRequest::GetTaskGraph { reply } => {
+                let response = wacp_transport::wacp_v1::TaskGraphView { tasks: vec![] };
+                let _ = reply.send(Ok(response));
+            }
+            HighwayRequest::InjectEnvelope { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::unimplemented(
+                    "envelope injection via gRPC pending full wiring",
+                )));
+            }
+            HighwayRequest::RespondToGate { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::unimplemented("gate response pending")));
+            }
+            HighwayRequest::RespondToEscalation { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::unimplemented(
+                    "escalation response pending",
+                )));
+            }
+            HighwayRequest::QueryTrail { reply, .. } => {
+                let response = wacp_transport::wacp_v1::QueryTrailResponse {
+                    entries: vec![],
+                    has_more: false,
+                    client_request_id: String::new(),
+                };
+                let _ = reply.send(Ok(response));
+            }
+            HighwayRequest::GetWorkspace { request, reply } => {
+                let ws_id = WorkspaceId::from(request.workspace_id.as_str());
+                if let Some(node) = self.coordinator.tree.get(&ws_id) {
+                    let response = wacp_transport::wacp_v1::WorkspaceView {
+                        id: node.id.to_string(),
+                        state: node.status as i32,
+                        role: String::new(),
+                        parent: node.parent.as_ref().map(|p| p.to_string()).unwrap_or_default(),
+                        owner: node.owner.to_string(),
+                        originator: String::new(),
+                        task_id: node.task_id.as_ref().map(|t| t.to_string()).unwrap_or_default(),
+                        current_usage: None,
+                        budget: None,
+                        checkpoint_count: 0,
+                        created_at: None,
+                        last_activity: None,
+                    };
+                    let _ = reply.send(Ok(response));
+                } else {
+                    let _ = reply.send(Err(tonic::Status::not_found("workspace not found")));
+                }
+            }
+            HighwayRequest::GetCheckpoint { reply, .. } => {
+                let _ = reply.send(Err(tonic::Status::not_found("checkpoint not found")));
+            }
+        }
+    }
+
+    fn load_taxonomy(config: &RuntimeConfig) -> Result<Taxonomy, RuntimeError> {
+        if let Some(ref path) = config.taxonomy_path {
+            let content = fs::read_to_string(path)
+                .map_err(|e| RuntimeError::Taxonomy(format!("failed to read {}: {e}", path.display())))?;
+            if path.extension().is_some_and(|ext| ext == "json") {
+                Taxonomy::load_json(&content, &config.protocol_version)
+                    .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
+            } else {
+                Taxonomy::load_yaml(&content, &config.protocol_version)
+                    .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
+            }
+        } else {
+            Ok(Taxonomy::empty(&config.protocol_version))
+        }
+    }
+}

@@ -1,0 +1,20 @@
+//! WACP — Coordinator actor.
+//!
+//! The orchestrator: owns the workspace tree, task graph, and integration engine.
+//! Dispatches work, processes signals, routes envelopes.
+
+pub mod integration;
+pub mod orchestrator;
+pub mod task_graph;
+pub mod tree;
+
+pub use integration::{
+    Conflict, ConflictResolution, IntegrationEngine, IntegrationRequest, IntegrationResult,
+    ResolutionOutcome,
+};
+pub use orchestrator::{Coordinator, DispatchRequest};
+pub use task_graph::{GraphError, TaskGraph};
+pub use tree::{TreeError, WorkspaceNode, WorkspaceTree};
+
+#[cfg(test)]
+mod tests;

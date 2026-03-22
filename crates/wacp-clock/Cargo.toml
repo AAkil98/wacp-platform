@@ -1,0 +1,10 @@
+[package]
+name = "wacp-clock"
+description = "WACP — Hybrid logical clock"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+serde = { workspace = true }

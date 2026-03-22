@@ -199,13 +199,21 @@ wacp/
 │   ├── human-highway.md         #   Human oversight integration
 │   └── security.md              #   Cryptographic guarantees
 │
-└── topology/                    # Structural relationships
-    ├── tree.md                  #   Workspace hierarchy
-    ├── graph.md                 #   Task graph structure
-    ├── causation.md             #   Causal ordering
-    ├── channels.md              #   Message passing
-    ├── ownership.md             #   Workspace ownership
-    └── visibility.md            #   Data visibility model
+├── topology/                    # Structural relationships
+│   ├── tree.md                  #   Workspace hierarchy
+│   ├── graph.md                 #   Task graph structure
+│   ├── causation.md             #   Causal ordering
+│   ├── channels.md              #   Message passing
+│   ├── ownership.md             #   Workspace ownership
+│   └── visibility.md            #   Data visibility model
+│
+├── impl/                        # Implementation specs (pre-code)
+│   ├── runtime.md               #   Runtime architecture (Rust)
+│   ├── storage.md               #   Storage architecture
+│   ├── protocol-interface.md    #   Protobuf + gRPC contracts
+│   └── sdk-agent.md             #   Agent SDK design (Python + Rust)
+│
+└── IMPLEMENTATION.md            # Decisions, language choice, roadmap
 ```
 
 ---
@@ -214,23 +222,23 @@ wacp/
 
 **If you want the full picture**, start with `PROTOCOL.md`. It is the authoritative specification — approximately 70KB covering all primitives, roles, lifecycle states, and integration procedures in a single document.
 
-**If you want to understand a specific concept**, go directly to the relevant constituent spec in `specs/`. Each spec is self-contained with its own rules, examples, and conformance requirements.
+**If you want to understand a specific concept**, go directly to the relevant constituent spec. Each spec is self-contained with its own rules, examples, and conformance requirements.
 
 **Recommended reading order for newcomers:**
 
 1. `PROTOCOL.md` §1–3 — Scope, vocabulary, and design principles
-2. `specs/primitives/workspace.md` — The foundational abstraction
-3. `specs/primitives/envelope.md` — How agents communicate
-4. `specs/primitives/signal.md` — How state changes propagate
-5. `specs/primitives/checkpoint.md` — How progress is recorded
-6. `specs/primitives/task.md` — How work is organized
-7. `specs/primitives/trail.md` — How history is preserved
-8. `specs/foundations/roles.md` — Who can do what
-9. `specs/mechanisms/integration.md` — How results are assembled
-10. `specs/mechanisms/human-highway.md` — How humans participate
+2. `primitives/workspace.md` — The foundational abstraction
+3. `primitives/envelope.md` — How agents communicate
+4. `primitives/signal.md` — How state changes propagate
+5. `primitives/checkpoint.md` — How progress is recorded
+6. `primitives/task.md` — How work is organized
+7. `primitives/trail.md` — How history is preserved
+8. `foundations/roles.md` — Who can do what
+9. `mechanisms/integration.md` — How results are assembled
+10. `mechanisms/human-highway.md` — How humans participate
 11. `TAXONOMY.md` — How the protocol is extended
 
-**If you want to implement WACP**, the conformance requirements in each spec define the minimum a runtime must enforce. Start with the workspace lifecycle state machine and the permission matrix.
+**If you want to implement WACP**, start with the implementation specs in `impl/`, then the conformance requirements in each protocol spec. See `IMPLEMENTATION.md` for architecture decisions, language choices, and the implementation roadmap.
 
 ---
 
@@ -242,10 +250,12 @@ WACP v0.1 is **complete**. The protocol specification and all 20 constituent spe
 |---|---|---|
 | Protocol specification | Complete | `PROTOCOL.md` |
 | Taxonomy | Complete | `TAXONOMY.md` |
-| Primitives (8 specs) | Complete | `specs/primitives/` |
-| Foundations (2 specs) | Complete | `specs/foundations/` |
-| Mechanisms (4 specs) | Complete | `specs/mechanisms/` |
-| Topology (6 specs) | Complete | `specs/topology/` |
+| Primitives (8 specs) | Complete | `primitives/` |
+| Foundations (2 specs) | Complete | `foundations/` |
+| Mechanisms (4 specs) | Complete | `mechanisms/` |
+| Topology (6 specs) | Complete | `topology/` |
+| Implementation specs (4 specs) | Complete | `impl/` |
+| Implementation journal | Active | `IMPLEMENTATION.md` |
 
 ---
 

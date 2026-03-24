@@ -3,6 +3,7 @@
 //! The orchestrator: owns the workspace tree, task graph, and integration engine.
 //! Dispatches work, processes signals, routes envelopes.
 
+pub mod dispatch;
 pub mod gate;
 pub mod integration;
 pub mod orchestrator;
@@ -13,6 +14,7 @@ pub mod topology;
 pub mod tree;
 pub mod visibility;
 
+pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
 pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
 pub use integration::{
     Conflict, ConflictResolution, IntegrationEngine, IntegrationRequest, IntegrationResult,

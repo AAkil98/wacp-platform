@@ -1,6 +1,7 @@
 use wacp_fsm::TaskTrigger;
 use wacp_types::*;
 
+use crate::dispatch::*;
 use crate::gate::*;
 use crate::integration::*;
 use crate::ownership::*;
@@ -1336,4 +1337,156 @@ fn default_timeout_applied() {
     let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
     assert_eq!(event.timeout_ms, 60_000);
     assert_eq!(event.fallback_action, "cancel");
+}
+
+// ══════════════════════════════════════════
+// Task 10.3 — Dispatch + Resource Allocation
+// ══════════════════════════════════════════
+
+fn make_dispatcher() -> Dispatcher {
+    Dispatcher::new(DispatchConfig::default())
+}
+
+fn setup_dispatch() -> (Dispatcher, TaskGraph, TopologySet) {
+    let dispatcher = make_dispatcher();
+    let graph = TaskGraph::new();
+    let topo = TopologySet::new(ws("root"), uid("owner"));
+    (dispatcher, graph, topo)
+}
+
+#[test]
+fn dispatch_single_task() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].task_id, tid("t1"));
+}
+
+#[test]
+fn dispatch_multiple_tasks() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert_eq!(actions.len(), 2);
+}
+
+#[test]
+fn dispatch_respects_capacity() {
+    let config = DispatchConfig {
+        max_concurrent_workspaces: Some(1),
+        ..Default::default()
+    };
+    let mut disp = Dispatcher::new(config);
+    let mut graph = TaskGraph::new();
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert_eq!(actions.len(), 1);
+}
+
+#[test]
+fn dispatch_skips_non_dispatchable() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert!(actions.is_empty());
+}
+
+#[test]
+fn dispatch_binds_task_to_workspace() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    let ws_id = &actions[0].workspace_id;
+    assert_eq!(graph.task_for_workspace(ws_id), Some(&tid("t1")));
+}
+
+#[test]
+fn dispatch_creates_workspace_in_topology() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    let ws_id = &actions[0].workspace_id;
+    assert!(topo.tree.get(ws_id).is_some());
+    assert_eq!(topo.tree.get(ws_id).unwrap().parent, Some(ws("root")));
+}
+
+#[test]
+fn select_parent_root_task() {
+    let graph = TaskGraph::new();
+    let task = make_task("t1", vec![], TaskStatus::Pending);
+    let parent = Dispatcher::select_parent(&graph, &task, &ws("root"));
+    assert_eq!(parent, ws("root"));
+}
+
+#[test]
+fn select_parent_subtask() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-parent")).unwrap();
+
+    let mut child = make_task("t2", vec![], TaskStatus::Pending);
+    child.parent_task = Some(tid("t1"));
+    graph.add_task(child.clone()).unwrap();
+
+    let parent = Dispatcher::select_parent(&graph, &child, &ws("root"));
+    assert_eq!(parent, ws("ws-parent"));
+}
+
+#[test]
+fn allocate_budget_applies_margin() {
+    let disp = Dispatcher::new(DispatchConfig {
+        budget_margin: 0.2,
+        ..Default::default()
+    });
+    let base = ResourceBudget {
+        max_tokens: Some(1000),
+        max_wall_time_ms: Some(60_000),
+        ..Default::default()
+    };
+    let budget = disp.allocate_budget(&base);
+    assert_eq!(budget.max_tokens, Some(1200));
+    assert_eq!(budget.max_wall_time_ms, Some(72_000));
+}
+
+#[test]
+fn allocate_budget_unlimited_stays_unlimited() {
+    let disp = make_dispatcher();
+    let base = ResourceBudget::default();
+    let budget = disp.allocate_budget(&base);
+    assert_eq!(budget.max_tokens, None);
+    assert_eq!(budget.max_wall_time_ms, None);
+}
+
+#[test]
+fn has_capacity_unlimited() {
+    let topo = TopologySet::new(ws("root"), uid("owner"));
+    assert!(Dispatcher::has_capacity(&topo, None));
+}
+
+#[test]
+fn has_capacity_at_limit() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("ws-1"),
+        parent: ws("root"),
+        owner: uid("owner"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    })
+    .unwrap();
+    // Root + ws-1 = 2 active, 1 worker. At limit of 1.
+    assert!(!Dispatcher::has_capacity(&topo, Some(1)));
 }

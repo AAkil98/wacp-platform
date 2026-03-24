@@ -2,6 +2,7 @@ use wacp_fsm::TaskTrigger;
 use wacp_types::*;
 
 use crate::integration::*;
+use crate::ownership::*;
 use crate::task_graph::*;
 use crate::tree::*;
 use crate::visibility::*;
@@ -677,4 +678,108 @@ fn grant_count_accurate() {
     // Self-grant should not count.
     graph.grant(&ws("A"), &ws("A"));
     assert_eq!(graph.grant_count(), 3);
+}
+
+// ══════════════════════════════════════════
+// Task 9.3 — Ownership Domains + Causation
+// ══════════════════════════════════════════
+
+#[test]
+fn escalation_router_register_and_route() {
+    let mut router = EscalationRouter::new();
+    router.register(&ws("A"), &uid("alice"));
+    assert_eq!(router.route(&ws("A")), Some(&uid("alice")));
+}
+
+#[test]
+fn escalation_router_update() {
+    let mut router = EscalationRouter::new();
+    router.register(&ws("A"), &uid("alice"));
+    router.update(&ws("A"), &uid("bob"));
+    assert_eq!(router.route(&ws("A")), Some(&uid("bob")));
+}
+
+#[test]
+fn escalation_router_unknown_returns_none() {
+    let router = EscalationRouter::new();
+    assert_eq!(router.route(&ws("unknown")), None);
+}
+
+#[test]
+fn resolve_owner_inherits_parent() {
+    let owner = resolve_owner(&uid("alice"), None);
+    assert_eq!(owner, uid("alice"));
+}
+
+#[test]
+fn resolve_owner_explicit_override() {
+    let owner = resolve_owner(&uid("alice"), Some(&uid("bob")));
+    assert_eq!(owner, uid("bob"));
+}
+
+#[test]
+fn resolve_originator_delegation_inherits() {
+    let parent = Originator::User(uid("alice"));
+    let orig = resolve_originator(&parent, false, None);
+    assert_eq!(orig, Originator::User(uid("alice")));
+}
+
+#[test]
+fn resolve_originator_injection_sets_user() {
+    let orig = resolve_originator(&Originator::System, true, Some(&uid("bob")));
+    assert_eq!(orig, Originator::User(uid("bob")));
+}
+
+#[test]
+fn resolve_originator_system_parent_inherited() {
+    let orig = resolve_originator(&Originator::System, false, None);
+    assert_eq!(orig, Originator::System);
+}
+
+#[test]
+fn causal_impact_active_only() {
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    let alice = Originator::User(uid("alice"));
+    tree.insert(make_node("A", Some("root"), "owner", alice.clone(), WorkspaceState::Active))
+        .unwrap();
+    tree.insert(make_node("B", Some("root"), "owner", alice.clone(), WorkspaceState::Closed))
+        .unwrap();
+    tree.insert(make_node("C", Some("root"), "owner", alice.clone(), WorkspaceState::Active))
+        .unwrap();
+
+    let impact = tree.causal_impact(&uid("alice"));
+    assert!(impact.contains(&ws("A")));
+    assert!(impact.contains(&ws("C")));
+    assert!(!impact.contains(&ws("B"))); // terminal
+    assert_eq!(impact.len(), 2);
+}
+
+#[test]
+fn causal_impact_empty_for_unknown_user() {
+    let tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    assert!(tree.causal_impact(&uid("nobody")).is_empty());
+}
+
+#[test]
+fn is_causal_boundary_root_false() {
+    let tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    assert!(!tree.is_causal_boundary(&ws("root")));
+}
+
+#[test]
+fn is_causal_boundary_same_originator_false() {
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
+        .unwrap();
+    assert!(!tree.is_causal_boundary(&ws("A")));
+}
+
+#[test]
+fn is_causal_boundary_different_originator_true() {
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    let alice = Originator::User(uid("alice"));
+    tree.insert(make_node("A", Some("root"), "owner", alice, WorkspaceState::Active))
+        .unwrap();
+    // Root is System, A is User(alice) → boundary.
+    assert!(tree.is_causal_boundary(&ws("A")));
 }

@@ -317,6 +317,39 @@ impl WorkspaceTree {
         }
     }
 
+    /// Active (non-terminal) workspaces with the given user as originator.
+    /// Used for causal impact queries when a human's state changes.
+    pub fn causal_impact(&self, user_id: &UserId) -> Vec<WorkspaceId> {
+        let originator = Originator::User(user_id.clone());
+        self.by_originator(&originator)
+            .iter()
+            .filter(|id| {
+                self.nodes
+                    .get(id.as_ref())
+                    .is_some_and(|n| !n.status.is_terminal())
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// True if this node's originator differs from its parent's.
+    /// Root returns false (no parent). Detects injection points.
+    pub fn is_causal_boundary(&self, id: &WorkspaceId) -> bool {
+        let node = match self.nodes.get(id.as_ref()) {
+            Some(n) => n,
+            None => return false,
+        };
+        let parent_id = match &node.parent {
+            Some(p) => p,
+            None => return false, // root
+        };
+        let parent = match self.nodes.get(parent_id.as_ref()) {
+            Some(n) => n,
+            None => return false,
+        };
+        node.originator != parent.originator
+    }
+
     /// All non-terminal workspace IDs.
     pub fn active_workspaces(&self) -> Vec<&WorkspaceId> {
         self.nodes

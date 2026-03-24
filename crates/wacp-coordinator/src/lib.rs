@@ -7,6 +7,7 @@ pub mod integration;
 pub mod orchestrator;
 pub mod task_graph;
 pub mod tree;
+pub mod visibility;
 
 pub use integration::{
     Conflict, ConflictResolution, IntegrationEngine, IntegrationRequest, IntegrationResult,
@@ -15,6 +16,7 @@ pub use integration::{
 pub use orchestrator::{Coordinator, DispatchRequest};
 pub use task_graph::{GraphError, TaskGraph};
 pub use tree::{TreeError, WorkspaceNode, WorkspaceTree};
+pub use visibility::{VisibilityError, VisibilityGraph};
 
 #[cfg(test)]
 mod tests;

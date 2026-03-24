@@ -4,6 +4,7 @@ use wacp_types::*;
 use crate::integration::*;
 use crate::task_graph::*;
 use crate::tree::*;
+use crate::visibility::*;
 
 fn ws(id: &str) -> WorkspaceId {
     WorkspaceId::from(id)
@@ -517,4 +518,163 @@ fn salvage_forces_evaluated() {
     };
     // Salvage always succeeds in the framework.
     assert!(matches!(engine.integrate(&req), IntegrationResult::Success));
+}
+
+// ══════════════════════════════════════════
+// Task 9.2 — Visibility Graph
+// ══════════════════════════════════════════
+
+#[test]
+fn self_visibility_implicit() {
+    let graph = VisibilityGraph::new();
+    // Self-visibility is true even for unregistered workspaces.
+    assert!(graph.can_see(&ws("A"), &ws("A")));
+}
+
+#[test]
+fn grant_creates_edge() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    assert!(graph.grant(&ws("A"), &ws("B")));
+    assert!(graph.can_see(&ws("A"), &ws("B")));
+}
+
+#[test]
+fn grant_not_symmetric() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.grant(&ws("A"), &ws("B"));
+    assert!(!graph.can_see(&ws("B"), &ws("A")));
+}
+
+#[test]
+fn grant_idempotent() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    assert!(graph.grant(&ws("A"), &ws("B")));
+    assert!(!graph.grant(&ws("A"), &ws("B"))); // second grant returns false
+}
+
+#[test]
+fn grant_checked_succeeds() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("coord"));
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    // Coordinator can see B (granted).
+    graph.grant(&ws("coord"), &ws("B"));
+    // Coordinator grants A → B.
+    let result = graph.grant_checked(&ws("A"), &ws("B"), &ws("coord"));
+    assert!(result.unwrap());
+    assert!(graph.can_see(&ws("A"), &ws("B")));
+}
+
+#[test]
+fn grant_checked_rejects_invisible_target() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("grantor"));
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    // Grantor cannot see B — grant should fail.
+    let result = graph.grant_checked(&ws("A"), &ws("B"), &ws("grantor"));
+    assert!(result.is_err());
+    assert!(!graph.can_see(&ws("A"), &ws("B")));
+}
+
+#[test]
+fn visible_to_includes_self() {
+    let graph = VisibilityGraph::new();
+    let set = graph.visible_to(&ws("A"));
+    assert!(set.contains(&ws("A")));
+    assert_eq!(set.len(), 1);
+}
+
+#[test]
+fn visible_to_includes_grants() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.register(&ws("C"));
+    graph.grant(&ws("A"), &ws("B"));
+    graph.grant(&ws("A"), &ws("C"));
+    let set = graph.visible_to(&ws("A"));
+    assert!(set.contains(&ws("A")));
+    assert!(set.contains(&ws("B")));
+    assert!(set.contains(&ws("C")));
+    assert_eq!(set.len(), 3);
+}
+
+#[test]
+fn who_can_see_includes_self() {
+    let graph = VisibilityGraph::new();
+    let set = graph.who_can_see(&ws("A"));
+    assert!(set.contains(&ws("A")));
+    assert_eq!(set.len(), 1);
+}
+
+#[test]
+fn who_can_see_tracks_reverse() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.register(&ws("C"));
+    graph.grant(&ws("A"), &ws("B"));
+    graph.grant(&ws("C"), &ws("B"));
+    let set = graph.who_can_see(&ws("B"));
+    assert!(set.contains(&ws("A")));
+    assert!(set.contains(&ws("B"))); // self
+    assert!(set.contains(&ws("C")));
+    assert_eq!(set.len(), 3);
+}
+
+#[test]
+fn unregistered_workspace_invisible() {
+    let graph = VisibilityGraph::new();
+    assert!(!graph.can_see(&ws("A"), &ws("X")));
+}
+
+#[test]
+fn register_idempotent() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.grant(&ws("A"), &ws("B"));
+    // Re-register A — should not clear grants.
+    graph.register(&ws("A"));
+    assert!(graph.can_see(&ws("A"), &ws("B")));
+}
+
+#[test]
+fn multiple_grants_accumulate() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.register(&ws("C"));
+    graph.register(&ws("D"));
+    graph.grant(&ws("A"), &ws("B"));
+    graph.grant(&ws("A"), &ws("C"));
+    graph.grant(&ws("A"), &ws("D"));
+    let set = graph.visible_to(&ws("A"));
+    assert_eq!(set.len(), 4); // B, C, D + self
+}
+
+#[test]
+fn grant_count_accurate() {
+    let mut graph = VisibilityGraph::new();
+    graph.register(&ws("A"));
+    graph.register(&ws("B"));
+    graph.register(&ws("C"));
+    assert_eq!(graph.grant_count(), 0);
+    graph.grant(&ws("A"), &ws("B"));
+    assert_eq!(graph.grant_count(), 1);
+    graph.grant(&ws("A"), &ws("C"));
+    assert_eq!(graph.grant_count(), 2);
+    graph.grant(&ws("B"), &ws("C"));
+    assert_eq!(graph.grant_count(), 3);
+    // Self-grant should not count.
+    graph.grant(&ws("A"), &ws("A"));
+    assert_eq!(graph.grant_count(), 3);
 }

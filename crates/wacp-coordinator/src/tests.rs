@@ -3,6 +3,7 @@ use wacp_types::*;
 
 use crate::integration::*;
 use crate::ownership::*;
+use crate::port_rights::*;
 use crate::task_graph::*;
 use crate::tree::*;
 use crate::visibility::*;
@@ -782,4 +783,164 @@ fn is_causal_boundary_different_originator_true() {
         .unwrap();
     // Root is System, A is User(alice) → boundary.
     assert!(tree.is_causal_boundary(&ws("A")));
+}
+
+// ══════════════════════════════════════════
+// Task 9.4 — Port Rights Graph
+// ══════════════════════════════════════════
+
+#[test]
+fn create_right() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    let entry = graph.get(&id).unwrap();
+    assert_eq!(entry.holder, ws("A"));
+    assert_eq!(entry.target, ws("B"));
+    assert_eq!(entry.kind, PortRightType::Send);
+    assert_eq!(entry.status, PortRightStatus::Active);
+}
+
+#[test]
+fn validate_send_with_right() {
+    let mut graph = PortRightsGraph::new();
+    graph.create(ws("A"), ws("B"), PortRightType::Send);
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_ok());
+}
+
+#[test]
+fn validate_send_no_right() {
+    let graph = PortRightsGraph::new();
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
+}
+
+#[test]
+fn validate_send_send_once() {
+    let mut graph = PortRightsGraph::new();
+    graph.create(ws("A"), ws("B"), PortRightType::SendOnce);
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_ok());
+}
+
+#[test]
+fn consume_send_once() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::SendOnce);
+    graph.consume(&id).unwrap();
+    assert_eq!(graph.get(&id).unwrap().status, PortRightStatus::Consumed);
+    // Subsequent validate_send should fail.
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
+}
+
+#[test]
+fn consume_non_send_once_rejected() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    assert!(matches!(graph.consume(&id), Err(PortRightError::NotSendOnce)));
+}
+
+#[test]
+fn revoke_right() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    graph.revoke(&id).unwrap();
+    assert_eq!(graph.get(&id).unwrap().status, PortRightStatus::Revoked);
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
+}
+
+#[test]
+fn revoke_non_active_rejected() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    graph.revoke(&id).unwrap();
+    assert!(matches!(graph.revoke(&id), Err(PortRightError::NotActive)));
+}
+
+#[test]
+fn transfer_send_right() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    let old = graph.transfer(&id, &ws("C")).unwrap();
+    assert_eq!(old, ws("A"));
+    assert_eq!(graph.get(&id).unwrap().holder, ws("C"));
+    // Old holder can no longer send.
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
+    // New holder can send.
+    assert!(graph.validate_send(&ws("C"), &ws("B")).is_ok());
+}
+
+#[test]
+fn transfer_receive_rejected() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("A"), PortRightType::Receive);
+    assert!(matches!(
+        graph.transfer(&id, &ws("B")),
+        Err(PortRightError::ReceiveNotTransferable)
+    ));
+}
+
+#[test]
+fn transfer_non_active_rejected() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    graph.revoke(&id).unwrap();
+    assert!(matches!(
+        graph.transfer(&id, &ws("C")),
+        Err(PortRightError::NotActive)
+    ));
+}
+
+#[test]
+fn expire_workspace_both_directions() {
+    let mut graph = PortRightsGraph::new();
+    let id_held = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    let id_targeted = graph.create(ws("C"), ws("A"), PortRightType::Send);
+    let id_unrelated = graph.create(ws("B"), ws("C"), PortRightType::Send);
+
+    graph.expire_workspace(&ws("A"));
+
+    assert_eq!(graph.get(&id_held).unwrap().status, PortRightStatus::Expired);
+    assert_eq!(graph.get(&id_targeted).unwrap().status, PortRightStatus::Expired);
+    assert_eq!(graph.get(&id_unrelated).unwrap().status, PortRightStatus::Active);
+}
+
+#[test]
+fn rights_held_by_returns_active_only() {
+    let mut graph = PortRightsGraph::new();
+    graph.create(ws("A"), ws("B"), PortRightType::Send);
+    let id2 = graph.create(ws("A"), ws("C"), PortRightType::Send);
+    graph.revoke(&id2).unwrap();
+
+    let active = graph.rights_held_by(&ws("A"));
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].target, ws("B"));
+}
+
+#[test]
+fn active_count_tracks_correctly() {
+    let mut graph = PortRightsGraph::new();
+    graph.create(ws("A"), ws("B"), PortRightType::Send);
+    graph.create(ws("A"), ws("C"), PortRightType::Send);
+    let id3 = graph.create(ws("A"), ws("D"), PortRightType::SendOnce);
+    assert_eq!(graph.active_count(), 3);
+
+    graph.consume(&id3).unwrap();
+    assert_eq!(graph.active_count(), 2);
+
+    graph.expire_workspace(&ws("A"));
+    assert_eq!(graph.active_count(), 0);
+}
+
+#[test]
+fn multiple_rights_same_pair() {
+    let mut graph = PortRightsGraph::new();
+    let id1 = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    let id2 = graph.create(ws("A"), ws("B"), PortRightType::Send);
+    assert_ne!(id1, id2);
+    // Both are valid — validate_send finds one.
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_ok());
+    // Revoke one, still valid via the other.
+    graph.revoke(&id1).unwrap();
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_ok());
+    // Revoke both, now fails.
+    graph.revoke(&id2).unwrap();
+    assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
 }

@@ -133,15 +133,15 @@ Three specs covering the remaining domains not addressed by Phase 1.
 | 6 | Deployment | `impl/deployment.md` | Configuration file format (YAML), CLI interface, TLS setup, authenticator provider configuration, structured logging via `tracing`, metrics endpoint, Docker image, systemd unit, health checks | **Complete** | Runtime (#1) |
 | 7 | Agent Migration | `impl/migration.md` | Migration coordinator procedure, workspace state snapshot for handoff, agent unbind sequence, new agent bind with state restore, atomic rollback on failure, connection handoff mechanics, resource meter continuity across migration | **Complete** | Runtime (#1), Storage (#2) |
 
-### Phase 3 — Pending (coordinator decision logic)
+### Phase 3 — Complete (coordinator decision logic)
 
-Audit (2026-03-22) identified three protocol domains covered by the protocol specs but lacking implementation specs. These are the coordinator's decision-making subsystems — integration, task scheduling, and topology operations. All are Level 1 conformance requirements.
+Audit (2026-03-22) identified three protocol domains covered by the protocol specs but lacking implementation specs. All three completed 2026-03-24.
 
 | # | Spec | Path | Scope | Status | Depends On |
 |---|------|------|-------|--------|------------|
-| 8 | Coordinator Integration | `impl/integration.md` | Merge strategies (`direct`/`layered`/`evaluated`), checkpoint evaluation, conflict detection (4 types: `content_overlap`, `semantic_contradiction`, `dependency_violation`, `constraint_breach`), conflict resolution (3 strategies: `coordinator_resolve`, `escalate`, `agent_rework`), salvage integration (Level 3) | **Not started** | Runtime (#1), Storage (#2) |
-| 9 | Task Scheduling | `impl/task-scheduling.md` | Task graph as DAG, readiness computation, circular dependency rejection, task decomposition (parent→subtask), task↔workspace lifecycle coupling, dispatch decisions | **Not started** | Runtime (#1) |
-| 10 | Topology Operations | `impl/topology.md` | Workspace tree operations (traverse, cascade, reparent), subtree failure propagation, ownership domain boundaries, visibility graph enforcement, causal ordering, envelope channel/thread tracking | **Not started** | Runtime (#1) |
+| 8 | Coordinator Integration | `impl/integration.md` | Merge strategies (`direct`/`layered`/`evaluated`), checkpoint evaluation, conflict detection (4 types), conflict resolution (3 strategies), salvage integration (3 guardrails) | **Complete** | Runtime (#1), Storage (#2), Topology (#10) |
+| 9 | Task Scheduling | `impl/task-scheduling.md` | Task lifecycle (8 states), gate enforcement, dispatch policy, resource allocation, context assembly, retry/cancellation, progressive decomposition, task-workspace coupling | **Complete** | Runtime (#1), Topology (#10) |
+| 10 | Topology Operations | `impl/topology.md` | Workspace tree (traversals, cascade, reparent), task graph (DAG, readiness), visibility graph, ownership domains, causation, port rights graph, compound operations, recovery | **Complete** | Runtime (#1) |
 
 **Protocol sources:**
 
@@ -155,19 +155,21 @@ Audit (2026-03-22) identified three protocol domains covered by the protocol spe
 
 **Internal consistency: clean.** All cross-references resolve. No trait conflicts. No struct/enum inconsistencies. The `Authenticator` trait appears in both protocol-interface.md §7 (defines) and deployment.md §5.1 (implements) — intentional and consistent.
 
-**Protocol coverage gaps by severity:**
+**Protocol coverage gaps by severity (updated 2026-03-24):**
 
-| Severity | Gap | Protocol source | Impact |
+| Severity | Gap | Protocol source | Status |
 |----------|-----|----------------|--------|
-| **Blocking** | Integration & conflict resolution | §7.4–§7.9 | Level 1 requires at least `direct` merge strategy |
-| **Blocking** | Task scheduling & DAG operations | §4.6, task spec | Core primitives include tasks; coordinator cannot dispatch without this |
-| **Blocking** | Topology operations (tree, graph, visibility) | 6 topology specs | Workspace tree operations underpin all coordinator logic |
-| Important | Graceful termination enforcement detail | §6.10 | Partially covered in deployment §3.4 and protocol-interface `GracefulTermination` message; needs enforcement detail in runtime or coordinator spec |
+| ~~Blocking~~ | ~~Integration & conflict resolution~~ | §7.4–§7.9 | **Resolved** — integration.md |
+| ~~Blocking~~ | ~~Task scheduling & DAG operations~~ | §4.6, task spec | **Resolved** — task-scheduling.md |
+| ~~Blocking~~ | ~~Topology operations (tree, graph, visibility)~~ | 6 topology specs | **Resolved** — topology.md |
+| Important | Graceful termination enforcement detail | §6.10 | Partially covered in deployment §3.4 and protocol-interface `GracefulTermination` message |
 | Important | Trail signing | §11.5 | Explicitly deferred to Level 3 |
-| Important | Salvage integration guardrails | §7.9 | Level 3; 3 mandatory guardrails not yet specified |
-| Deferrable | Ownership transfer | §4.8 | Not critical for initial implementation |
+| ~~Important~~ | ~~Salvage integration guardrails~~ | §7.9 | **Resolved** — integration.md §7 |
+| Deferrable | Ownership transfer | §4.8 | Covered in topology.md §5.3 |
 
-**Fully covered protocol domains (no gaps):**
+**All blocking gaps resolved.** Zero protocol domains without implementation spec coverage.
+
+**Fully covered protocol domains:**
 
 | Domain | Impl spec(s) |
 |--------|-------------|
@@ -178,6 +180,9 @@ Audit (2026-03-22) identified three protocol domains covered by the protocol spe
 | Highway UI (TypeScript, gRPC-Web, gates, escalations) | highway-ui.md |
 | Deployment (config, CLI, TLS, auth providers, logging, metrics, health, Docker, systemd) | deployment.md |
 | Agent migration (coordinator procedure, snapshot, unbind/bind, rollback, resource continuity) | migration.md |
+| Topology (tree, task graph, visibility, ownership, causation, port rights) | topology.md |
+| Task scheduling (lifecycle, gates, dispatch, resource allocation, retry, decomposition) | task-scheduling.md |
+| Integration (merge strategies, conflict detection/resolution, salvage, ordering) | integration.md |
 
 ### Coverage matrix — "What's Next" vs. specs
 
@@ -190,9 +195,9 @@ Audit (2026-03-22) identified three protocol domains covered by the protocol spe
 | Agent migration | Yes | migration.md §2–12, workspace spec §11, PROTOCOL.md §6.9 | Code — migration procedure |
 | Highway UI | Yes | highway-ui.md | Code — TypeScript SPA |
 | Production deployment | Yes | deployment.md §1–13 | Code — config, CLI, Docker, systemd |
-| Coordinator integration | **No** | PROTOCOL.md §7, `mechanisms/integration.md` | **Spec needed** — `impl/integration.md` |
-| Task scheduling | **No** | PROTOCOL.md §4.6, `primitives/task.md` | **Spec needed** — `impl/task-scheduling.md` |
-| Topology operations | **No** | 6 topology specs | **Spec needed** — `impl/topology.md` |
+| Coordinator integration | Yes | integration.md §2–11 | Code — merge strategies, conflict detection/resolution |
+| Task scheduling | Yes | task-scheduling.md §2–11 | Code — dispatch, gates, retry, resource allocation |
+| Topology operations | Yes | topology.md §2–10 | Code — tree, graph, visibility, ownership, causation, port rights |
 
 ---
 
@@ -238,7 +243,10 @@ wacp/
 │   ├── sdk-agent.md            # Complete — implemented
 │   ├── highway-ui.md           # Complete
 │   ├── deployment.md           # Complete
-│   └── migration.md            # Complete
+│   ├── migration.md            # Complete
+│   ├── topology.md             # Complete
+│   ├── task-scheduling.md      # Complete
+│   └── integration.md          # Complete
 │
 ├── proto/                       # Protobuf definitions (shared contract)
 │   ├── primitives.proto

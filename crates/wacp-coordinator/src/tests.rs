@@ -6,6 +6,7 @@ use crate::gate::*;
 use crate::integration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
+use crate::scheduling::*;
 use crate::task_graph::*;
 use crate::topology::*;
 use crate::tree::*;
@@ -1489,4 +1490,160 @@ fn has_capacity_at_limit() {
     .unwrap();
     // Root + ws-1 = 2 active, 1 worker. At limit of 1.
     assert!(!Dispatcher::has_capacity(&topo, Some(1)));
+}
+
+// ══════════════════════════════════════════
+// Task 10.4 — Context Assembly + Retry + Decomposition
+// ══════════════════════════════════════════
+
+fn make_task_with_checkpoint(id: &str, deps: Vec<&str>, status: TaskStatus, cp: Option<&str>) -> Task {
+    Task {
+        id: tid(id),
+        name: id.into(),
+        description: String::new(),
+        depends_on: deps.into_iter().map(tid).collect(),
+        parent_task: None,
+        status,
+        workspace_ref: None,
+        workspace_history: vec![],
+        checkpoint_ref: cp.map(CheckpointId::from),
+    }
+}
+
+#[test]
+fn assemble_context_collects_deps() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task_with_checkpoint("t1", vec![], TaskStatus::Integrated, Some("cp-1"))).unwrap();
+    graph.add_task(make_task_with_checkpoint("t2", vec!["t1"], TaskStatus::Pending, None)).unwrap();
+
+    let ctx = SchedulingOps::assemble_context(&graph, &tid("t2"));
+    assert_eq!(ctx.dependency_outputs.len(), 1);
+    assert_eq!(ctx.dependency_outputs[0].task_id, tid("t1"));
+    assert_eq!(ctx.dependency_outputs[0].checkpoint_ref, CheckpointId::from("cp-1"));
+}
+
+#[test]
+fn assemble_context_skips_no_checkpoint() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task_with_checkpoint("t1", vec![], TaskStatus::Integrated, None)).unwrap();
+    graph.add_task(make_task_with_checkpoint("t2", vec!["t1"], TaskStatus::Pending, None)).unwrap();
+
+    let ctx = SchedulingOps::assemble_context(&graph, &tid("t2"));
+    assert!(ctx.dependency_outputs.is_empty());
+}
+
+#[test]
+fn assemble_context_empty_no_deps() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+
+    let ctx = SchedulingOps::assemble_context(&graph, &tid("t1"));
+    assert!(ctx.dependency_outputs.is_empty());
+}
+
+#[test]
+fn should_retry_within_limit() {
+    let policy = RetryPolicy::default(); // max_attempts: 1
+    let task = make_task("t1", vec![], TaskStatus::Failed);
+    assert!(SchedulingOps::should_retry(&policy, &task, "agent_error"));
+}
+
+#[test]
+fn should_retry_exceeds_limit() {
+    let policy = RetryPolicy { max_attempts: 1, ..Default::default() };
+    let mut task = make_task("t1", vec![], TaskStatus::Failed);
+    task.workspace_history = vec![ws("ws-old")]; // 1 prior attempt
+    assert!(!SchedulingOps::should_retry(&policy, &task, "agent_error"));
+}
+
+#[test]
+fn should_retry_timeout_denied() {
+    let policy = RetryPolicy { retry_on_timeout: false, ..Default::default() };
+    let task = make_task("t1", vec![], TaskStatus::Failed);
+    assert!(!SchedulingOps::should_retry(&policy, &task, "timeout"));
+}
+
+#[test]
+fn should_retry_agent_allowed() {
+    let policy = RetryPolicy { retry_on_agent_failure: true, ..Default::default() };
+    let task = make_task("t1", vec![], TaskStatus::Failed);
+    assert!(SchedulingOps::should_retry(&policy, &task, "agent_error"));
+}
+
+#[test]
+fn prepare_retry_unbinds() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+
+    // Simulate failure.
+    graph.transition(&tid("t1"), TaskTrigger::Fail).unwrap();
+    SchedulingOps::prepare_retry(&mut graph, &tid("t1"));
+
+    assert_eq!(graph.get(&tid("t1")).unwrap().workspace_ref, None);
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), None);
+}
+
+#[test]
+fn cancel_task_transitions() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
+    assert!(cancelled.contains(&tid("t1")));
+    assert_eq!(graph.get(&tid("t1")).unwrap().status, TaskStatus::Cancelled);
+}
+
+#[test]
+fn cancel_cascades_to_pending_dependents() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+
+    let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
+    assert!(cancelled.contains(&tid("t1")));
+    assert!(cancelled.contains(&tid("t2")));
+}
+
+#[test]
+fn cancel_does_not_cascade_to_in_progress() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::InProgress)).unwrap();
+
+    let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
+    assert!(cancelled.contains(&tid("t1")));
+    assert!(!cancelled.contains(&tid("t2"))); // in-progress: left running
+}
+
+#[test]
+fn add_subtasks_sets_parent() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("parent", vec![], TaskStatus::InProgress)).unwrap();
+
+    let sub = make_task("sub1", vec![], TaskStatus::Draft);
+    let ids = SchedulingOps::add_subtasks(&mut graph, &tid("parent"), vec![sub]).unwrap();
+
+    assert_eq!(ids.len(), 1);
+    assert_eq!(graph.get(&tid("sub1")).unwrap().parent_task, Some(tid("parent")));
+}
+
+#[test]
+fn add_subtasks_validates_parent() {
+    let mut graph = TaskGraph::new();
+    let sub = make_task("sub1", vec![], TaskStatus::Draft);
+    let result = SchedulingOps::add_subtasks(&mut graph, &tid("nonexistent"), vec![sub]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn add_subtasks_in_graph() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("parent", vec![], TaskStatus::InProgress)).unwrap();
+
+    let sub1 = make_task("sub1", vec![], TaskStatus::Draft);
+    let sub2 = make_task("sub2", vec![], TaskStatus::Draft);
+    SchedulingOps::add_subtasks(&mut graph, &tid("parent"), vec![sub1, sub2]).unwrap();
+
+    assert!(graph.get(&tid("sub1")).is_some());
+    assert!(graph.get(&tid("sub2")).is_some());
 }

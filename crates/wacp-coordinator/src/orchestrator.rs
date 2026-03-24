@@ -42,11 +42,13 @@ impl Coordinator {
         let owner = request.config.owner.clone();
 
         // Insert in tree.
+        let originator = request.config.originator.clone();
         let node = WorkspaceNode {
             id: ws_id.clone(),
             parent: Some(parent),
             children: Vec::new(),
             owner,
+            originator,
             status: WorkspaceState::Idle,
             task_id: Some(request.task_id),
         };

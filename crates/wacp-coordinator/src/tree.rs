@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use wacp_types::{TaskId, UserId, WorkspaceId, WorkspaceState};
+use wacp_types::{Originator, TaskId, UserId, WorkspaceId, WorkspaceState};
 
 /// Error from tree operations.
 #[derive(Debug, thiserror::Error)]
@@ -11,6 +11,8 @@ pub enum TreeError {
     DuplicateNode(String),
     #[error("node not found: {0}")]
     NodeNotFound(String),
+    #[error("transfer_owner called with current owner")]
+    SameOwner,
 }
 
 /// A node in the workspace tree.
@@ -20,14 +22,19 @@ pub struct WorkspaceNode {
     pub parent: Option<WorkspaceId>,
     pub children: Vec<WorkspaceId>,
     pub owner: UserId,
+    pub originator: Originator,
     pub status: WorkspaceState,
     pub task_id: Option<TaskId>,
 }
 
-/// The workspace tree (PROTOCOL.md §6.5).
+/// The workspace tree (PROTOCOL.md §6.5, topology.md §2).
+///
+/// Flat table with three indices for O(1) lookup + O(k) traversal.
 pub struct WorkspaceTree {
     nodes: HashMap<String, WorkspaceNode>,
     root: WorkspaceId,
+    originator_index: HashMap<Originator, Vec<WorkspaceId>>,
+    owner_index: HashMap<UserId, Vec<WorkspaceId>>,
 }
 
 impl WorkspaceTree {
@@ -37,15 +44,32 @@ impl WorkspaceTree {
             id: root_id.clone(),
             parent: None,
             children: Vec::new(),
-            owner,
+            owner: owner.clone(),
+            originator: Originator::System,
             status: WorkspaceState::Active,
             task_id: None,
         };
+
+        let mut originator_index = HashMap::new();
+        originator_index
+            .entry(Originator::System)
+            .or_insert_with(Vec::new)
+            .push(root_id.clone());
+
+        let mut owner_index = HashMap::new();
+        owner_index
+            .entry(owner)
+            .or_insert_with(Vec::new)
+            .push(root_id.clone());
+
         let mut nodes = HashMap::new();
         nodes.insert(root_id.to_string(), node);
+
         Self {
             nodes,
             root: root_id,
+            originator_index,
+            owner_index,
         }
     }
 
@@ -71,12 +95,26 @@ impl WorkspaceTree {
         }
 
         let child_id = node.id.clone();
+        let originator = node.originator.clone();
+        let owner = node.owner.clone();
+
         self.nodes.insert(id_str, node);
         self.nodes
             .get_mut(&parent_str)
             .unwrap()
             .children
+            .push(child_id.clone());
+
+        // Maintain indices.
+        self.originator_index
+            .entry(originator)
+            .or_default()
+            .push(child_id.clone());
+        self.owner_index
+            .entry(owner)
+            .or_default()
             .push(child_id);
+
         Ok(())
     }
 
@@ -96,15 +134,38 @@ impl WorkspaceTree {
             .unwrap_or_default()
     }
 
+    /// Siblings — children of the same parent, excluding self.
+    pub fn siblings(&self, id: &WorkspaceId) -> Vec<WorkspaceId> {
+        let node = match self.nodes.get(id.as_ref()) {
+            Some(n) => n,
+            None => return vec![],
+        };
+        let parent = match &node.parent {
+            Some(p) => p,
+            None => return vec![], // root has no siblings
+        };
+        self.nodes
+            .get(parent.as_ref())
+            .map(|p| {
+                p.children
+                    .iter()
+                    .filter(|c| *c != id)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// All descendants (recursive BFS).
     pub fn descendants(&self, id: &WorkspaceId) -> Vec<WorkspaceId> {
         let mut result = Vec::new();
-        let mut queue = vec![id.clone()];
-        while let Some(current) = queue.pop() {
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(id.clone());
+        while let Some(current) = queue.pop_front() {
             if let Some(node) = self.nodes.get(current.as_ref()) {
                 for child in &node.children {
                     result.push(child.clone());
-                    queue.push(child.clone());
+                    queue.push_back(child.clone());
                 }
             }
         }
@@ -124,6 +185,69 @@ impl WorkspaceTree {
             }
         }
         chain
+    }
+
+    /// All workspaces with the given originator.
+    pub fn by_originator(&self, originator: &Originator) -> &[WorkspaceId] {
+        self.originator_index
+            .get(originator)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// All workspaces owned by the given user.
+    pub fn by_owner(&self, owner: &UserId) -> &[WorkspaceId] {
+        self.owner_index
+            .get(owner)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Descendants of `id` that have the given originator.
+    /// Intersection of descendants(id) and by_originator(originator).
+    pub fn causal_descendants(
+        &self,
+        id: &WorkspaceId,
+        originator: &Originator,
+    ) -> Vec<WorkspaceId> {
+        let descendants = self.descendants(id);
+        let originator_set = self.by_originator(originator);
+        descendants
+            .into_iter()
+            .filter(|d| originator_set.contains(d))
+            .collect()
+    }
+
+    /// Transfer ownership of a node. Updates owner_index.
+    /// Returns the old owner. Originator is immutable — no transfer method.
+    pub fn transfer_owner(
+        &mut self,
+        id: &WorkspaceId,
+        new_owner: UserId,
+    ) -> Result<UserId, TreeError> {
+        let node = self
+            .nodes
+            .get_mut(id.as_ref())
+            .ok_or_else(|| TreeError::NodeNotFound(id.to_string()))?;
+
+        if node.owner == new_owner {
+            return Err(TreeError::SameOwner);
+        }
+
+        let old_owner = std::mem::replace(&mut node.owner, new_owner.clone());
+
+        // Remove from old owner's index.
+        if let Some(entries) = self.owner_index.get_mut(&old_owner) {
+            entries.retain(|w| w != id);
+        }
+
+        // Add to new owner's index.
+        self.owner_index
+            .entry(new_owner)
+            .or_default()
+            .push(id.clone());
+
+        Ok(old_owner)
     }
 
     /// Cascade failure: mark node + children Failed within same owner boundary.

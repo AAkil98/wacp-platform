@@ -1,6 +1,7 @@
 use wacp_fsm::TaskTrigger;
 use wacp_types::*;
 
+use crate::gate::*;
 use crate::integration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
@@ -1242,4 +1243,97 @@ fn create_then_terminate_lifecycle() {
     assert_eq!(topo.port_rights.active_count(), 0);
     // Visibility preserved — terminal workspaces remain visible for trail queries.
     assert!(topo.visibility.can_see(&ws("root"), &ws("A")));
+}
+
+// ══════════════════════════════════════════
+// Task 10.2 — Gate Enforcement
+// ══════════════════════════════════════════
+
+fn make_gate_ctrl() -> GateController {
+    GateController::new(30_000, GateFallback::AutoApprove)
+}
+
+#[test]
+fn open_gate_creates_pending() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    assert!(ctrl.is_pending(&event.gate_id));
+    assert_eq!(ctrl.pending_count(), 1);
+}
+
+#[test]
+fn open_gate_returns_event() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    assert_eq!(event.gate_type, GateType::TaskApproval);
+    assert_eq!(event.task_id, Some(tid("t1")));
+}
+
+#[test]
+fn resolve_approve_removes_gate() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    let res = ctrl.resolve(&event.gate_id, GateDecision::Approve);
+    assert_eq!(res, Some(GateResolution::Approved { source: "human".into() }));
+    assert!(!ctrl.is_pending(&event.gate_id));
+}
+
+#[test]
+fn resolve_reject_removes_gate() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    let res = ctrl.resolve(&event.gate_id, GateDecision::Reject);
+    assert_eq!(res, Some(GateResolution::Rejected));
+    assert_eq!(ctrl.pending_count(), 0);
+}
+
+#[test]
+fn resolve_already_resolved_returns_none() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    ctrl.resolve(&event.gate_id, GateDecision::Approve);
+    let res = ctrl.resolve(&event.gate_id, GateDecision::Approve);
+    assert_eq!(res, None);
+}
+
+#[test]
+fn timeout_auto_approve() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, Some(GateFallback::AutoApprove));
+    let res = ctrl.timeout(&event.gate_id);
+    assert_eq!(res, Some(GateResolution::Approved { source: "timeout_auto_approve".into() }));
+}
+
+#[test]
+fn timeout_cancel() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, Some(GateFallback::Cancel));
+    let res = ctrl.timeout(&event.gate_id);
+    assert_eq!(res, Some(GateResolution::Rejected));
+}
+
+#[test]
+fn timeout_already_resolved_returns_none() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    ctrl.resolve(&event.gate_id, GateDecision::Approve);
+    let res = ctrl.timeout(&event.gate_id);
+    assert_eq!(res, None);
+}
+
+#[test]
+fn pending_for_task_lookup() {
+    let mut ctrl = make_gate_ctrl();
+    ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    let pending = ctrl.pending_for_task(&tid("t1"));
+    assert!(pending.is_some());
+    assert_eq!(pending.unwrap().task_name, "task1");
+}
+
+#[test]
+fn default_timeout_applied() {
+    let mut ctrl = GateController::new(60_000, GateFallback::Cancel);
+    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    assert_eq!(event.timeout_ms, 60_000);
+    assert_eq!(event.fallback_action, "cancel");
 }

@@ -416,6 +416,158 @@ fn dependents() {
 }
 
 // ══════════════════════════════════════════
+// Task 10.1 — Task Graph Enhancement
+// ══════════════════════════════════════════
+
+#[test]
+fn remaining_deps_set_on_insert() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Draft)).unwrap();
+    assert_eq!(graph.remaining_deps(&tid("t3")), Some(2));
+}
+
+#[test]
+fn remaining_deps_zero_for_no_deps() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    assert_eq!(graph.remaining_deps(&tid("t1")), Some(0));
+}
+
+#[test]
+fn remaining_deps_skips_terminal() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    // t1 is already Integrated → doesn't count.
+    assert_eq!(graph.remaining_deps(&tid("t2")), Some(0));
+}
+
+#[test]
+fn mark_completed_decrements() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    assert_eq!(graph.remaining_deps(&tid("t2")), Some(1));
+
+    graph.mark_completed(&tid("t1"));
+    assert_eq!(graph.remaining_deps(&tid("t2")), Some(0));
+}
+
+#[test]
+fn mark_completed_returns_newly_ready() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+
+    let newly_ready = graph.mark_completed(&tid("t1"));
+    assert!(newly_ready.contains(&tid("t2")));
+}
+
+#[test]
+fn mark_completed_not_ready_if_other_deps() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Pending)).unwrap();
+
+    let newly_ready = graph.mark_completed(&tid("t1"));
+    // t3 still has t2 pending.
+    assert!(newly_ready.is_empty());
+    assert_eq!(graph.remaining_deps(&tid("t3")), Some(1));
+}
+
+#[test]
+fn mark_failed_returns_dependents() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph.add_task(make_task("t3", vec!["t1"], TaskStatus::Pending)).unwrap();
+
+    let blocked = graph.mark_failed(&tid("t1"));
+    assert_eq!(blocked.len(), 2);
+}
+
+#[test]
+fn bind_sets_both_maps() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+
+    assert_eq!(graph.get(&tid("t1")).unwrap().workspace_ref, Some(ws("ws-1")));
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), Some(&tid("t1")));
+    assert!(graph.get(&tid("t1")).unwrap().workspace_history.contains(&ws("ws-1")));
+}
+
+#[test]
+fn bind_duplicate_task_rejected() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    assert!(matches!(
+        graph.bind(&tid("t1"), &ws("ws-2")),
+        Err(GraphError::TaskAlreadyBound(_))
+    ));
+}
+
+#[test]
+fn bind_duplicate_workspace_rejected() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    assert!(matches!(
+        graph.bind(&tid("t2"), &ws("ws-1")),
+        Err(GraphError::WorkspaceAlreadyBound(_))
+    ));
+}
+
+#[test]
+fn unbind_clears_both() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    graph.unbind(&tid("t1"));
+
+    assert_eq!(graph.get(&tid("t1")).unwrap().workspace_ref, None);
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), None);
+}
+
+#[test]
+fn task_for_workspace_lookup() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), Some(&tid("t1")));
+}
+
+#[test]
+fn dispatchable_uses_counter() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    let d = graph.dispatchable();
+    assert!(d.contains(&&tid("t1")));
+}
+
+#[test]
+fn dispatchable_excludes_non_pending() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    let d = graph.dispatchable();
+    assert!(!d.contains(&&tid("t1")));
+}
+
+#[test]
+fn forward_edges_built_on_insert() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
+    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    let deps = graph.dependents(&tid("t1"));
+    assert!(deps.contains(&&tid("t2")));
+}
+
+// ══════════════════════════════════════════
 // Task 5.4 — Integration Engine
 // ══════════════════════════════════════════
 

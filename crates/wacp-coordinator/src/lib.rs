@@ -8,6 +8,7 @@ pub mod orchestrator;
 pub mod ownership;
 pub mod port_rights;
 pub mod task_graph;
+pub mod topology;
 pub mod tree;
 pub mod visibility;
 
@@ -19,6 +20,7 @@ pub use orchestrator::{Coordinator, DispatchRequest};
 pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};
 pub use port_rights::{PortRightEntry, PortRightError, PortRightStatus, PortRightsGraph};
 pub use task_graph::{GraphError, TaskGraph};
+pub use topology::{CascadeEffect, CreateWorkspaceParams, TopologySet};
 pub use tree::{TreeError, WorkspaceNode, WorkspaceTree};
 pub use visibility::{VisibilityError, VisibilityGraph};
 

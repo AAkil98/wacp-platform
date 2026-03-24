@@ -5,6 +5,7 @@ use crate::integration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
 use crate::task_graph::*;
+use crate::topology::*;
 use crate::tree::*;
 use crate::visibility::*;
 
@@ -943,4 +944,150 @@ fn multiple_rights_same_pair() {
     // Revoke both, now fails.
     graph.revoke(&id2).unwrap();
     assert!(graph.validate_send(&ws("A"), &ws("B")).is_err());
+}
+
+// ══════════════════════════════════════════
+// Task 9.5 — Compound Operations
+// ══════════════════════════════════════════
+
+fn make_create_params(
+    id: &str,
+    parent: &str,
+    owner: &str,
+    originator: Originator,
+) -> CreateWorkspaceParams {
+    CreateWorkspaceParams {
+        id: ws(id),
+        parent: ws(parent),
+        owner: uid(owner),
+        originator,
+        status: WorkspaceState::Idle,
+        task_id: None,
+    }
+}
+
+#[test]
+fn create_workspace_updates_all() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+
+    // Tree: node exists.
+    assert!(topo.tree.get(&ws("A")).is_some());
+
+    // Visibility: registered.
+    assert!(topo.visibility.can_see(&ws("A"), &ws("A"))); // self
+
+    // Escalation: routes to owner.
+    assert_eq!(topo.escalation.route(&ws("A")), Some(&uid("owner")));
+
+    // Port rights: 3 created (parent→child send, child→parent send, child self-receive).
+    assert_eq!(topo.port_rights.active_count(), 3);
+    assert!(topo.port_rights.validate_send(&ws("root"), &ws("A")).is_ok());
+    assert!(topo.port_rights.validate_send(&ws("A"), &ws("root")).is_ok());
+}
+
+#[test]
+fn create_workspace_coordinator_sees_child() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+
+    assert!(topo.visibility.can_see(&ws("root"), &ws("A")));
+}
+
+#[test]
+fn terminate_closed_expires_rights() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+    assert_eq!(topo.port_rights.active_count(), 3);
+
+    let effect = topo.terminate_workspace(&ws("A"), WorkspaceState::Closed);
+    assert!(effect.failed.is_empty());
+    assert!(effect.reparented.is_empty());
+    assert!(effect.rights_expired > 0);
+    // All rights involving A should be expired.
+    assert!(topo.port_rights.validate_send(&ws("root"), &ws("A")).is_err());
+    assert!(topo.port_rights.validate_send(&ws("A"), &ws("root")).is_err());
+}
+
+#[test]
+fn terminate_failed_cascades() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+    topo.create_workspace(make_create_params("B", "A", "owner", Originator::System))
+        .unwrap();
+
+    let effect = topo.terminate_workspace(&ws("A"), WorkspaceState::Failed);
+    // B is same-owner child → failed.
+    assert!(effect.failed.contains(&ws("B")));
+    assert_eq!(topo.tree.get(&ws("B")).unwrap().status, WorkspaceState::Failed);
+}
+
+#[test]
+fn terminate_failed_expires_cascaded_rights() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+    topo.create_workspace(make_create_params("B", "A", "owner", Originator::System))
+        .unwrap();
+    // 6 rights total: 3 for A + 3 for B.
+    assert_eq!(topo.port_rights.active_count(), 6);
+
+    topo.terminate_workspace(&ws("A"), WorkspaceState::Failed);
+    // All rights for A and B should be expired.
+    assert_eq!(topo.port_rights.active_count(), 0);
+}
+
+#[test]
+fn cascade_updates_escalation_router() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner1"));
+    topo.create_workspace(make_create_params("A", "root", "owner1", Originator::System))
+        .unwrap();
+    topo.create_workspace(make_create_params("B", "A", "owner2", Originator::System))
+        .unwrap();
+
+    // Set B to Active so it's a non-terminal candidate.
+    topo.tree.update_status(&ws("B"), WorkspaceState::Active);
+
+    let effect = topo.terminate_workspace(&ws("A"), WorkspaceState::Failed);
+    // B is cross-owner → reparented, not failed.
+    assert!(effect.reparented.contains(&ws("B")));
+    assert_eq!(topo.tree.get(&ws("B")).unwrap().status, WorkspaceState::Active);
+    // Escalation still routes B to owner2.
+    assert_eq!(topo.escalation.route(&ws("B")), Some(&uid("owner2")));
+}
+
+#[test]
+fn transfer_ownership_updates_both() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner1"));
+    topo.create_workspace(make_create_params("A", "root", "owner1", Originator::System))
+        .unwrap();
+
+    let old = topo.transfer_ownership(&ws("A"), uid("owner2")).unwrap();
+    assert_eq!(old, uid("owner1"));
+    assert_eq!(topo.tree.get(&ws("A")).unwrap().owner, uid("owner2"));
+    assert!(topo.tree.by_owner(&uid("owner2")).contains(&ws("A")));
+    assert_eq!(topo.escalation.route(&ws("A")), Some(&uid("owner2")));
+}
+
+#[test]
+fn create_then_terminate_lifecycle() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+
+    // Create.
+    topo.create_workspace(make_create_params("A", "root", "owner", Originator::System))
+        .unwrap();
+    assert!(topo.tree.get(&ws("A")).is_some());
+    assert!(topo.visibility.can_see(&ws("root"), &ws("A")));
+    assert_eq!(topo.port_rights.active_count(), 3);
+
+    // Terminate.
+    topo.terminate_workspace(&ws("A"), WorkspaceState::Closed);
+    assert_eq!(topo.tree.get(&ws("A")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(topo.port_rights.active_count(), 0);
+    // Visibility preserved — terminal workspaces remain visible for trail queries.
+    assert!(topo.visibility.can_see(&ws("root"), &ws("A")));
 }

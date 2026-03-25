@@ -178,14 +178,14 @@ impl AuthRateLimiter {
         }
         let mut map = self.failures.lock();
         // Evict oldest entry if at capacity.
-        if map.len() >= MAX_TRACKED_IPS && !map.contains_key(ip) {
-            if let Some(oldest_ip) = map
+        if map.len() >= MAX_TRACKED_IPS
+            && !map.contains_key(ip)
+            && let Some(oldest_ip) = map
                 .iter()
                 .min_by_key(|(_, ts)| ts.back().copied().unwrap_or_else(Instant::now))
                 .map(|(ip, _)| *ip)
-            {
-                map.remove(&oldest_ip);
-            }
+        {
+            map.remove(&oldest_ip);
         }
         map.entry(*ip).or_default().push_back(Instant::now());
     }

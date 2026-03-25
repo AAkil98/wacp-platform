@@ -1,7 +1,9 @@
 mod agent;
 pub mod config;
+pub mod health;
 mod init;
 pub mod logging;
+pub mod metrics;
 pub mod tls;
 
 pub use agent::TestAgent;
@@ -90,6 +92,48 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
+        // Start observability endpoints before runtime init (so health shows Starting).
+        let health_state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(
+            health::HEALTH_STARTING,
+        ));
+
+        if config.observability.health.enabled {
+            if let Err(e) =
+                health::start_health_server(&config.observability.health, health_state.clone())
+                    .await
+            {
+                tracing::error!(error = %e, "health server failed to start");
+                return ExitCode::from(3);
+            }
+            tracing::info!(
+                address = %config.observability.health.listen,
+                path = %config.observability.health.path,
+                "health endpoint listening"
+            );
+        }
+
+        if config.observability.metrics.enabled {
+            let metrics = match metrics::register_metrics() {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::error!(error = %e, "metric registration failed");
+                    return ExitCode::from(3);
+                }
+            };
+            if let Err(e) =
+                metrics::start_metrics_server(&config.observability.metrics, metrics.registry)
+                    .await
+            {
+                tracing::error!(error = %e, "metrics server failed to start");
+                return ExitCode::from(3);
+            }
+            tracing::info!(
+                address = %config.observability.metrics.listen,
+                path = %config.observability.metrics.path,
+                "metrics endpoint listening"
+            );
+        }
+
         let mut runtime = match Runtime::init(config).await {
             Ok(rt) => rt,
             Err(e) => {
@@ -97,7 +141,22 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
                 return exit_code_for_runtime_error(&e);
             }
         };
+
+        // Mark ready after all subsystems initialized.
+        health_state.store(
+            health::HEALTH_READY,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        tracing::info!("runtime ready");
+
         runtime.run().await;
+
+        // Mark draining during shutdown.
+        health_state.store(
+            health::HEALTH_DRAINING,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+
         ExitCode::SUCCESS
     })
 }

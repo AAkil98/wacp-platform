@@ -27,6 +27,9 @@ prost = "0.13"
 # Storage
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# CLI
+clap = { version = "4", features = ["derive"] }
+
 # Error handling
 thiserror = "2"
 

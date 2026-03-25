@@ -3,11 +3,14 @@
 //! Reconstructs runtime state from the trail after a crash.
 //! Five steps: integrity check, state reconstruction, in-flight detection,
 //! timer reconstruction (placeholder), clock recovery.
+//! Supports snapshot-accelerated recovery: load a system snapshot to skip
+//! replaying early trail entries.
 
 use std::collections::{HashMap, HashSet};
 
 use wacp_clock::Timestamp;
-use wacp_trail::{verify_chain, ChainHash, SegmentId, StorageError, TrailStorage};
+use wacp_coordinator::SystemSnapshot;
+use wacp_trail::{verify_chain, ChainHash, SegmentId, SnapshotStorage, StorageError, TrailStorage};
 use wacp_types::*;
 
 /// Error during recovery.
@@ -20,7 +23,7 @@ pub enum RecoveryError {
     StorageError(#[from] StorageError),
 }
 
-/// Recovered state from trail replay.
+/// Recovered state from trail replay (optionally accelerated by a snapshot).
 #[derive(Debug)]
 pub struct RecoveredState {
     /// Workspace ID → last known state.
@@ -33,48 +36,140 @@ pub struct RecoveredState {
     pub clock_initial: Timestamp,
     /// Envelope IDs that were created but not delivered.
     pub in_flight_envelopes: Vec<String>,
+    /// Sequence of the snapshot used, if any.
+    pub snapshot_sequence: Option<u64>,
 }
 
 /// The recovery engine (runtime spec §13).
 pub struct RecoveryEngine;
 
 impl RecoveryEngine {
-    /// Full recovery procedure.
+    /// Full recovery from trail only (no snapshots).
     pub fn recover(trail: &dyn TrailStorage) -> Result<RecoveredState, RecoveryError> {
+        Self::recover_internal(trail, None)
+    }
+
+    /// Recovery with optional snapshot acceleration.
+    /// If a valid system snapshot exists, recovery starts from the snapshot's
+    /// anchor sequence instead of replaying the entire trail.
+    pub fn recover_with_snapshot(
+        trail: &dyn TrailStorage,
+        snapshots: &dyn SnapshotStorage,
+    ) -> Result<RecoveredState, RecoveryError> {
+        // Try to load the latest system snapshot.
+        let snapshot = match snapshots.read_latest_system() {
+            Ok(Some((seq, data))) => {
+                match serde_json::from_slice::<SystemSnapshot>(&data) {
+                    Ok(snap) => Some((seq, snap)),
+                    Err(_) => None, // corrupt snapshot → fall back
+                }
+            }
+            Ok(None) => None,
+            Err(_) => None, // storage error → fall back
+        };
+
+        Self::recover_internal(trail, snapshot)
+    }
+
+    fn recover_internal(
+        trail: &dyn TrailStorage,
+        snapshot: Option<(u64, SystemSnapshot)>,
+    ) -> Result<RecoveredState, RecoveryError> {
         let metadata = trail.metadata();
 
-        // Empty trail → empty state.
+        // Empty trail.
         if metadata.total_entries == 0 {
+            // If we have a snapshot, use its state.
+            if let Some((seq, snap)) = snapshot {
+                let (ws_states, task_statuses) = Self::extract_snapshot_state(&snap);
+                return Ok(RecoveredState {
+                    workspace_states: ws_states,
+                    task_statuses,
+                    last_sequence: seq,
+                    clock_initial: Timestamp::ZERO,
+                    in_flight_envelopes: vec![],
+                    snapshot_sequence: Some(seq),
+                });
+            }
             return Ok(RecoveredState {
                 workspace_states: HashMap::new(),
                 task_statuses: HashMap::new(),
                 last_sequence: 0,
                 clock_initial: Timestamp::ZERO,
                 in_flight_envelopes: vec![],
+                snapshot_sequence: None,
             });
         }
 
-        // Step 1: Trail integrity check — verify hash chain.
+        // Step 1: Collect and verify all trail entries.
         let all_entries = Self::collect_entries(trail, &metadata)?;
         Self::verify_integrity(&all_entries)?;
 
-        // Step 2: State reconstruction from trail replay.
-        let (workspace_states, task_statuses) = Self::reconstruct_state(&all_entries);
+        // Determine replay start point.
+        let (mut ws_states, mut task_statuses, snapshot_seq, replay_start) =
+            if let Some((seq, snap)) = snapshot {
+                let (ws, ts) = Self::extract_snapshot_state(&snap);
+                // Replay entries after the snapshot anchor.
+                (ws, ts, Some(seq), seq as usize)
+            } else {
+                (HashMap::new(), HashMap::new(), None, 0)
+            };
 
-        // Step 3: In-flight detection.
+        // Step 2: Replay entries from start point.
+        let replay_entries = &all_entries[replay_start..];
+        let (replay_ws, replay_tasks) = Self::reconstruct_state(replay_entries);
+
+        // Merge replayed state on top of snapshot state.
+        ws_states.extend(replay_ws);
+        task_statuses.extend(replay_tasks);
+
+        // Step 3: In-flight detection (over full trail for correctness).
         let in_flight_envelopes = Self::detect_in_flight(&all_entries);
 
-        // Step 5: Clock recovery — last entry timestamp + 1 logical tick.
+        // Step 5: Clock recovery.
         let last_timestamp = Self::extract_last_timestamp(&all_entries);
         let clock_initial = last_timestamp.succ();
 
         Ok(RecoveredState {
-            workspace_states,
+            workspace_states: ws_states,
             task_statuses,
             last_sequence: metadata.total_entries,
             clock_initial,
             in_flight_envelopes,
+            snapshot_sequence: snapshot_seq,
         })
+    }
+
+    /// Extract workspace and task state from a deserialized snapshot.
+    fn extract_snapshot_state(
+        snap: &SystemSnapshot,
+    ) -> (HashMap<String, WorkspaceState>, HashMap<String, TaskStatus>) {
+        let mut ws_states = HashMap::new();
+        let mut task_statuses = HashMap::new();
+
+        // Extract workspace states from tree snapshot.
+        if let Some(nodes) = snap.tree.get("nodes").and_then(|n| n.as_object()) {
+            for (ws_id, node) in nodes {
+                if let Some(status_str) = node.get("status").and_then(|s| s.as_str()) {
+                    if let Some(state) = parse_workspace_state(status_str) {
+                        ws_states.insert(ws_id.clone(), state);
+                    }
+                }
+            }
+        }
+
+        // Extract task statuses from task_graph snapshot.
+        if let Some(tasks) = snap.task_graph.get("tasks").and_then(|t| t.as_object()) {
+            for (task_id, task) in tasks {
+                if let Some(status_str) = task.get("status").and_then(|s| s.as_str()) {
+                    if let Some(status) = parse_task_status(status_str) {
+                        task_statuses.insert(task_id.clone(), status);
+                    }
+                }
+            }
+        }
+
+        (ws_states, task_statuses)
     }
 
     /// Collect all entries from all segments.
@@ -104,7 +199,6 @@ impl RecoveryEngine {
     }
 
     /// Step 2: Replay entries to reconstruct state.
-    /// Uses a simple JSON-based event body parsing approach.
     fn reconstruct_state(
         entries: &[(Vec<u8>, ChainHash)],
     ) -> (HashMap<String, WorkspaceState>, HashMap<String, TaskStatus>) {
@@ -112,7 +206,6 @@ impl RecoveryEngine {
         let mut task_statuses: HashMap<String, TaskStatus> = HashMap::new();
 
         for (entry_bytes, _) in entries {
-            // Attempt to parse entry as JSON for event processing.
             if let Ok(event) = serde_json::from_slice::<serde_json::Value>(entry_bytes)
                 && let Some(event_type) = event.get("event_type").and_then(|v| v.as_str()) {
                     match event_type {
@@ -166,7 +259,7 @@ impl RecoveryEngine {
         created.difference(&delivered).cloned().collect()
     }
 
-    /// Extract timestamp from the last entry (by parsing or using a default).
+    /// Extract timestamp from the last entry.
     fn extract_last_timestamp(entries: &[(Vec<u8>, ChainHash)]) -> Timestamp {
         if let Some((entry_bytes, _)) = entries.last()
             && let Ok(event) = serde_json::from_slice::<serde_json::Value>(entry_bytes)

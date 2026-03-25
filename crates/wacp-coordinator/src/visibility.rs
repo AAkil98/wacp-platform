@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use serde::{Deserialize, Serialize};
 use wacp_types::WorkspaceId;
 
 /// Error from visibility operations.
@@ -15,6 +16,7 @@ pub enum VisibilityError {
 /// Self-visibility is implicit — every workspace can see itself
 /// without being stored in the graph (invariant VI-1).
 /// Grants are additive only — no revoke method (invariant VI-2).
+#[derive(Serialize, Deserialize)]
 pub struct VisibilityGraph {
     /// Forward: workspace → set of workspaces it can see
     can_see: HashMap<String, HashSet<WorkspaceId>>,

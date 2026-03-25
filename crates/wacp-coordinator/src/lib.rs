@@ -31,7 +31,7 @@ pub use integration::{
     IntegrationRequest, IntegrationResult, MergeContext, MergeExecutor, MergeResult,
     ResolutionOutcome, SalvageIntegration,
 };
-pub use orchestrator::{Coordinator, DispatchRequest};
+pub use orchestrator::{Coordinator, DispatchRequest, SystemSnapshot};
 pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};
 pub use port_rights::{PortRightEntry, PortRightError, PortRightStatus, PortRightsGraph};
 pub use resource::{BudgetCheckResult, BudgetEnforcer, LivenessMonitor, TimeoutTracker};

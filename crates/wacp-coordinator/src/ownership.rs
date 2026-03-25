@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use wacp_types::{Originator, UserId, WorkspaceId};
 
 /// Derived index for escalation routing (topology.md §5.1).
@@ -7,6 +8,7 @@ use wacp_types::{Originator, UserId, WorkspaceId};
 /// Maps workspace id → owner for O(1) lookup when an escalation
 /// signal needs to be routed to the owning human. Maintained on
 /// workspace creation and ownership transfer.
+#[derive(Serialize, Deserialize)]
 pub struct EscalationRouter {
     routing: HashMap<String, UserId>,
 }

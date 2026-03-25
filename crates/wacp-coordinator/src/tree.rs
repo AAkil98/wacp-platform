@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use wacp_types::{Originator, TaskId, UserId, WorkspaceId, WorkspaceState};
 
 /// Error from tree operations.
@@ -16,7 +17,7 @@ pub enum TreeError {
 }
 
 /// A node in the workspace tree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceNode {
     pub id: WorkspaceId,
     pub parent: Option<WorkspaceId>,
@@ -30,6 +31,7 @@ pub struct WorkspaceNode {
 /// The workspace tree (PROTOCOL.md §6.5, topology.md §2).
 ///
 /// Flat table with three indices for O(1) lookup + O(k) traversal.
+#[derive(Serialize, Deserialize)]
 pub struct WorkspaceTree {
     nodes: HashMap<String, WorkspaceNode>,
     root: WorkspaceId,

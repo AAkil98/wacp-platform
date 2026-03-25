@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use wacp_types::{Originator, PortRightType, TaskId, UserId, WorkspaceId, WorkspaceState};
 
 use crate::ownership::EscalationRouter;
@@ -28,6 +29,7 @@ pub struct CascadeEffect {
 /// that span all of them (topology.md §8).
 ///
 /// `TaskGraph` is separate — managed by the coordinator's scheduling logic.
+#[derive(Serialize, Deserialize)]
 pub struct TopologySet {
     pub tree: WorkspaceTree,
     pub visibility: VisibilityGraph,

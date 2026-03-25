@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use wacp_types::{PortRightType, WorkspaceId};
 
 /// Status of a port right in its lifecycle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PortRightStatus {
     Active,
     Consumed, // send-once used
@@ -12,7 +13,7 @@ pub enum PortRightStatus {
 }
 
 /// A port right entry with id and lifecycle status (topology.md §7).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortRightEntry {
     pub id: String,
     pub holder: WorkspaceId,
@@ -43,6 +44,7 @@ pub enum PortRightError {
 /// Three indices for O(1) lookup by holder, target, or right id.
 /// Rights are created, transferred, consumed (send-once), revoked,
 /// or expired (terminal workspace). The most mutable of the six topologies.
+#[derive(Serialize, Deserialize)]
 pub struct PortRightsGraph {
     by_holder: HashMap<String, Vec<String>>,
     by_target: HashMap<String, Vec<String>>,

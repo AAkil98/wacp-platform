@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use wacp_types::*;
 use wacp_workspace::{
@@ -14,6 +15,14 @@ use crate::tree::{WorkspaceNode, WorkspaceTree};
 pub struct DispatchRequest {
     pub task_id: TaskId,
     pub config: WorkspaceConfig,
+}
+
+/// Serializable system snapshot — coordinator state at a point in time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemSnapshot {
+    pub sequence: u64,
+    pub tree: serde_json::Value,
+    pub task_graph: serde_json::Value,
 }
 
 /// The coordinator — owns tree, task graph, workspace handles.
@@ -109,5 +118,14 @@ impl Coordinator {
     /// Get a workspace handle.
     pub fn handle(&self, id: &WorkspaceId) -> Option<&WorkspaceHandle> {
         self.workspace_handles.get(id.as_ref())
+    }
+
+    /// Capture the coordinator's current state as a serializable snapshot.
+    pub fn capture_snapshot(&self, sequence: u64) -> SystemSnapshot {
+        SystemSnapshot {
+            sequence,
+            tree: serde_json::to_value(&self.tree).expect("tree serializes"),
+            task_graph: serde_json::to_value(&self.task_graph).expect("task_graph serializes"),
+        }
     }
 }

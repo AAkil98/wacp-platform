@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use wacp_fsm::{StateMachine, TaskFsm, TaskTrigger, TransitionError};
 use wacp_types::{Task, TaskId, TaskStatus, WorkspaceId};
 
@@ -25,6 +26,7 @@ pub enum GraphError {
 /// Readiness is counter-based: each task tracks how many non-terminal
 /// dependencies remain. When a dependency completes, its dependents'
 /// counters are decremented. Counter reaching zero = ready.
+#[derive(Serialize, Deserialize)]
 pub struct TaskGraph {
     tasks: HashMap<String, Task>,
     /// Per-task readiness counter: how many deps are not yet terminal.

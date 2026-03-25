@@ -1,6 +1,7 @@
 mod agent;
 pub mod config;
 mod init;
+pub mod logging;
 
 pub use agent::TestAgent;
 pub use config::{ConfigError, RuntimeConfig, PROTOCOL_VERSION};
@@ -49,31 +50,49 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
     let (config, source) = match RuntimeConfig::load(config_path) {
         Ok(result) => result,
         Err(e) => {
+            // Logging may not be initialized yet — use stderr directly.
             eprintln!("fatal: configuration error: {e}");
             return ExitCode::from(1);
         }
     };
 
-    eprintln!(
-        "wacp-runtime v{} (protocol wacp-v{}, commit {}, built {})",
-        env!("CARGO_PKG_VERSION"),
-        PROTOCOL_VERSION,
-        env!("WACP_GIT_COMMIT"),
-        env!("WACP_BUILD_TIMESTAMP"),
-    );
-    if let Some(path) = &source {
-        eprintln!("configuration: {}", path.display());
-    } else {
-        eprintln!("configuration: defaults (no config file found)");
+    // Initialize logging as first action after config load.
+    if let Err(e) = logging::init_logging(&config.logging) {
+        eprintln!("fatal: logging initialization failed: {e}");
+        return ExitCode::from(1);
     }
-    eprintln!("data directory: {}", config.storage.data_dir);
+
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        protocol = %format_args!("wacp-v{PROTOCOL_VERSION}"),
+        commit = env!("WACP_GIT_COMMIT"),
+        built = env!("WACP_BUILD_TIMESTAMP"),
+        "runtime starting"
+    );
+    match &source {
+        Some(path) => tracing::info!(source = %path.display(), "configuration loaded"),
+        None => tracing::info!("no config file found, using defaults"),
+    }
+    tracing::info!(
+        level = %config.logging.level,
+        format = %config.logging.format,
+        output = %config.logging.output,
+        "logging initialized"
+    );
+
+    // Unconditional TLS-disabled warning.
+    if !config.tls.enabled {
+        tracing::warn!(
+            "TLS disabled — gRPC endpoints serving plaintext. Do not use in production."
+        );
+    }
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         let mut runtime = match Runtime::init(config).await {
             Ok(rt) => rt,
             Err(e) => {
-                eprintln!("fatal: initialization failed: {e}");
+                tracing::error!(error = %e, "initialization failed");
                 return exit_code_for_runtime_error(&e);
             }
         };
@@ -85,7 +104,6 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
 fn cmd_validate(config_path: Option<&std::path::Path>) -> ExitCode {
     match RuntimeConfig::load(config_path) {
         Ok((config, _)) => {
-            // Also validate taxonomy if configured.
             if !config.taxonomy.file.is_empty() {
                 let path = std::path::Path::new(&config.taxonomy.file);
                 match std::fs::read_to_string(path) {

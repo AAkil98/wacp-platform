@@ -64,12 +64,12 @@ impl Runtime {
         let recovered = RecoveryEngine::recover(&trail)
             .map_err(|e| RuntimeError::Recovery(e.to_string()))?;
 
-        eprintln!(
-            "recovery: {} workspaces, {} tasks, {} in-flight envelopes, last_seq={}",
-            recovered.workspace_states.len(),
-            recovered.task_statuses.len(),
-            recovered.in_flight_envelopes.len(),
-            recovered.last_sequence,
+        tracing::info!(
+            workspaces_recovered = recovered.workspace_states.len(),
+            tasks = recovered.task_statuses.len(),
+            in_flight_envelopes = recovered.in_flight_envelopes.len(),
+            last_sequence = recovered.last_sequence,
+            "recovery completed"
         );
 
         // 5. Build permission engine from taxonomy.
@@ -100,9 +100,10 @@ impl Runtime {
         .await
         .map_err(|e| RuntimeError::Transport(e.to_string()))?;
 
-        eprintln!(
-            "gRPC: agent service on {}, highway service on {}",
-            config.server.agent_listen, config.server.highway_listen
+        tracing::info!(
+            agent = %config.server.agent_listen,
+            highway = %config.server.highway_listen,
+            "gRPC endpoints listening"
         );
 
         Ok(Runtime {
@@ -144,7 +145,7 @@ impl Runtime {
 
     /// Run the coordinator event processing loop until shutdown.
     pub async fn run(&mut self) {
-        eprintln!("wacp-runtime: entering event loop");
+        tracing::info!("entering event loop");
 
         loop {
             tokio::select! {
@@ -179,7 +180,7 @@ impl Runtime {
 
                 // Shutdown signal.
                 _ = tokio::signal::ctrl_c() => {
-                    eprintln!("wacp-runtime: received shutdown signal");
+                    tracing::info!("received shutdown signal");
                     break;
                 }
             }
@@ -190,7 +191,7 @@ impl Runtime {
 
     /// Graceful shutdown — abort all active workspaces, wait for termination.
     pub async fn shutdown(&mut self) {
-        eprintln!("wacp-runtime: shutting down...");
+        tracing::info!("shutting down");
 
         let active: Vec<WorkspaceId> = self
             .coordinator
@@ -216,7 +217,7 @@ impl Runtime {
             }
         }
 
-        eprintln!("wacp-runtime: shutdown complete");
+        tracing::info!("shutdown complete");
     }
 
     /// Handle an agent gRPC request by forwarding to the coordinator.

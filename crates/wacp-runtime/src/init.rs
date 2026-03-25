@@ -1,5 +1,6 @@
 use std::fs;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 use tokio::sync::mpsc;
 use wacp_coordinator::Coordinator;
@@ -11,7 +12,7 @@ use wacp_transport::{start_grpc_server, GrpcServerConfig};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
 
-use crate::config::RuntimeConfig;
+use crate::config::{RuntimeConfig, PROTOCOL_VERSION};
 
 /// Errors during runtime initialization.
 #[derive(Debug, thiserror::Error)]
@@ -42,18 +43,20 @@ pub struct Runtime {
 impl Runtime {
     /// Full initialization sequence — production mode with filesystem storage and gRPC.
     pub async fn init(config: RuntimeConfig) -> Result<Self, RuntimeError> {
+        let data_dir = PathBuf::from(&config.storage.data_dir);
+
         // 1. Create data directories.
-        fs::create_dir_all(config.data_dir.join("trail"))?;
-        fs::create_dir_all(config.data_dir.join("checkpoints"))?;
-        fs::create_dir_all(config.data_dir.join("snapshots"))?;
+        fs::create_dir_all(data_dir.join("trail"))?;
+        fs::create_dir_all(data_dir.join("checkpoints"))?;
+        fs::create_dir_all(data_dir.join("snapshots"))?;
 
         // 2. Load taxonomy.
         let taxonomy = Self::load_taxonomy(&config)?;
 
         // 3. Open trail storage with crash recovery.
         let trail = FileTrailStorage::recover(FileTrailConfig {
-            dir: config.data_dir.join("trail"),
-            max_segment_size: config.max_segment_size,
+            dir: data_dir.join("trail"),
+            max_segment_size: config.storage.trail.segment_size_bytes,
         })
         .map_err(|e| RuntimeError::Storage(e.to_string()))?;
 
@@ -78,17 +81,28 @@ impl Runtime {
         let (event_tx, event_rx) = mpsc::channel(256);
         let coordinator = Coordinator::new(root_id, owner, event_tx);
 
-        // 7. Start gRPC server on configured ports.
+        // 7. Start gRPC server on configured addresses.
+        let agent_addr: SocketAddr = config
+            .server
+            .agent_listen
+            .parse()
+            .map_err(|e| RuntimeError::Transport(format!("invalid agent address: {e}")))?;
+        let highway_addr: SocketAddr = config
+            .server
+            .highway_listen
+            .parse()
+            .map_err(|e| RuntimeError::Transport(format!("invalid highway address: {e}")))?;
+
         let grpc_handles = start_grpc_server(GrpcServerConfig {
-            agent_addr: SocketAddr::from(([0, 0, 0, 0], config.agent_port)),
-            highway_addr: SocketAddr::from(([0, 0, 0, 0], config.highway_port)),
+            agent_addr,
+            highway_addr,
         })
         .await
         .map_err(|e| RuntimeError::Transport(e.to_string()))?;
 
         eprintln!(
-            "gRPC: agent service on :{}, highway service on :{}",
-            config.agent_port, config.highway_port
+            "gRPC: agent service on {}, highway service on {}",
+            config.server.agent_listen, config.server.highway_listen
         );
 
         Ok(Runtime {
@@ -211,7 +225,6 @@ impl Runtime {
 
         match req {
             AgentRequest::Bind { request, reply } => {
-                // Bind: look up workspace, return its state.
                 let ws_id = WorkspaceId::from(request.workspace_id.as_str());
                 if let Some(node) = self.coordinator.tree.get(&ws_id) {
                     let response = wacp_transport::wacp_v1::BindResponse {
@@ -329,18 +342,19 @@ impl Runtime {
     }
 
     fn load_taxonomy(config: &RuntimeConfig) -> Result<Taxonomy, RuntimeError> {
-        if let Some(ref path) = config.taxonomy_path {
-            let content = fs::read_to_string(path)
-                .map_err(|e| RuntimeError::Taxonomy(format!("failed to read {}: {e}", path.display())))?;
-            if path.extension().is_some_and(|ext| ext == "json") {
-                Taxonomy::load_json(&content, &config.protocol_version)
-                    .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
-            } else {
-                Taxonomy::load_yaml(&content, &config.protocol_version)
-                    .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
-            }
+        if config.taxonomy.file.is_empty() {
+            return Ok(Taxonomy::empty(PROTOCOL_VERSION));
+        }
+        let path = std::path::Path::new(&config.taxonomy.file);
+        let content = fs::read_to_string(path).map_err(|e| {
+            RuntimeError::Taxonomy(format!("failed to read {}: {e}", path.display()))
+        })?;
+        if path.extension().is_some_and(|ext| ext == "json") {
+            Taxonomy::load_json(&content, PROTOCOL_VERSION)
+                .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
         } else {
-            Ok(Taxonomy::empty(&config.protocol_version))
+            Taxonomy::load_yaml(&content, PROTOCOL_VERSION)
+                .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
         }
     }
 }

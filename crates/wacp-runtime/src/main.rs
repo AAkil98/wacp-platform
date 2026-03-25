@@ -1,18 +1,29 @@
 mod agent;
-mod config;
+pub mod config;
 mod init;
 
 pub use agent::TestAgent;
-pub use config::RuntimeConfig;
+pub use config::{ConfigError, RuntimeConfig, PROTOCOL_VERSION};
 pub use init::{Runtime, RuntimeError};
 
 #[tokio::main]
 async fn main() {
-    let config = RuntimeConfig::default();
+    let (config, source) = match RuntimeConfig::load(None) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("fatal: configuration error: {e}");
+            std::process::exit(1);
+        }
+    };
 
     eprintln!("wacp-runtime v{}", env!("CARGO_PKG_VERSION"));
-    eprintln!("protocol version: {}", config.protocol_version);
-    eprintln!("data directory: {}", config.data_dir.display());
+    eprintln!("protocol version: {}", PROTOCOL_VERSION);
+    if let Some(path) = &source {
+        eprintln!("configuration: {}", path.display());
+    } else {
+        eprintln!("configuration: defaults (no config file found)");
+    }
+    eprintln!("data directory: {}", config.storage.data_dir);
 
     let mut runtime = match Runtime::init(config).await {
         Ok(rt) => rt,

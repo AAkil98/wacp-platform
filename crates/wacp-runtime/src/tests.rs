@@ -13,7 +13,7 @@ fn test_runtime() -> Runtime {
     Runtime::init_in_memory(RuntimeConfig::default()).unwrap()
 }
 
-fn worker_config(id: &str, task_id: &str) -> WorkspaceConfig {
+fn worker_config(id: &str, _task_id: &str) -> WorkspaceConfig {
     WorkspaceConfig {
         id: WorkspaceId::from(id),
         role: "worker".into(),
@@ -222,7 +222,6 @@ async fn e2e_failure_cascade() {
     let mut child_config = worker_config("ws-child", "task-child");
     child_config.parent = WorkspaceId::from("ws-parent");
 
-    // Manually insert child into tree (dispatch auto-inserts).
     rt.coordinator.dispatch(DispatchRequest {
         task_id: TaskId::from("task-child"),
         config: child_config,
@@ -264,12 +263,11 @@ async fn e2e_grpc_bind_and_authenticate() {
     use wacp_transport::wacp_v1::highway_service_client::HighwayServiceClient;
 
     // Start runtime with gRPC on test ports.
-    let config = RuntimeConfig {
-        data_dir: tempfile::tempdir().unwrap().into_path(),
-        agent_port: 29400,
-        highway_port: 29401,
-        ..RuntimeConfig::default()
-    };
+    let mut config = RuntimeConfig::default();
+    let tmp = tempfile::tempdir().unwrap();
+    config.storage.data_dir = tmp.path().to_string_lossy().to_string();
+    config.server.agent_listen = "127.0.0.1:29400".into();
+    config.server.highway_listen = "127.0.0.1:29401".into();
 
     let mut rt = Runtime::init(config).await.unwrap();
 

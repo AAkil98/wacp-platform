@@ -2,6 +2,7 @@ mod agent;
 pub mod config;
 mod init;
 pub mod logging;
+pub mod tls;
 
 pub use agent::TestAgent;
 pub use config::{ConfigError, RuntimeConfig, PROTOCOL_VERSION};

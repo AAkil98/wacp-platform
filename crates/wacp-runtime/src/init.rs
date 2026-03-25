@@ -81,7 +81,17 @@ impl Runtime {
         let (event_tx, event_rx) = mpsc::channel(256);
         let coordinator = Coordinator::new(root_id, owner, event_tx);
 
-        // 7. Start gRPC server on configured addresses.
+        // 7. Build TLS configuration if enabled.
+        let tls_config = if config.tls.enabled {
+            Some(
+                crate::tls::build_tls_config(&config.tls)
+                    .map_err(|e| RuntimeError::Transport(format!("TLS error: {e}")))?,
+            )
+        } else {
+            None
+        };
+
+        // 8. Start gRPC server on configured addresses.
         let agent_addr: SocketAddr = config
             .server
             .agent_listen
@@ -96,6 +106,7 @@ impl Runtime {
         let grpc_handles = start_grpc_server(GrpcServerConfig {
             agent_addr,
             highway_addr,
+            tls: tls_config,
         })
         .await
         .map_err(|e| RuntimeError::Transport(e.to_string()))?;

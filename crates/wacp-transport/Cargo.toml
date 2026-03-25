@@ -9,7 +9,7 @@ license.workspace = true
 wacp-types = { path = "../wacp-types" }
 tokio = { workspace = true }
 thiserror = { workspace = true }
-tonic = { workspace = true }
+tonic = { workspace = true, features = ["tls-ring"] }
 prost = { workspace = true }
 tokio-stream = "0.1"
 

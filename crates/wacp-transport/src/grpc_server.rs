@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use tokio::sync::mpsc;
+use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Server;
 
 use crate::grpc_agent::{AgentRequest, AgentServiceImpl};
@@ -13,6 +14,8 @@ use crate::TransportError;
 pub struct GrpcServerConfig {
     pub agent_addr: SocketAddr,
     pub highway_addr: SocketAddr,
+    /// When set, both endpoints serve TLS. When None, plaintext.
+    pub tls: Option<ServerTlsConfig>,
 }
 
 impl Default for GrpcServerConfig {
@@ -20,6 +23,7 @@ impl Default for GrpcServerConfig {
         Self {
             agent_addr: ([0, 0, 0, 0], 9400).into(),
             highway_addr: ([0, 0, 0, 0], 9401).into(),
+            tls: None,
         }
     }
 }
@@ -43,8 +47,15 @@ pub async fn start_grpc_server(
 
     // Spawn agent service on its own port.
     let agent_addr = config.agent_addr;
+    let agent_tls = config.tls.clone();
     tokio::spawn(async move {
-        Server::builder()
+        let mut builder = Server::builder();
+        if let Some(tls) = agent_tls {
+            builder = builder
+                .tls_config(tls)
+                .expect("agent TLS configuration failed");
+        }
+        builder
             .add_service(AgentServiceServer::new(agent_service))
             .serve(agent_addr)
             .await
@@ -53,8 +64,15 @@ pub async fn start_grpc_server(
 
     // Spawn highway service on its own port.
     let highway_addr = config.highway_addr;
+    let highway_tls = config.tls;
     tokio::spawn(async move {
-        Server::builder()
+        let mut builder = Server::builder();
+        if let Some(tls) = highway_tls {
+            builder = builder
+                .tls_config(tls)
+                .expect("highway TLS configuration failed");
+        }
+        builder
             .add_service(HighwayServiceServer::new(highway_service))
             .serve(highway_addr)
             .await

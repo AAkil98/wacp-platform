@@ -11,6 +11,7 @@ pub mod fs_snapshot;
 pub mod fs_trail;
 pub mod index;
 pub mod memory;
+pub mod tiered;
 pub mod traits;
 
 pub use chain::{compute_chain_hash, verify_chain, verify_chain_link, ChainHash, ChainVerificationError};

@@ -21,6 +21,9 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 ring = "0.17"
 
+# Compression
+zstd = "0.13"
+
 # Encoding
 base64 = "0.22"
 

@@ -18,7 +18,9 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 14: complete.** Deployment infrastructure — full RuntimeConfig (9 sections, 47 fields), clap CLI (serve/validate/defaults), tracing-based structured logging (JSON/pretty), rustls TLS with mTLS, PSK authenticator with rate limiter, Prometheus metrics endpoint, HTTP health checks (Starting/Ready/Draining). 40 tests in `wacp-runtime` (was 7). See details below.
 
-**Phase: 15 next.** Storage enhancements (system snapshots, tiered storage, retention). See `IMPLEMENTATION.md` for the full 42-task plan (Phases 9–18).
+**Phase 15: complete.** Storage enhancements — FileSnapshotStorage with SHA-256 checksums, coordinator state serialization (all topology types), snapshot-accelerated recovery, tiered storage (zstd compression, hot/warm/cold transitions, recovery window invariant), background compaction with retention policies. 67 tests in `wacp-trail` (was 48).
+
+**Phase: 16 next.** Agent migration (7-step procedure, snapshot, unbind/bind, rollback). See `IMPLEMENTATION.md` for the full 42-task plan (Phases 9–18).
 
 ## Repository Map
 
@@ -63,7 +65,8 @@ wacp/
 │   ├── phase10-*.md                 # Phase 10: scheduling (4 specs, complete)
 │   ├── phase11-*.md                 # Phase 11: integration (3 specs, complete)
 │   ├── phase13-*.md                 # Phase 13: request handler (1 spec, complete)
-│   └── phase14-*.md                 # Phase 14: deployment (6 specs, complete)
+│   ├── phase14-*.md                 # Phase 14: deployment (6 specs, complete)
+│   └── phase15-*.md                 # Phase 15: storage enhancements (4 specs, complete)
 │
 ├── crates/                  # Rust implementation (12 crates)
 │   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 11 tests
@@ -71,7 +74,7 @@ wacp/
 │   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 41 tests
 │   ├── wacp-taxonomy/       # YAML/JSON loader, 11 validation checks, role resolution — 22 tests
 │   ├── wacp-permissions/    # Permission matrix, checkpoint table, port rights, default-deny — 20 tests
-│   ├── wacp-trail/          # Storage traits, in-memory + filesystem backends, hash chain, SQLite index — 48 tests
+│   ├── wacp-trail/          # Storage traits, filesystem backends, hash chain, SQLite index, snapshots, tiered storage, compaction — 67 tests
 │   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, envelope/checkpoint — 17 tests
 │   ├── wacp-coordinator/    # Full coordinator decision engine — 214 tests (see below)
 │   ├── wacp-transport/      # Transport trait, InProcessTransport, gRPC (tonic + TLS), Authenticator trait, PSK provider, rate limiter — 17 tests
@@ -176,13 +179,13 @@ The coordinator crate grew from 28 to 214 tests across Phases 9–13. It now con
 
 ## What's Next
 
-Phases 9–14 complete (topology, scheduling, integration, resource enforcement, request routing, deployment infrastructure). The remaining work:
+Phases 9–15 complete (topology, scheduling, integration, resource enforcement, request routing, deployment infrastructure, storage enhancements). The remaining work:
 
 | Phase | Work item | Spec source | Status |
 |-------|-----------|-------------|--------|
 | 14 | Deployment infrastructure (config, CLI, TLS, auth, logging, metrics, health) | deployment.md §2–12 | **Complete** |
-| 15 | Storage enhancements (system snapshots, tiered storage, retention) | storage.md §7–9 | **Next** |
-| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | Pending |
+| 15 | Storage enhancements (system snapshots, tiered storage, retention) | storage.md §7–9 | **Complete** |
+| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | **Next** |
 | 17 | End-to-end testing + Docker/systemd packaging | all impl specs | Pending |
 | 18 | Highway UI (TypeScript SPA) | highway-ui.md | Pending |
 

@@ -6,22 +6,24 @@
 
 ## What WACP Is
 
-WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinating autonomous agents. It defines how agents communicate, how work is organized, how progress is recorded, and how everything is audited. The protocol is complete — 20 constituent specs + PROTOCOL.md + TAXONOMY.md. The specification layer is complete — 10 implementation specs covering every protocol domain. The project is now entering the coding phase.
+WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinating autonomous agents. It defines how agents communicate, how work is organized, how progress is recorded, and how everything is audited. The protocol is complete — 20 constituent specs + PROTOCOL.md + TAXONOMY.md. The specification layer is complete — 10 implementation specs covering every protocol domain.
 
 ## Current State
 
 **Specification: complete.** 20 protocol specs, 10 implementation specs. Zero unresolved coverage gaps (audit 2026-03-22, gaps resolved 2026-03-24). All three conformance levels (Level 1–3) have implementation guidance.
 
-**Initial implementation: complete.** 28 coding tasks in `SPEC-STRATEGY.md` are done. 12 Rust crates compile, 225 Rust tests pass, 14 Python tests pass. The runtime binary starts a gRPC server, accepts agent and highway connections, and runs the coordinator event loop.
+**Initial implementation (Phases 0–8): complete.** 28 coding tasks in `SPEC-STRATEGY.md` are done. 12 Rust crates compile, 14 Python tests pass. The runtime binary starts a gRPC server, accepts agent and highway connections, and runs the coordinator event loop.
 
-**Phase: coding against full spec coverage.** The initial implementation covers the core runtime. The next work is coding against the Phase 2–3 implementation specs — deployment, migration, topology operations, task scheduling, integration, and the highway UI.
+**Phases 9–13: complete.** Coordinator decision engine fully implemented. 214 tests in `wacp-coordinator` (was 28). See details below.
+
+**Phase: 14 next.** Deployment infrastructure (config, CLI, TLS, auth, logging, metrics). See `IMPLEMENTATION.md` for the full 42-task plan (Phases 9–18).
 
 ## Repository Map
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Decision log, spec tracking, audit findings
-├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (all complete)
+├── IMPLEMENTATION.md        # Decision log, spec tracking, Phase 9–18 plan (42 tasks)
+├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 12 crates
 ├── .github/workflows/ci.yml # GitHub Actions: build, clippy, test, fmt, proto check
@@ -53,9 +55,14 @@ wacp/
 │   ├── highway.proto        # HighwayService — 12 RPCs (8 unary, 4 streaming)
 │   └── taxonomy.proto       # Taxonomy configuration messages
 │
-├── specs/coding/            # 28 coding specs (one per task, all status: complete)
+├── specs/coding/            # Coding specs (one per task)
+│   ├── phase0-*.md – phase8-*.md    # Phases 0–8 (28 specs, all complete)
+│   ├── phase9-*.md                  # Phase 9: topology (5 specs, complete)
+│   ├── phase10-*.md                 # Phase 10: scheduling (4 specs, complete)
+│   ├── phase11-*.md                 # Phase 11: integration (3 specs, complete)
+│   └── phase13-*.md                 # Phase 13: request handler (1 spec, complete)
 │
-├── crates/                  # Rust implementation (12 crates, 225 tests)
+├── crates/                  # Rust implementation (12 crates)
 │   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 11 tests
 │   ├── wacp-clock/          # HLC: Timestamp, Clock<TimeSource>, ManualTimeSource — 14 tests
 │   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 41 tests
@@ -63,7 +70,7 @@ wacp/
 │   ├── wacp-permissions/    # Permission matrix, checkpoint table, port rights, default-deny — 20 tests
 │   ├── wacp-trail/          # Storage traits, in-memory + filesystem backends, hash chain, SQLite index — 48 tests
 │   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, envelope/checkpoint — 17 tests
-│   ├── wacp-coordinator/    # Workspace tree, task DAG, orchestration, integration engine — 28 tests
+│   ├── wacp-coordinator/    # Full coordinator decision engine — 214 tests (see below)
 │   ├── wacp-transport/      # Transport trait, InProcessTransport, gRPC (tonic codegen + services) — 8 tests
 │   ├── wacp-recovery/       # Trail integrity check, state reconstruction, clock recovery — 6 tests
 │   ├── wacp-runtime/        # Binary: init sequence, gRPC server, event loop, shutdown — 7 tests
@@ -79,20 +86,26 @@ wacp/
     └── tests/
 ```
 
-## Implementation Spec Index
+## wacp-coordinator Modules (Phases 9–13)
 
-| # | Spec | Sections | Key content |
-|---|------|----------|-------------|
-| 1 | `runtime.md` | 17 | FSM engine, permission engine, trail write-ahead, HLC clock, workspace isolation, recovery, concurrency model, crate structure |
-| 2 | `storage.md` | 12 | Trail backend (custom append-only log), checkpoint content-addressing, snapshots, tiered storage, retention, durability guarantees |
-| 3 | `protocol-interface.md` | 11 | Protobuf types, agent/highway gRPC services, serialization rules, authenticator trait, transport trait |
-| 4 | `sdk-agent.md` | 11 | Python + Rust SDK surface, connection lifecycle, LLM agent mapping, tool mounting, testing |
-| 5 | `highway-ui.md` | 17 | TypeScript SPA, gRPC-Web, trail streaming, gate management, escalation, injection, autonomy presets |
-| 6 | `deployment.md` | 13 | YAML config (47 fields), CLI (`serve`/`validate`/`defaults`), TLS, auth providers (PSK/external), logging, metrics (30 gauges/counters), health, Docker, systemd |
-| 7 | `migration.md` | 12 | 7-step coordinator procedure, workspace snapshot (5 live components), unbind/bind, atomic rollback, resource meter continuity |
-| 8 | `topology.md` | 10 | 6 topologies (tree, task graph, visibility, ownership, causation, port rights), compound operations, trail-driven recovery |
-| 9 | `task-scheduling.md` | 11 | Task lifecycle (8 states, 10 triggers), gate enforcement, dispatch policy, resource allocation, retry/cancellation, progressive decomposition |
-| 10 | `integration.md` | 11 | 3 merge strategies, 4 conflict types, 3 resolution strategies, salvage (3 guardrails), integration ordering, 22 invariants |
+The coordinator crate grew from 28 to 214 tests across Phases 9–13. It now contains the full decision engine:
+
+| Module | Purpose | Phase |
+|--------|---------|-------|
+| `tree.rs` | Workspace tree with originator_index, owner_index, causal traversal, siblings, transfer_owner, cascade | 9 |
+| `visibility.rs` | Directed visibility graph — forward/reverse HashSet, grant/grant_checked, can_see | 9 |
+| `ownership.rs` | EscalationRouter, resolve_owner, resolve_originator | 9 |
+| `port_rights.rs` | Port rights multigraph — 3 indices, create/transfer/consume/revoke/expire, validate_send | 9 |
+| `topology.rs` | TopologySet — compound operations spanning all 4 structures (create/terminate/transfer) | 9 |
+| `task_graph.rs` | DAG with readiness counters, forward edges, bidirectional task-workspace binding | 10 |
+| `gate.rs` | GateController — approval gates, timeout fallback, first-response-wins | 10 |
+| `dispatch.rs` | Dispatcher — task selection, budget allocation with margin, capacity limits | 10 |
+| `scheduling.rs` | SchedulingOps — context assembly, retry policy, cancellation cascade, subtask decomposition | 10 |
+| `integration.rs` | IntegrationQueue + Pipeline + MergeExecutor (direct/layered/evaluated) + ConflictResolver + SalvageIntegration | 11 |
+| `resource.rs` | TimeoutTracker, BudgetEnforcer, LivenessMonitor — pure state tracking | 12 |
+| `handler.rs` | RequestHandler — domain-level agent/highway/gate RPC handling (no tonic dep) | 13 |
+| `events.rs` | EventBus — callback subscribers + buffering for streaming RPCs | 13 |
+| `orchestrator.rs` | Original coordinator actor (dispatch, event handling, envelope routing) | 0–8 |
 
 ## Key Decisions (from IMPLEMENTATION.md)
 
@@ -117,7 +130,15 @@ wacp/
 
 **Transport:** Trait-based abstraction. `InProcessTransport` (testing) and `GrpcTransport` (production, via tonic). Agent service on port 9090, highway service on port 9091. Proto codegen via `tonic-build` in `build.rs`.
 
-**Topology:** 6 independent structures over the same node set — workspace tree (parent pointers + 3 indices), task graph (dual adjacency lists + readiness counters), visibility graph (forward/reverse `HashSet`), ownership domains (partition by `owner`), causal forest (partition by `originator`), port rights graph (3 indices by holder/target/id). All owned by coordinator actor, all recoverable from trail.
+**Topology:** 6 independent structures over the same node set — workspace tree (parent pointers + 3 indices), task graph (dual adjacency lists + readiness counters), visibility graph (forward/reverse `HashSet`), ownership domains (partition by `owner` + EscalationRouter), causal forest (partition by `originator`), port rights graph (3 indices by holder/target/id). All owned by coordinator actor via `TopologySet`, all recoverable from trail.
+
+**Scheduling:** GateController (approval gates with timeout fallback), Dispatcher (task selection + budget allocation + capacity limits), SchedulingOps (context assembly from dependency checkpoints, retry policy, cancellation cascade, progressive decomposition).
+
+**Integration:** IntegrationQueue (sequential, one-at-a-time), IntegrationPipeline (find final checkpoint, decide accept/revise/reject, select strategy), MergeExecutor (direct/layered/evaluated with resource overlap detection), ConflictResolver (type-based strategy selection, escalation pauses, rework fails workspace), SalvageIntegration (3 guardrails).
+
+**Resource enforcement:** TimeoutTracker (elapsed time in Active/Blocked/Conflicted, pause on Suspended/Migrating), BudgetEnforcer (5-dimension check with warning threshold), LivenessMonitor (configurable inactivity detection).
+
+**Request handling:** RequestHandler (domain-level types, testable without gRPC — bind, send envelope, emit signal, create checkpoint, get workspace, get task graph, inject envelope, gate response). EventBus (callback subscribers + buffering for streaming RPCs).
 
 **Crate structure:** 12 crates in a Cargo workspace. Dependency order: `wacp-types` (leaf) → `wacp-clock`, `wacp-fsm`, `wacp-taxonomy` → `wacp-trail`, `wacp-permissions` → `wacp-workspace` → `wacp-coordinator` → `wacp-transport`, `wacp-recovery` → `wacp-runtime` (binary), `wacp-sdk` (agent SDK).
 
@@ -152,21 +173,17 @@ wacp/
 
 ## What's Next
 
-All specs are complete. The next phase is coding against the full spec coverage. Priority work items (all fully specced):
+Phases 9–13 complete (topology, scheduling, integration, resource enforcement, request routing). The remaining work:
 
-| Work item | Spec source | Crate(s) affected |
-|-----------|-------------|-------------------|
-| Full gRPC request routing | protocol-interface.md §4–5, §8–9 | wacp-transport, wacp-coordinator |
-| Topology operations (tree, graph, visibility, port rights) | topology.md §2–7 | wacp-coordinator |
-| Task scheduling (dispatch, gates, retry) | task-scheduling.md §2–8 | wacp-coordinator |
-| Integration engine (merge, conflict, salvage) | integration.md §2–7 | wacp-coordinator |
-| Timeout/budget enforcement | runtime.md §12 | wacp-workspace, wacp-coordinator |
-| Deployment infrastructure (config, CLI, TLS, auth, logging, metrics, health) | deployment.md §2–12 | wacp-runtime |
-| Agent migration | migration.md §2–8 | wacp-coordinator, wacp-transport |
-| Tiered storage (hot/warm/cold) | storage.md §8–9 | wacp-trail |
-| System snapshots | storage.md §7 | wacp-recovery, wacp-coordinator |
-| Highway UI (TypeScript SPA) | highway-ui.md | new: TypeScript project |
-| Docker image + systemd unit | deployment.md §9–10 | wacp-runtime (packaging) |
+| Phase | Work item | Spec source | Status |
+|-------|-----------|-------------|--------|
+| 14 | Deployment infrastructure (config, CLI, TLS, auth, logging, metrics, health) | deployment.md §2–12 | **Next** |
+| 15 | Storage enhancements (system snapshots, tiered storage, retention) | storage.md §7–9 | Pending |
+| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | Pending |
+| 17 | End-to-end testing + Docker/systemd packaging | all impl specs | Pending |
+| 18 | Highway UI (TypeScript SPA) | highway-ui.md | Pending |
+
+See `IMPLEMENTATION.md` for the full task breakdown within each phase.
 
 ---
 

@@ -5,6 +5,7 @@
 
 pub mod dispatch;
 pub mod gate;
+pub mod handler;
 pub mod integration;
 pub mod orchestrator;
 pub mod ownership;
@@ -18,6 +19,10 @@ pub mod visibility;
 
 pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
 pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
+pub use handler::{
+    BindResult, CreateCheckpointResult, EmitSignalResult, HandlerError, RequestHandler,
+    SendEnvelopeResult, TaskGraphSnapshot, TaskView, WorkspaceView,
+};
 pub use integration::{
     CheckpointRef, Conflict, ConflictResolution, ConflictResolutionResult, ConflictResolver,
     IntegrationDecision, IntegrationEngine, IntegrationPipeline, IntegrationQueue,

@@ -3,6 +3,7 @@ use wacp_types::*;
 
 use crate::dispatch::*;
 use crate::gate::*;
+use crate::handler::*;
 use crate::integration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
@@ -2225,4 +2226,228 @@ fn liveness_remove_stops_tracking() {
     m.register(&ws("A"), 100);
     m.remove(&ws("A"));
     assert!(m.check_inactive(999_999).is_empty());
+}
+
+// ══════════════════════════════════════════
+// Tasks 13.1–13.3 — Request Handler
+// ══════════════════════════════════════════
+
+/// Build a RequestHandler with a topology containing root + one child workspace.
+fn setup_handler() -> (
+    TopologySet,
+    TaskGraph,
+    GateController,
+    IntegrationQueue,
+    TimeoutTracker,
+    LivenessMonitor,
+    u64,
+    u64,
+) {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("ws-1"),
+        parent: ws("root"),
+        owner: uid("owner"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    })
+    .unwrap();
+
+    let mut graph = TaskGraph::new();
+    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+
+    let gate = GateController::new(30_000, GateFallback::AutoApprove);
+    let queue = IntegrationQueue::new();
+    let timeout = TimeoutTracker::new();
+    let liveness = LivenessMonitor::new(0);
+
+    (topo, graph, gate, queue, timeout, liveness, 1, 1)
+}
+
+#[test]
+fn handler_bind_returns_state() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_bind(&ws("ws-1")).unwrap();
+    assert_eq!(result.workspace_id, ws("ws-1"));
+    assert_eq!(result.state, WorkspaceState::Active);
+    assert_eq!(result.owner, uid("owner"));
+}
+
+#[test]
+fn handler_bind_not_found() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    assert!(h.handle_bind(&ws("nonexistent")).is_err());
+}
+
+#[test]
+fn handler_send_envelope_validates_rights() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    // root → ws-1 has a send right (created by TopologySet::create_workspace).
+    let result = h.handle_send_envelope(
+        &ws("root"), &ws("ws-1"), "directive", b"payload", EnvelopePriority::Normal,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn handler_send_envelope_no_right() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+
+    // Create ws-2 with no special rights to ws-1.
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("ws-2"),
+        parent: ws("root"),
+        owner: uid("owner"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    }).unwrap();
+
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    // ws-2 → ws-1 has no send right.
+    let result = h.handle_send_envelope(
+        &ws("ws-2"), &ws("ws-1"), "feedback", b"payload", EnvelopePriority::Normal,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn handler_emit_signal_accepted() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_emit_signal(&ws("ws-1"), SignalType::Started, None);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn handler_emit_signal_unknown_workspace() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    assert!(h.handle_emit_signal(&ws("nonexistent"), SignalType::Started, None).is_err());
+}
+
+#[test]
+fn handler_create_checkpoint_returns_id() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_create_checkpoint(
+        &ws("ws-1"), "artifact", b"content", "test", CheckpointStatus::Final, Confidence::High,
+    );
+    assert!(result.is_ok());
+    let r = result.unwrap();
+    assert!(!r.content_hash.is_empty());
+}
+
+#[test]
+fn handler_get_workspace_view() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let view = h.handle_get_workspace(&ws("ws-1")).unwrap();
+    assert_eq!(view.id, ws("ws-1"));
+    assert_eq!(view.state, WorkspaceState::Active);
+    assert_eq!(view.parent, Some(ws("root")));
+}
+
+#[test]
+fn handler_get_task_graph_snapshot() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let snapshot = h.handle_get_task_graph();
+    assert_eq!(snapshot.tasks.len(), 1);
+    assert_eq!(snapshot.tasks[0].id, tid("t1"));
+}
+
+#[test]
+fn handler_inject_envelope_succeeds() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_inject_envelope(
+        &ws("ws-1"), "directive", b"injected", EnvelopePriority::Urgent,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn handler_inject_envelope_not_found() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    assert!(h.handle_inject_envelope(&ws("nope"), "directive", b"x", EnvelopePriority::Normal).is_err());
+}
+
+#[test]
+fn handler_gate_response_resolves() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+
+    // Open a gate first.
+    let event = gate.open_gate(tid("t1"), "task".into(), "desc", None, None);
+    let gate_id = event.gate_id;
+
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_gate_response(&gate_id, GateDecision::Approve).unwrap();
+    assert!(result.is_some());
+}
+
+#[test]
+fn handler_gate_response_unknown_returns_none() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_gate_response(&GateId::from("gate-999"), GateDecision::Approve).unwrap();
+    assert!(result.is_none());
 }

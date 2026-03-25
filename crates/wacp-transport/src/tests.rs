@@ -159,6 +159,7 @@ async fn grpc_server_starts() {
     let handles = start_grpc_server(GrpcServerConfig {
         agent_addr: ([127, 0, 0, 1], 19400).into(),
         highway_addr: ([127, 0, 0, 1], 19401).into(),
+        tls: None,
     })
     .await
     .unwrap();

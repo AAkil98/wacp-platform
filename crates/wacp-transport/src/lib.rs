@@ -4,6 +4,7 @@
 //! - `InProcessTransport` for testing (channel-based, zero serialization)
 //! - gRPC transport for production (`tonic` server with agent + highway services)
 
+pub mod auth;
 pub mod error_mapping;
 pub mod grpc_agent;
 pub mod grpc_highway;

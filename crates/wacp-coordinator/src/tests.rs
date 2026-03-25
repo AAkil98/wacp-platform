@@ -6,6 +6,7 @@ use crate::gate::*;
 use crate::integration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
+use crate::resource::*;
 use crate::scheduling::*;
 use crate::task_graph::*;
 use crate::topology::*;
@@ -2024,4 +2025,204 @@ fn salvage_is_applicable() {
     let cps = vec![make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Low)];
     assert!(SalvageIntegration::is_applicable(&cps));
     assert!(!SalvageIntegration::is_applicable(&[]));
+}
+
+// ══════════════════════════════════════════
+// Task 12.1 — Timeout Enforcement
+// ══════════════════════════════════════════
+
+#[test]
+fn timeout_register_and_elapsed() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 10_000);
+    assert_eq!(t.elapsed_ms(&ws("A"), 0), 0);
+}
+
+#[test]
+fn timeout_starts_on_active() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 10_000);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 100);
+    assert_eq!(t.elapsed_ms(&ws("A"), 500), 400);
+}
+
+#[test]
+fn timeout_pauses_on_suspended() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 10_000);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 100);
+    t.on_state_change(&ws("A"), WorkspaceState::Suspended, 300);
+    // 200ms elapsed, timer paused.
+    assert_eq!(t.elapsed_ms(&ws("A"), 1000), 200);
+}
+
+#[test]
+fn timeout_resumes_after_pause() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 10_000);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 100);
+    t.on_state_change(&ws("A"), WorkspaceState::Suspended, 300); // 200ms
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 500);    // resume
+    assert_eq!(t.elapsed_ms(&ws("A"), 700), 400); // 200 + 200
+}
+
+#[test]
+fn timeout_continues_in_blocked() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 10_000);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 0);
+    t.on_state_change(&ws("A"), WorkspaceState::Blocked, 100);
+    // Timer still running in Blocked.
+    assert_eq!(t.elapsed_ms(&ws("A"), 300), 300);
+}
+
+#[test]
+fn timeout_expired_detected() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 500);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 0);
+    let expired = t.check_expired(600);
+    assert!(expired.contains(&ws("A")));
+}
+
+#[test]
+fn timeout_zero_limit_never_expires() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 0); // no timeout
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 0);
+    assert!(t.check_expired(1_000_000).is_empty());
+}
+
+#[test]
+fn timeout_extend_additive() {
+    let mut t = TimeoutTracker::new();
+    t.register(&ws("A"), 500);
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 0);
+    t.extend(&ws("A"), 300);
+    // 500 + 300 = 800ms limit. At 600ms, not expired.
+    assert!(t.check_expired(600).is_empty());
+    // At 900ms, expired.
+    assert!(!t.check_expired(900).is_empty());
+}
+
+// ══════════════════════════════════════════
+// Task 12.2 — Budget Enforcement
+// ══════════════════════════════════════════
+
+#[test]
+fn budget_ok_within_limits() {
+    let usage = ResourceUsage { tokens: 50, ..Default::default() };
+    let budget = ResourceBudget { max_tokens: Some(100), ..Default::default() };
+    assert_eq!(BudgetEnforcer::check(&usage, &budget), BudgetCheckResult::Ok);
+}
+
+#[test]
+fn budget_warning_at_threshold() {
+    let usage = ResourceUsage { tokens: 85, ..Default::default() };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Warning(dims) => assert!(dims.contains(&"tokens".to_string())),
+        other => panic!("expected Warning, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_exceeded_at_limit() {
+    let usage = ResourceUsage { tokens: 100, ..Default::default() };
+    let budget = ResourceBudget { max_tokens: Some(100), ..Default::default() };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"tokens".to_string())),
+        other => panic!("expected Exceeded, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_unlimited_never_warns() {
+    let usage = ResourceUsage { tokens: 999_999, ..Default::default() };
+    let budget = ResourceBudget::default(); // all None
+    assert_eq!(BudgetEnforcer::check(&usage, &budget), BudgetCheckResult::Ok);
+}
+
+#[test]
+fn budget_multiple_dimensions() {
+    let usage = ResourceUsage {
+        tokens: 100,
+        storage_bytes: 85,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_storage_bytes: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"tokens".to_string())),
+        other => panic!("expected Exceeded, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_increase_additive() {
+    let mut budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: Some(5000),
+        ..Default::default()
+    };
+    let additional = ResourceBudget {
+        max_tokens: Some(50),
+        max_wall_time_ms: Some(3000),
+        ..Default::default()
+    };
+    BudgetEnforcer::increase_budget(&mut budget, &additional);
+    assert_eq!(budget.max_tokens, Some(150));
+    assert_eq!(budget.max_wall_time_ms, Some(8000));
+}
+
+// ══════════════════════════════════════════
+// Task 12.3 — Liveness Monitoring
+// ══════════════════════════════════════════
+
+#[test]
+fn liveness_register_and_active() {
+    let mut m = LivenessMonitor::new(5000);
+    m.register(&ws("A"), 100);
+    assert!(m.check_inactive(4000).is_empty()); // within interval
+}
+
+#[test]
+fn liveness_detects_inactivity() {
+    let mut m = LivenessMonitor::new(5000);
+    m.register(&ws("A"), 100);
+    let inactive = m.check_inactive(6000); // 5900ms since last activity
+    assert!(inactive.contains(&ws("A")));
+}
+
+#[test]
+fn liveness_record_resets_timer() {
+    let mut m = LivenessMonitor::new(5000);
+    m.register(&ws("A"), 100);
+    m.record_activity(&ws("A"), 4000);
+    assert!(m.check_inactive(8000).is_empty()); // 4000ms since last, < 5000
+    assert!(!m.check_inactive(10_000).is_empty()); // 6000ms since last
+}
+
+#[test]
+fn liveness_disabled_never_reports() {
+    let mut m = LivenessMonitor::new(0); // disabled
+    m.register(&ws("A"), 0);
+    assert!(m.check_inactive(999_999).is_empty());
+    assert!(!m.is_enabled());
+}
+
+#[test]
+fn liveness_remove_stops_tracking() {
+    let mut m = LivenessMonitor::new(5000);
+    m.register(&ws("A"), 100);
+    m.remove(&ws("A"));
+    assert!(m.check_inactive(999_999).is_empty());
 }

@@ -9,6 +9,7 @@ pub mod integration;
 pub mod orchestrator;
 pub mod ownership;
 pub mod port_rights;
+pub mod resource;
 pub mod scheduling;
 pub mod task_graph;
 pub mod topology;
@@ -26,6 +27,7 @@ pub use integration::{
 pub use orchestrator::{Coordinator, DispatchRequest};
 pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};
 pub use port_rights::{PortRightEntry, PortRightError, PortRightStatus, PortRightsGraph};
+pub use resource::{BudgetCheckResult, BudgetEnforcer, LivenessMonitor, TimeoutTracker};
 pub use scheduling::{DependencyOutput, RetryPolicy, SchedulingOps, TaskContext};
 pub use task_graph::{GraphError, TaskGraph};
 pub use topology::{CascadeEffect, CreateWorkspaceParams, TopologySet};

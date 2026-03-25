@@ -19,8 +19,8 @@ pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
 pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
 pub use integration::{
     CheckpointRef, Conflict, ConflictResolution, IntegrationDecision, IntegrationEngine,
-    IntegrationPipeline, IntegrationQueue, IntegrationRequest, IntegrationResult,
-    ResolutionOutcome,
+    IntegrationPipeline, IntegrationQueue, IntegrationRequest, IntegrationResult, MergeContext,
+    MergeExecutor, MergeResult, ResolutionOutcome,
 };
 pub use orchestrator::{Coordinator, DispatchRequest};
 pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};

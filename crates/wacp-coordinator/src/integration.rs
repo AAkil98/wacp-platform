@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use wacp_types::*;
 
@@ -215,6 +215,99 @@ impl IntegrationPipeline {
             Confidence::High => MergeStrategy::Direct,
             Confidence::Medium => MergeStrategy::Layered,
             Confidence::Low => MergeStrategy::Evaluated,
+        }
+    }
+}
+
+// ── Merge executor (task 11.2) ──────────────────────────────────────
+
+/// Context for a merge operation — carries extracted resource sets.
+#[derive(Debug, Clone)]
+pub struct MergeContext {
+    pub source_id: WorkspaceId,
+    pub target_id: WorkspaceId,
+    /// Resources modified by the source workspace's checkpoint.
+    pub source_resources: HashSet<String>,
+    /// Resources modified by prior integrations into the parent.
+    pub parent_resources: HashSet<String>,
+    pub checkpoint: CheckpointRef,
+}
+
+/// Result of a merge operation.
+#[derive(Debug)]
+pub enum MergeResult {
+    Success,
+    Conflicts(Vec<Conflict>),
+}
+
+/// Executes merge strategies against a MergeContext (integration.md §4).
+pub struct MergeExecutor;
+
+impl MergeExecutor {
+    /// Execute the given strategy.
+    pub fn execute(strategy: MergeStrategy, ctx: &MergeContext) -> MergeResult {
+        match strategy {
+            MergeStrategy::Direct => Self::merge_direct(ctx),
+            MergeStrategy::Layered => Self::merge_layered(ctx),
+            MergeStrategy::Evaluated => Self::merge_evaluated(ctx),
+        }
+    }
+
+    /// Direct: pass-through, no conflict detection.
+    pub fn merge_direct(_ctx: &MergeContext) -> MergeResult {
+        MergeResult::Success
+    }
+
+    /// Layered: detect content overlap only.
+    pub fn merge_layered(ctx: &MergeContext) -> MergeResult {
+        let overlapping: Vec<&String> = ctx
+            .source_resources
+            .intersection(&ctx.parent_resources)
+            .collect();
+
+        if overlapping.is_empty() {
+            return MergeResult::Success;
+        }
+
+        let conflicts = overlapping
+            .into_iter()
+            .map(|resource| Conflict {
+                conflict_type: ConflictType::ContentOverlap,
+                description: format!(
+                    "Resource '{}' modified by both source and prior integration",
+                    resource
+                ),
+                workspace_id: ctx.source_id.clone(),
+            })
+            .collect();
+
+        MergeResult::Conflicts(conflicts)
+    }
+
+    /// Evaluated: full 4-type conflict scan.
+    /// Content overlap is detected mechanically. Semantic contradiction,
+    /// dependency violation, and constraint breach require application-level
+    /// analysis — hooks for those are provided but return no conflicts in
+    /// the initial implementation.
+    pub fn merge_evaluated(ctx: &MergeContext) -> MergeResult {
+        let mut conflicts = Vec::new();
+
+        // 1. Content overlap (same as layered).
+        for resource in ctx.source_resources.intersection(&ctx.parent_resources) {
+            conflicts.push(Conflict {
+                conflict_type: ConflictType::ContentOverlap,
+                description: format!("Resource '{}' modified by both", resource),
+                workspace_id: ctx.source_id.clone(),
+            });
+        }
+
+        // 2–4. Semantic contradiction, dependency violation, constraint breach:
+        // application-level hooks — no mechanical detection in initial impl.
+
+        if conflicts.is_empty() {
+            MergeResult::Success
+        } else {
+            MergeResult::Conflicts(conflicts)
         }
     }
 }

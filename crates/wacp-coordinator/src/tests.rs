@@ -1796,3 +1796,76 @@ fn select_strategy_mapping() {
     assert_eq!(IntegrationPipeline::select_strategy(Confidence::Medium), MergeStrategy::Layered);
     assert_eq!(IntegrationPipeline::select_strategy(Confidence::Low), MergeStrategy::Evaluated);
 }
+
+// ══════════════════════════════════════════
+// Task 11.2 — Merge Strategies
+// ══════════════════════════════════════════
+
+fn make_merge_ctx(source_res: Vec<&str>, parent_res: Vec<&str>) -> MergeContext {
+    MergeContext {
+        source_id: ws("src"),
+        target_id: ws("parent"),
+        source_resources: source_res.into_iter().map(String::from).collect(),
+        parent_resources: parent_res.into_iter().map(String::from).collect(),
+        checkpoint: CheckpointRef {
+            checkpoint_id: CheckpointId::from("cp-1"),
+            content_hash: "hash".into(),
+            intent: "intent".into(),
+            confidence: Confidence::High,
+        },
+    }
+}
+
+#[test]
+fn direct_no_conflicts() {
+    let ctx = make_merge_ctx(vec!["a", "b"], vec!["a", "b"]); // overlap doesn't matter
+    assert!(matches!(MergeExecutor::merge_direct(&ctx), MergeResult::Success));
+}
+
+#[test]
+fn layered_no_overlap() {
+    let ctx = make_merge_ctx(vec!["a", "b"], vec!["c", "d"]);
+    assert!(matches!(MergeExecutor::merge_layered(&ctx), MergeResult::Success));
+}
+
+#[test]
+fn layered_detects_overlap() {
+    let ctx = make_merge_ctx(vec!["a", "b"], vec!["b", "c"]);
+    match MergeExecutor::merge_layered(&ctx) {
+        MergeResult::Conflicts(conflicts) => {
+            assert_eq!(conflicts.len(), 1);
+            assert_eq!(conflicts[0].conflict_type, ConflictType::ContentOverlap);
+            assert!(conflicts[0].description.contains("b"));
+        }
+        MergeResult::Success => panic!("expected conflict"),
+    }
+}
+
+#[test]
+fn evaluated_detects_overlap() {
+    let ctx = make_merge_ctx(vec!["x", "y"], vec!["y", "z"]);
+    match MergeExecutor::merge_evaluated(&ctx) {
+        MergeResult::Conflicts(conflicts) => {
+            assert_eq!(conflicts.len(), 1);
+            assert_eq!(conflicts[0].conflict_type, ConflictType::ContentOverlap);
+        }
+        MergeResult::Success => panic!("expected conflict"),
+    }
+}
+
+#[test]
+fn evaluated_no_conflicts() {
+    let ctx = make_merge_ctx(vec!["a"], vec!["b"]);
+    assert!(matches!(MergeExecutor::merge_evaluated(&ctx), MergeResult::Success));
+}
+
+#[test]
+fn execute_dispatches_correctly() {
+    let overlap_ctx = make_merge_ctx(vec!["a"], vec!["a"]);
+    // Direct: succeeds despite overlap.
+    assert!(matches!(MergeExecutor::execute(MergeStrategy::Direct, &overlap_ctx), MergeResult::Success));
+    // Layered: detects overlap.
+    assert!(matches!(MergeExecutor::execute(MergeStrategy::Layered, &overlap_ctx), MergeResult::Conflicts(_)));
+    // Evaluated: detects overlap.
+    assert!(matches!(MergeExecutor::execute(MergeStrategy::Evaluated, &overlap_ctx), MergeResult::Conflicts(_)));
+}

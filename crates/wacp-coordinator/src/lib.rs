@@ -18,7 +18,8 @@ pub mod visibility;
 pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
 pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
 pub use integration::{
-    Conflict, ConflictResolution, IntegrationEngine, IntegrationRequest, IntegrationResult,
+    CheckpointRef, Conflict, ConflictResolution, IntegrationDecision, IntegrationEngine,
+    IntegrationPipeline, IntegrationQueue, IntegrationRequest, IntegrationResult,
     ResolutionOutcome,
 };
 pub use orchestrator::{Coordinator, DispatchRequest};

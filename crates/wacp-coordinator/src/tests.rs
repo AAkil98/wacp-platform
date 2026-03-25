@@ -1647,3 +1647,152 @@ fn add_subtasks_in_graph() {
     assert!(graph.get(&tid("sub1")).is_some());
     assert!(graph.get(&tid("sub2")).is_some());
 }
+
+// ══════════════════════════════════════════
+// Task 11.1 — Integration Pipeline + Ordering
+// ══════════════════════════════════════════
+
+#[test]
+fn queue_push_and_next() {
+    let mut q = IntegrationQueue::new();
+    q.push(ws("ws-1"));
+    assert_eq!(q.take_next(), Some(ws("ws-1")));
+}
+
+#[test]
+fn queue_one_at_a_time() {
+    let mut q = IntegrationQueue::new();
+    q.push(ws("ws-1"));
+    q.push(ws("ws-2"));
+    q.take_next(); // ws-1 in progress
+    assert_eq!(q.take_next(), None); // blocked
+}
+
+#[test]
+fn queue_complete_allows_next() {
+    let mut q = IntegrationQueue::new();
+    q.push(ws("ws-1"));
+    q.push(ws("ws-2"));
+    q.take_next();
+    q.complete();
+    assert_eq!(q.take_next(), Some(ws("ws-2")));
+}
+
+#[test]
+fn queue_fifo_order() {
+    let mut q = IntegrationQueue::new();
+    q.push(ws("ws-1"));
+    q.push(ws("ws-2"));
+    q.push(ws("ws-3"));
+    assert_eq!(q.take_next(), Some(ws("ws-1")));
+    q.complete();
+    assert_eq!(q.take_next(), Some(ws("ws-2")));
+    q.complete();
+    assert_eq!(q.take_next(), Some(ws("ws-3")));
+}
+
+#[test]
+fn queue_pending_count() {
+    let mut q = IntegrationQueue::new();
+    assert_eq!(q.pending_count(), 0);
+    q.push(ws("ws-1"));
+    q.push(ws("ws-2"));
+    assert_eq!(q.pending_count(), 2);
+    q.take_next();
+    assert_eq!(q.pending_count(), 1); // ws-1 moved to in_progress
+}
+
+fn make_checkpoint(id: &str, status: CheckpointStatus, confidence: Confidence) -> Checkpoint {
+    Checkpoint {
+        id: CheckpointId::from(id),
+        workspace_id: ws("ws-1"),
+        checkpoint_type: "artifact".into(),
+        payload: vec![],
+        content_hash: format!("hash-{id}"),
+        intent: format!("intent-{id}"),
+        parent_checkpoint: None,
+        status,
+        confidence,
+        timestamp: 0,
+        resource_usage: None,
+    }
+}
+
+#[test]
+fn find_final_checkpoint_found() {
+    let cps = vec![
+        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
+        make_checkpoint("cp-2", CheckpointStatus::Final, Confidence::High),
+    ];
+    let result = IntegrationPipeline::find_final_checkpoint(&cps);
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().checkpoint_id, CheckpointId::from("cp-2"));
+}
+
+#[test]
+fn find_final_checkpoint_none() {
+    let cps = vec![
+        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
+    ];
+    assert!(IntegrationPipeline::find_final_checkpoint(&cps).is_none());
+}
+
+#[test]
+fn find_final_prefers_latest() {
+    let cps = vec![
+        make_checkpoint("cp-1", CheckpointStatus::Final, Confidence::Medium),
+        make_checkpoint("cp-2", CheckpointStatus::Provisional, Confidence::Medium),
+        make_checkpoint("cp-3", CheckpointStatus::Final, Confidence::High),
+    ];
+    let result = IntegrationPipeline::find_final_checkpoint(&cps).unwrap();
+    assert_eq!(result.checkpoint_id, CheckpointId::from("cp-3"));
+}
+
+#[test]
+fn decide_high_confidence_accepts() {
+    let cp = CheckpointRef {
+        checkpoint_id: CheckpointId::from("cp-1"),
+        content_hash: "hash".into(),
+        intent: "intent".into(),
+        confidence: Confidence::High,
+    };
+    let decision = IntegrationPipeline::decide(&cp);
+    assert_eq!(
+        decision,
+        IntegrationDecision::Accept { strategy: MergeStrategy::Direct }
+    );
+}
+
+#[test]
+fn decide_low_confidence_revises() {
+    let cp = CheckpointRef {
+        checkpoint_id: CheckpointId::from("cp-1"),
+        content_hash: "hash".into(),
+        intent: "intent".into(),
+        confidence: Confidence::Low,
+    };
+    let decision = IntegrationPipeline::decide(&cp);
+    assert!(matches!(decision, IntegrationDecision::Revise { .. }));
+}
+
+#[test]
+fn decide_medium_accepts_layered() {
+    let cp = CheckpointRef {
+        checkpoint_id: CheckpointId::from("cp-1"),
+        content_hash: "hash".into(),
+        intent: "intent".into(),
+        confidence: Confidence::Medium,
+    };
+    let decision = IntegrationPipeline::decide(&cp);
+    assert_eq!(
+        decision,
+        IntegrationDecision::Accept { strategy: MergeStrategy::Layered }
+    );
+}
+
+#[test]
+fn select_strategy_mapping() {
+    assert_eq!(IntegrationPipeline::select_strategy(Confidence::High), MergeStrategy::Direct);
+    assert_eq!(IntegrationPipeline::select_strategy(Confidence::Medium), MergeStrategy::Layered);
+    assert_eq!(IntegrationPipeline::select_strategy(Confidence::Low), MergeStrategy::Evaluated);
+}

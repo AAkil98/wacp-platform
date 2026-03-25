@@ -95,10 +95,10 @@ impl TierManager {
 
         for seg in hot.iter().take(excess) {
             // Recovery window check: don't move segments at or after snapshot anchor.
-            if let Some(anchor) = self.snapshot_anchor {
-                if seg.id >= anchor {
-                    continue;
-                }
+            if let Some(anchor) = self.snapshot_anchor
+                && seg.id >= anchor
+            {
+                continue;
             }
 
             let warm_path = self
@@ -157,17 +157,16 @@ impl TierManager {
             let name_str = name.to_string_lossy();
 
             if let Some(id_str) = name_str.strip_prefix(prefix).and_then(|s| s.strip_suffix(suffix))
+                && let Ok(id) = id_str.parse::<u64>()
             {
-                if let Ok(id) = id_str.parse::<u64>() {
-                    let meta = entry.metadata().map_err(|e| StorageError::Io(e.to_string()))?;
-                    segments.push(SegmentInfo {
-                        id,
-                        tier,
-                        path: entry.path(),
-                        created: meta.created().unwrap_or(SystemTime::UNIX_EPOCH),
-                        size_bytes: meta.len(),
-                    });
-                }
+                let meta = entry.metadata().map_err(|e| StorageError::Io(e.to_string()))?;
+                segments.push(SegmentInfo {
+                    id,
+                    tier,
+                    path: entry.path(),
+                    created: meta.created().unwrap_or(SystemTime::UNIX_EPOCH),
+                    size_bytes: meta.len(),
+                });
             }
         }
 

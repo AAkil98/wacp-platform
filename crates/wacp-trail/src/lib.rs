@@ -5,6 +5,7 @@
 //! with in-memory and filesystem implementations.
 
 pub mod chain;
+pub mod compaction;
 pub mod error;
 pub mod fs_checkpoint;
 pub mod fs_snapshot;

@@ -2,6 +2,7 @@ use wacp_fsm::TaskTrigger;
 use wacp_types::*;
 
 use crate::dispatch::*;
+use crate::events::*;
 use crate::gate::*;
 use crate::handler::*;
 use crate::integration::*;
@@ -2450,4 +2451,99 @@ fn handler_gate_response_unknown_returns_none() {
 
     let result = h.handle_gate_response(&GateId::from("gate-999"), GateDecision::Approve).unwrap();
     assert!(result.is_none());
+}
+
+// ══════════════════════════════════════════
+// Task 13.4 — Event Bus
+// ══════════════════════════════════════════
+
+#[test]
+fn event_bus_buffering() {
+    let mut bus = EventBus::new(true);
+    bus.emit(CoordinatorEvent::WorkspaceStateChanged {
+        workspace_id: ws("A"),
+        from: WorkspaceState::Idle,
+        to: WorkspaceState::Active,
+    });
+    assert_eq!(bus.buffered_count(), 1);
+}
+
+#[test]
+fn event_bus_drain() {
+    let mut bus = EventBus::new(true);
+    bus.emit(CoordinatorEvent::TaskStatusChanged {
+        task_id: tid("t1"),
+        from: TaskStatus::Draft,
+        to: TaskStatus::Pending,
+    });
+    bus.emit(CoordinatorEvent::TaskStatusChanged {
+        task_id: tid("t2"),
+        from: TaskStatus::Pending,
+        to: TaskStatus::Assigned,
+    });
+    let events = bus.drain();
+    assert_eq!(events.len(), 2);
+    assert_eq!(bus.buffered_count(), 0);
+}
+
+#[test]
+fn event_bus_subscriber_called() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let count = Arc::new(AtomicUsize::new(0));
+    let count_clone = count.clone();
+
+    let mut bus = EventBus::new(false);
+    bus.subscribe(Box::new(move |_| {
+        count_clone.fetch_add(1, Ordering::SeqCst);
+    }));
+
+    bus.emit(CoordinatorEvent::TrailEntry {
+        workspace_id: Some(ws("A")),
+        event_type: "test".into(),
+        sequence: 1,
+    });
+    bus.emit(CoordinatorEvent::TrailEntry {
+        workspace_id: Some(ws("A")),
+        event_type: "test".into(),
+        sequence: 2,
+    });
+
+    assert_eq!(count.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn event_bus_multiple_subscribers() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let count = Arc::new(AtomicUsize::new(0));
+
+    let mut bus = EventBus::new(false);
+    for _ in 0..3 {
+        let c = count.clone();
+        bus.subscribe(Box::new(move |_| { c.fetch_add(1, Ordering::SeqCst); }));
+    }
+
+    bus.emit(CoordinatorEvent::GateOpened(GateEvent {
+        gate_id: GateId::from("g1"),
+        gate_type: GateType::TaskApproval,
+        subject: vec![],
+        workspace_id: ws("A"),
+        task_id: None,
+        timeout_ms: 0,
+        fallback_action: String::new(),
+        created_at: 0,
+    }));
+
+    assert_eq!(count.load(Ordering::SeqCst), 3);
+    assert_eq!(bus.subscriber_count(), 3);
+}
+
+#[test]
+fn event_bus_no_buffering_by_default() {
+    let mut bus = EventBus::default();
+    bus.emit(CoordinatorEvent::TrailEntry {
+        workspace_id: None,
+        event_type: "test".into(),
+        sequence: 1,
+    });
+    assert_eq!(bus.buffered_count(), 0);
 }

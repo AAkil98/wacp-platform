@@ -4,6 +4,7 @@
 //! Dispatches work, processes signals, routes envelopes.
 
 pub mod dispatch;
+pub mod events;
 pub mod gate;
 pub mod handler;
 pub mod integration;
@@ -18,6 +19,7 @@ pub mod tree;
 pub mod visibility;
 
 pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
+pub use events::{CoordinatorEvent, EventBus};
 pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
 pub use handler::{
     BindResult, CreateCheckpointResult, EmitSignalResult, HandlerError, RequestHandler,

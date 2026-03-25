@@ -311,3 +311,129 @@ impl MergeExecutor {
         }
     }
 }
+
+// ── Conflict resolution (task 11.3) ─────────────────────────────────
+
+/// Result of resolving all conflicts for a workspace.
+#[derive(Debug)]
+pub enum ConflictResolutionResult {
+    /// All conflicts resolved — integration can proceed.
+    Resolved(Vec<ConflictResolution>),
+    /// Waiting for human escalation — integration paused.
+    Pending(Vec<ConflictResolution>),
+    /// Agent rework required — workspace will be failed.
+    Rework(Vec<ConflictResolution>),
+}
+
+/// Resolves conflicts using configured strategies (integration.md §6).
+pub struct ConflictResolver;
+
+impl ConflictResolver {
+    /// Select a resolution strategy for a conflict type.
+    /// Default policy: overlap → coordinator resolve, semantic → escalate,
+    /// dependency → rework, constraint → escalate.
+    pub fn select_strategy(conflict_type: ConflictType) -> ResolutionStrategy {
+        match conflict_type {
+            ConflictType::ContentOverlap => ResolutionStrategy::CoordinatorResolve,
+            ConflictType::SemanticContradiction => ResolutionStrategy::Escalate,
+            ConflictType::DependencyViolation => ResolutionStrategy::AgentRework,
+            ConflictType::ConstraintBreach => ResolutionStrategy::Escalate,
+        }
+    }
+
+    /// Resolve a single conflict with a given strategy.
+    pub fn resolve_one(conflict: Conflict, strategy: ResolutionStrategy) -> ConflictResolution {
+        let outcome = match strategy {
+            ResolutionStrategy::CoordinatorResolve => ResolutionOutcome::Resolved,
+            ResolutionStrategy::Escalate => ResolutionOutcome::Escalated,
+            ResolutionStrategy::AgentRework => ResolutionOutcome::Reworked,
+        };
+        ConflictResolution {
+            conflict,
+            strategy,
+            outcome,
+        }
+    }
+
+    /// Resolve all conflicts for a workspace.
+    /// Stops on escalation (pauses for human) or rework (fails workspace).
+    pub fn resolve_all(conflicts: Vec<Conflict>) -> ConflictResolutionResult {
+        let mut resolutions = Vec::new();
+        let mut has_rework = false;
+
+        for conflict in conflicts {
+            let strategy = Self::select_strategy(conflict.conflict_type);
+
+            match strategy {
+                ResolutionStrategy::CoordinatorResolve => {
+                    resolutions.push(Self::resolve_one(conflict, strategy));
+                }
+                ResolutionStrategy::Escalate => {
+                    resolutions.push(Self::resolve_one(conflict, strategy));
+                    return ConflictResolutionResult::Pending(resolutions);
+                }
+                ResolutionStrategy::AgentRework => {
+                    resolutions.push(Self::resolve_one(conflict, strategy));
+                    has_rework = true;
+                    break; // rework fails workspace — no further resolution
+                }
+            }
+        }
+
+        if has_rework {
+            ConflictResolutionResult::Rework(resolutions)
+        } else {
+            ConflictResolutionResult::Resolved(resolutions)
+        }
+    }
+}
+
+// ── Salvage integration (task 11.4) ─────────────────────────────────
+
+/// Salvage integration with three guardrails (integration.md §7).
+pub struct SalvageIntegration;
+
+impl SalvageIntegration {
+    /// Select a checkpoint for salvage: prefer final, fall back to latest provisional.
+    pub fn select_checkpoint(checkpoints: &[Checkpoint]) -> Option<CheckpointRef> {
+        // Prefer final.
+        if let Some(cp) = checkpoints
+            .iter()
+            .rev()
+            .find(|c| c.status == CheckpointStatus::Final)
+        {
+            return Some(Self::to_ref(cp));
+        }
+        // Fall back to latest provisional.
+        checkpoints.last().map(Self::to_ref)
+    }
+
+    /// Apply the three guardrails and execute salvage merge.
+    ///
+    /// Guardrail 1: Evaluated strategy only.
+    /// Guardrail 2: Confidence treated as Low.
+    /// Guardrail 3: Mode is Salvage (caller records in trail).
+    pub fn execute(ctx: &MergeContext) -> MergeResult {
+        // Guardrail 1: always use evaluated strategy.
+        MergeExecutor::merge_evaluated(ctx)
+    }
+
+    /// Apply guardrail 2: override confidence to Low.
+    pub fn apply_confidence_guardrail(cp: &mut CheckpointRef) {
+        cp.confidence = Confidence::Low;
+    }
+
+    /// Check if salvage is applicable: workspace has at least one checkpoint.
+    pub fn is_applicable(checkpoints: &[Checkpoint]) -> bool {
+        !checkpoints.is_empty()
+    }
+
+    fn to_ref(cp: &Checkpoint) -> CheckpointRef {
+        CheckpointRef {
+            checkpoint_id: cp.id.clone(),
+            content_hash: cp.content_hash.clone(),
+            intent: cp.intent.clone(),
+            confidence: cp.confidence,
+        }
+    }
+}

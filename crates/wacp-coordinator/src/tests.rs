@@ -1869,3 +1869,159 @@ fn execute_dispatches_correctly() {
     // Evaluated: detects overlap.
     assert!(matches!(MergeExecutor::execute(MergeStrategy::Evaluated, &overlap_ctx), MergeResult::Conflicts(_)));
 }
+
+// ══════════════════════════════════════════
+// Task 11.3 — Conflict Resolution
+// ══════════════════════════════════════════
+
+fn make_conflict(ct: ConflictType) -> Conflict {
+    Conflict {
+        conflict_type: ct,
+        description: "test conflict".into(),
+        workspace_id: ws("ws-1"),
+    }
+}
+
+#[test]
+fn resolve_one_coordinator() {
+    let r = ConflictResolver::resolve_one(
+        make_conflict(ConflictType::ContentOverlap),
+        ResolutionStrategy::CoordinatorResolve,
+    );
+    assert_eq!(r.outcome, ResolutionOutcome::Resolved);
+}
+
+#[test]
+fn resolve_one_escalate() {
+    let r = ConflictResolver::resolve_one(
+        make_conflict(ConflictType::ContentOverlap),
+        ResolutionStrategy::Escalate,
+    );
+    assert_eq!(r.outcome, ResolutionOutcome::Escalated);
+}
+
+#[test]
+fn resolve_one_rework() {
+    let r = ConflictResolver::resolve_one(
+        make_conflict(ConflictType::ContentOverlap),
+        ResolutionStrategy::AgentRework,
+    );
+    assert_eq!(r.outcome, ResolutionOutcome::Reworked);
+}
+
+#[test]
+fn select_strategy_overlap_is_coordinator() {
+    assert_eq!(
+        ConflictResolver::select_strategy(ConflictType::ContentOverlap),
+        ResolutionStrategy::CoordinatorResolve
+    );
+}
+
+#[test]
+fn select_strategy_semantic_is_escalate() {
+    assert_eq!(
+        ConflictResolver::select_strategy(ConflictType::SemanticContradiction),
+        ResolutionStrategy::Escalate
+    );
+}
+
+#[test]
+fn select_strategy_dependency_is_rework() {
+    assert_eq!(
+        ConflictResolver::select_strategy(ConflictType::DependencyViolation),
+        ResolutionStrategy::AgentRework
+    );
+}
+
+#[test]
+fn resolve_all_coordinator_only() {
+    let conflicts = vec![
+        make_conflict(ConflictType::ContentOverlap),
+        make_conflict(ConflictType::ContentOverlap),
+    ];
+    let result = ConflictResolver::resolve_all(conflicts);
+    assert!(matches!(result, ConflictResolutionResult::Resolved(r) if r.len() == 2));
+}
+
+#[test]
+fn resolve_all_stops_on_escalation() {
+    let conflicts = vec![
+        make_conflict(ConflictType::ContentOverlap),         // coordinator
+        make_conflict(ConflictType::SemanticContradiction),   // escalate → stop
+        make_conflict(ConflictType::ContentOverlap),          // never reached
+    ];
+    let result = ConflictResolver::resolve_all(conflicts);
+    assert!(matches!(result, ConflictResolutionResult::Pending(r) if r.len() == 2));
+}
+
+#[test]
+fn resolve_all_stops_on_rework() {
+    let conflicts = vec![
+        make_conflict(ConflictType::ContentOverlap),         // coordinator
+        make_conflict(ConflictType::DependencyViolation),    // rework → stop
+        make_conflict(ConflictType::ContentOverlap),          // never reached
+    ];
+    let result = ConflictResolver::resolve_all(conflicts);
+    assert!(matches!(result, ConflictResolutionResult::Rework(r) if r.len() == 2));
+}
+
+// ══════════════════════════════════════════
+// Task 11.4 — Salvage Integration
+// ══════════════════════════════════════════
+
+#[test]
+fn salvage_select_prefers_final() {
+    let cps = vec![
+        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
+        make_checkpoint("cp-2", CheckpointStatus::Final, Confidence::High),
+    ];
+    let cp = SalvageIntegration::select_checkpoint(&cps).unwrap();
+    assert_eq!(cp.checkpoint_id, CheckpointId::from("cp-2"));
+}
+
+#[test]
+fn salvage_select_falls_back_to_provisional() {
+    let cps = vec![
+        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
+    ];
+    let cp = SalvageIntegration::select_checkpoint(&cps).unwrap();
+    assert_eq!(cp.checkpoint_id, CheckpointId::from("cp-1"));
+}
+
+#[test]
+fn salvage_select_empty_returns_none() {
+    assert!(SalvageIntegration::select_checkpoint(&[]).is_none());
+}
+
+#[test]
+fn salvage_confidence_guardrail() {
+    let mut cp = CheckpointRef {
+        checkpoint_id: CheckpointId::from("cp-1"),
+        content_hash: "hash".into(),
+        intent: "intent".into(),
+        confidence: Confidence::High,
+    };
+    SalvageIntegration::apply_confidence_guardrail(&mut cp);
+    assert_eq!(cp.confidence, Confidence::Low);
+}
+
+#[test]
+fn salvage_uses_evaluated_strategy() {
+    // Clean context → success, but via evaluated path.
+    let ctx = make_merge_ctx(vec!["a"], vec!["b"]);
+    assert!(matches!(SalvageIntegration::execute(&ctx), MergeResult::Success));
+}
+
+#[test]
+fn salvage_detects_conflicts() {
+    // Overlap → evaluated detects it.
+    let ctx = make_merge_ctx(vec!["a"], vec!["a"]);
+    assert!(matches!(SalvageIntegration::execute(&ctx), MergeResult::Conflicts(_)));
+}
+
+#[test]
+fn salvage_is_applicable() {
+    let cps = vec![make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Low)];
+    assert!(SalvageIntegration::is_applicable(&cps));
+    assert!(!SalvageIntegration::is_applicable(&[]));
+}

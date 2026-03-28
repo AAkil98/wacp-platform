@@ -161,6 +161,50 @@ impl WorkspaceState {
         self.checkpoint_register.last()
     }
 
+    // --- Migration snapshot ---
+
+    /// Capture the five mutable components for migration.
+    /// Pure read — does not mutate workspace state.
+    pub fn capture_snapshot(&self) -> MigrationSnapshot {
+        MigrationSnapshot {
+            inbox: self.inbox.iter().cloned().collect(),
+            working_memory: self.working_memory.clone(),
+            checkpoint_register: self.checkpoint_register.clone(),
+            resource_meter: self.resource_meter.clone(),
+            trail_sequence: self.trail_sequence,
+            delivered_envelope_ids: self.delivered_envelope_ids.clone(),
+        }
+    }
+
+    /// Reconstruct workspace state from a migration snapshot and creation config.
+    /// Used for crash recovery — during normal migration the actor persists.
+    pub fn restore_from_snapshot(
+        config: WorkspaceConfig,
+        snapshot: MigrationSnapshot,
+        restore_status: wacp_types::WorkspaceState,
+    ) -> Self {
+        Self {
+            id: config.id,
+            status: restore_status,
+            role: config.role,
+            base_role: config.base_role,
+            parent: config.parent,
+            owner: config.owner,
+            originator: config.originator,
+            delegate: config.delegate,
+            directive: config.directive,
+            inbox: snapshot.inbox.into(),
+            context: config.context,
+            working_memory: snapshot.working_memory,
+            checkpoint_register: snapshot.checkpoint_register,
+            resource_meter: snapshot.resource_meter,
+            trail_sequence: snapshot.trail_sequence,
+            visibility_set: config.visibility,
+            authority_set: config.authority,
+            delivered_envelope_ids: snapshot.delivered_envelope_ids,
+        }
+    }
+
     // --- Terminal state ---
 
     /// Consume into an immutable archive. Only valid for terminal states.
@@ -198,6 +242,21 @@ pub struct ArchivedWorkspace {
     pub final_usage: ResourceUsage,
     pub visibility: HashSet<String>,
     pub authority: HashSet<String>,
+}
+
+/// Snapshot of mutable workspace components for migration.
+///
+/// Captures the five mutable components plus the dedup set.
+/// Immutable components (directive, context, visibility, authority)
+/// are unchanged by migration and not included.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationSnapshot {
+    pub inbox: Vec<Envelope>,
+    pub working_memory: Vec<u8>,
+    pub checkpoint_register: Vec<Checkpoint>,
+    pub resource_meter: ResourceMeter,
+    pub trail_sequence: u64,
+    pub delivered_envelope_ids: HashSet<String>,
 }
 
 fn priority_rank(p: EnvelopePriority) -> u8 {

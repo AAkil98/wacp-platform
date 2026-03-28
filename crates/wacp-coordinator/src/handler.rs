@@ -2,6 +2,7 @@ use wacp_types::*;
 
 use crate::gate::{GateController, GateResolution};
 use crate::integration::IntegrationQueue;
+use crate::migration::MigrationCoordinator;
 use crate::resource::{LivenessMonitor, TimeoutTracker};
 use crate::task_graph::TaskGraph;
 use crate::topology::TopologySet;
@@ -93,6 +94,7 @@ pub struct RequestHandler<'a> {
     pub integration_queue: &'a IntegrationQueue,
     pub timeout_tracker: &'a TimeoutTracker,
     pub liveness_monitor: &'a LivenessMonitor,
+    pub migration: &'a MigrationCoordinator,
     next_envelope_id: &'a mut u64,
     next_checkpoint_id: &'a mut u64,
 }
@@ -106,6 +108,7 @@ impl<'a> RequestHandler<'a> {
         integration_queue: &'a IntegrationQueue,
         timeout_tracker: &'a TimeoutTracker,
         liveness_monitor: &'a LivenessMonitor,
+        migration: &'a MigrationCoordinator,
         next_envelope_id: &'a mut u64,
         next_checkpoint_id: &'a mut u64,
     ) -> Self {
@@ -116,6 +119,7 @@ impl<'a> RequestHandler<'a> {
             integration_queue,
             timeout_tracker,
             liveness_monitor,
+            migration,
             next_envelope_id,
             next_checkpoint_id,
         }
@@ -124,12 +128,35 @@ impl<'a> RequestHandler<'a> {
     // ── Agent RPCs (13.1) ───────────────────────────────────────────
 
     /// Bind: return workspace state for an agent connection.
-    pub fn handle_bind(&self, workspace_id: &WorkspaceId) -> Result<BindResult, HandlerError> {
+    ///
+    /// If the workspace is migrating, only the expected new agent
+    /// (identified by `agent_identity`) may bind. Pass `None` for
+    /// non-migration binds or when identity is not yet verified.
+    pub fn handle_bind(
+        &self,
+        workspace_id: &WorkspaceId,
+        agent_identity: Option<&str>,
+    ) -> Result<BindResult, HandlerError> {
         let node = self
             .topology
             .tree
             .get(workspace_id)
             .ok_or_else(|| HandlerError::WorkspaceNotFound(workspace_id.clone()))?;
+
+        // Migration identity check: if workspace is migrating,
+        // only the expected new agent may bind.
+        if node.status == WorkspaceState::Migrating
+            && let Some(expected) = self.migration.expected_agent(workspace_id.as_ref())
+        {
+            match agent_identity {
+                Some(identity) if identity == expected.agent_type => {}
+                _ => {
+                    return Err(HandlerError::PermissionDenied(
+                        "migration: agent identity mismatch".to_string(),
+                    ));
+                }
+            }
+        }
 
         Ok(BindResult {
             workspace_id: node.id.clone(),

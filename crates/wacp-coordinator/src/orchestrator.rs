@@ -7,6 +7,7 @@ use wacp_workspace::{
     CoordinatorCommand, WorkspaceActor, WorkspaceConfig, WorkspaceEvent, WorkspaceHandle,
 };
 
+use crate::migration::{MigrationCoordinator, MigrationRequest};
 use crate::task_graph::TaskGraph;
 use crate::tree::{WorkspaceNode, WorkspaceTree};
 
@@ -25,10 +26,11 @@ pub struct SystemSnapshot {
     pub task_graph: serde_json::Value,
 }
 
-/// The coordinator — owns tree, task graph, workspace handles.
+/// The coordinator — owns tree, task graph, workspace handles, migration state.
 pub struct Coordinator {
     pub tree: WorkspaceTree,
     pub task_graph: TaskGraph,
+    pub migration: MigrationCoordinator,
     workspace_handles: HashMap<String, WorkspaceHandle>,
     event_tx: mpsc::Sender<WorkspaceEvent>,
 }
@@ -39,6 +41,7 @@ impl Coordinator {
         Self {
             tree: WorkspaceTree::new(root_id, owner),
             task_graph: TaskGraph::new(),
+            migration: MigrationCoordinator::new(60_000),
             workspace_handles: HashMap::new(),
             event_tx,
         }
@@ -85,6 +88,14 @@ impl Coordinator {
                     .update_status(&archived.id, archived.terminal_state);
                 self.workspace_handles.remove(archived.id.as_ref());
             }
+            WorkspaceEvent::MigrationSnapshot {
+                workspace_id,
+                snapshot,
+            } => {
+                let _ = self
+                    .migration
+                    .set_snapshot(workspace_id.as_ref(), snapshot.clone());
+            }
             _ => {}
         }
     }
@@ -118,6 +129,76 @@ impl Coordinator {
     /// Get a workspace handle.
     pub fn handle(&self, id: &WorkspaceId) -> Option<&WorkspaceHandle> {
         self.workspace_handles.get(id.as_ref())
+    }
+
+    /// Start a migration for a workspace. Validates preconditions and sends
+    /// MigrateBegin to the workspace actor.
+    pub async fn start_migration(
+        &mut self,
+        request: MigrationRequest,
+        old_agent: String,
+        now_ms: u64,
+    ) -> Result<(), crate::migration::MigrationError> {
+        let ws_id = request.workspace_id.clone();
+
+        // Read current state from tree for precondition check
+        let current_state = self
+            .tree
+            .get(&ws_id)
+            .map(|n| n.status)
+            .ok_or_else(|| {
+                crate::migration::MigrationError::WorkspaceNotFound(ws_id.to_string())
+            })?;
+
+        self.migration
+            .start(request, current_state, old_agent, now_ms)?;
+
+        // Send MigrateBegin to workspace actor
+        if let Some(handle) = self.workspace_handles.get(ws_id.as_ref()) {
+            let _ = handle
+                .coordinator_tx
+                .send(CoordinatorCommand::MigrateBegin)
+                .await;
+        }
+
+        Ok(())
+    }
+
+    /// Complete a migration after the new agent has bound.
+    pub async fn complete_migration(
+        &mut self,
+        workspace_id: &WorkspaceId,
+    ) -> Option<crate::migration::MigrationContext> {
+        let ctx = self.migration.get(workspace_id.as_ref())?;
+        let restore_blocked = ctx.pre_migration_state == WorkspaceState::Blocked;
+
+        if let Some(handle) = self.workspace_handles.get(workspace_id.as_ref()) {
+            let _ = handle
+                .coordinator_tx
+                .send(CoordinatorCommand::MigrationComplete { restore_blocked })
+                .await;
+        }
+
+        self.migration.complete(workspace_id.as_ref()).ok()
+    }
+
+    /// Fail a migration. Sends MigrationFailed to workspace actor.
+    pub async fn fail_migration(
+        &mut self,
+        workspace_id: &WorkspaceId,
+        error: String,
+        step: u32,
+    ) -> Option<crate::migration::MigrationContext> {
+        let ctx = self.migration.fail(workspace_id.as_ref(), error, step).ok()?;
+
+        if let Some(handle) = self.workspace_handles.get(workspace_id.as_ref()) {
+            let _ = handle
+                .coordinator_tx
+                .send(CoordinatorCommand::MigrationFailed)
+                .await;
+        }
+
+        Some(ctx)
     }
 
     /// Capture the coordinator's current state as a serializable snapshot.

@@ -297,6 +297,15 @@ impl LivenessMonitor {
         self.last_activity.remove(id.as_ref());
     }
 
+    /// Reset activity timestamp for a workspace.
+    /// Called after migration completion to prevent false liveness
+    /// warnings from the migration gap.
+    pub fn reset_activity(&mut self, workspace_id: &WorkspaceId, now_ms: u64) {
+        if let Some(ts) = self.last_activity.get_mut(workspace_id.as_ref()) {
+            *ts = now_ms;
+        }
+    }
+
     /// Is monitoring enabled?
     pub fn is_enabled(&self) -> bool {
         self.interval_ms > 0

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use wacp_types::*;
 
 use crate::actor::*;
-use crate::state::{WorkspaceConfig, WorkspaceState as WsState};
+use crate::state::{MigrationSnapshot, ResourceMeter, WorkspaceConfig, WorkspaceState as WsState};
 
 fn test_config() -> WorkspaceConfig {
     WorkspaceConfig {
@@ -358,4 +358,418 @@ async fn auto_signal_emitted_on_checkpoint() {
 
     assert!(got_checkpoint);
     assert!(got_signal);
+}
+
+// ── Phase 16: Migration Snapshot + Restore + Actor ──
+
+#[test]
+fn snapshot_capture_empty_workspace() {
+    let ws = WsState::new(test_config());
+    let snap = ws.capture_snapshot();
+    assert!(snap.inbox.is_empty());
+    assert!(snap.working_memory.is_empty());
+    assert!(snap.checkpoint_register.is_empty());
+    assert_eq!(snap.resource_meter.usage.tokens, 0);
+    assert_eq!(snap.trail_sequence, 0);
+    assert!(snap.delivered_envelope_ids.is_empty());
+}
+
+#[test]
+fn snapshot_capture_with_state() {
+    let mut ws = WsState::new(test_config());
+    ws.push_inbox(test_envelope("e1", "feedback", EnvelopePriority::Normal));
+    ws.push_inbox(test_envelope("e2", "feedback", EnvelopePriority::Urgent));
+    ws.working_memory = vec![10, 20, 30];
+    ws.push_checkpoint(Checkpoint {
+        id: CheckpointId::from("cp-1"),
+        workspace_id: WorkspaceId::from("ws-test"),
+        checkpoint_type: "artifact".into(),
+        payload: vec![],
+        content_hash: "abc".into(),
+        intent: "test".into(),
+        parent_checkpoint: None,
+        status: CheckpointStatus::Provisional,
+        confidence: Confidence::High,
+        timestamp: 0,
+        resource_usage: None,
+    });
+    ws.resource_meter.usage.tokens = 500;
+    ws.trail_sequence = 7;
+
+    let snap = ws.capture_snapshot();
+    assert_eq!(snap.inbox.len(), 2);
+    assert_eq!(snap.working_memory, vec![10, 20, 30]);
+    assert_eq!(snap.checkpoint_register.len(), 1);
+    assert_eq!(snap.resource_meter.usage.tokens, 500);
+    assert_eq!(snap.trail_sequence, 7);
+}
+
+#[test]
+fn snapshot_capture_preserves_inbox_order() {
+    let mut ws = WsState::new(test_config());
+    ws.push_inbox(test_envelope("normal", "feedback", EnvelopePriority::Normal));
+    ws.push_inbox(test_envelope("urgent", "feedback", EnvelopePriority::Urgent));
+    ws.push_inbox(test_envelope("blocking", "feedback", EnvelopePriority::Blocking));
+
+    let snap = ws.capture_snapshot();
+    // Priority order: blocking > urgent > normal
+    assert_eq!(snap.inbox[0].id, EnvelopeId::from("blocking"));
+    assert_eq!(snap.inbox[1].id, EnvelopeId::from("urgent"));
+    assert_eq!(snap.inbox[2].id, EnvelopeId::from("normal"));
+}
+
+#[test]
+fn snapshot_capture_preserves_dedup_set() {
+    let mut ws = WsState::new(test_config());
+    ws.push_inbox(test_envelope("e1", "feedback", EnvelopePriority::Normal));
+    let _ = ws.pop_inbox(); // marks e1 as delivered
+
+    let snap = ws.capture_snapshot();
+    assert!(snap.delivered_envelope_ids.contains("e1"));
+}
+
+#[test]
+fn restore_from_snapshot() {
+    let mut ws = WsState::new(test_config());
+    ws.push_inbox(test_envelope("e1", "feedback", EnvelopePriority::Normal));
+    ws.working_memory = vec![1, 2, 3];
+    ws.resource_meter.usage.tokens = 999;
+    ws.trail_sequence = 42;
+    let _ = ws.pop_inbox();
+    ws.push_inbox(test_envelope("e2", "feedback", EnvelopePriority::Normal));
+
+    let snap = ws.capture_snapshot();
+
+    let restored = WsState::restore_from_snapshot(
+        test_config(),
+        snap.clone(),
+        wacp_types::WorkspaceState::Active,
+    );
+
+    assert_eq!(restored.status, wacp_types::WorkspaceState::Active);
+    assert_eq!(restored.inbox_len(), snap.inbox.len());
+    assert_eq!(restored.working_memory, vec![1, 2, 3]);
+    assert_eq!(restored.resource_meter.usage.tokens, 999);
+    assert_eq!(restored.trail_sequence, 42);
+    assert!(restored.is_envelope_delivered("e1")); // dedup set restored
+    // Immutable fields from config, not snapshot
+    assert_eq!(restored.directive().envelope_type, "directive");
+    assert_eq!(restored.context(), b"ctx");
+}
+
+#[test]
+fn restore_status_active() {
+    let snap = MigrationSnapshot {
+        inbox: vec![],
+        working_memory: vec![],
+        checkpoint_register: vec![],
+        resource_meter: ResourceMeter::default(),
+        trail_sequence: 0,
+        delivered_envelope_ids: Default::default(),
+    };
+    let ws = WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Active);
+    assert_eq!(ws.status, wacp_types::WorkspaceState::Active);
+}
+
+#[test]
+fn restore_status_blocked() {
+    let snap = MigrationSnapshot {
+        inbox: vec![],
+        working_memory: vec![],
+        checkpoint_register: vec![],
+        resource_meter: ResourceMeter::default(),
+        trail_sequence: 0,
+        delivered_envelope_ids: Default::default(),
+    };
+    let ws = WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Blocked);
+    assert_eq!(ws.status, wacp_types::WorkspaceState::Blocked);
+}
+
+#[test]
+fn snapshot_serde_roundtrip() {
+    let mut ws = WsState::new(test_config());
+    ws.push_inbox(test_envelope("e1", "feedback", EnvelopePriority::Normal));
+    ws.working_memory = vec![42];
+    ws.resource_meter.usage.tokens = 100;
+    ws.trail_sequence = 5;
+
+    let snap = ws.capture_snapshot();
+    let json = serde_json::to_string(&snap).unwrap();
+    let roundtrip: MigrationSnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(roundtrip.inbox.len(), 1);
+    assert_eq!(roundtrip.working_memory, vec![42]);
+    assert_eq!(roundtrip.resource_meter.usage.tokens, 100);
+    assert_eq!(roundtrip.trail_sequence, 5);
+}
+
+#[tokio::test]
+async fn actor_migrate_begin_emits_snapshot() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Activate first (Idle → Active via envelope).
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-1", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    // Drain StateChanged.
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+
+    // MigrateBegin
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+
+    // Expect StateChanged (Active → Migrating) and MigrationSnapshot.
+    let mut got_state_change = false;
+    let mut got_snapshot = false;
+
+    for _ in 0..5 {
+        if let Ok(Some(evt)) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            event_rx.recv(),
+        )
+        .await
+        {
+            match evt {
+                WorkspaceEvent::StateChanged { to, .. } if to == wacp_types::WorkspaceState::Migrating => {
+                    got_state_change = true;
+                }
+                WorkspaceEvent::MigrationSnapshot { workspace_id, .. } => {
+                    assert_eq!(workspace_id, WorkspaceId::from("ws-test"));
+                    got_snapshot = true;
+                }
+                _ => {}
+            }
+        }
+        if got_state_change && got_snapshot {
+            break;
+        }
+    }
+
+    assert!(got_state_change);
+    assert!(got_snapshot);
+}
+
+#[tokio::test]
+async fn actor_migrate_begin_invalid_state() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Workspace is Idle — MigrateBegin should produce Error.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+
+    let evt = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(matches!(evt, WorkspaceEvent::Error { .. }));
+}
+
+#[tokio::test]
+async fn actor_migration_complete_to_active() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Activate, then migrate.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-1", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+    // Drain StateChanged + MigrationSnapshot.
+    for _ in 0..3 {
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+    }
+
+    // Complete migration → Active.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrationComplete {
+            restore_blocked: false,
+        })
+        .await
+        .unwrap();
+
+    let mut found_active = false;
+    for _ in 0..3 {
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            event_rx.recv(),
+        )
+        .await
+        {
+            if to == wacp_types::WorkspaceState::Active {
+                found_active = true;
+                break;
+            }
+        }
+    }
+    assert!(found_active);
+}
+
+#[tokio::test]
+async fn actor_migration_complete_to_blocked() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Activate, then migrate.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-1", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+    }
+
+    // Complete migration → Blocked.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrationComplete {
+            restore_blocked: true,
+        })
+        .await
+        .unwrap();
+
+    let mut found_blocked = false;
+    for _ in 0..3 {
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            event_rx.recv(),
+        )
+        .await
+        {
+            if to == wacp_types::WorkspaceState::Blocked {
+                found_blocked = true;
+                break;
+            }
+        }
+    }
+    assert!(found_blocked);
+}
+
+#[tokio::test]
+async fn actor_agent_msg_rejected_in_migrating() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Activate, then migrate.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-1", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+    // Drain events.
+    for _ in 0..3 {
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+    }
+
+    // Agent message while migrating — should be silently dropped.
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
+
+    // Should NOT get a Signal event.
+    let result = tokio::time::timeout(std::time::Duration::from_millis(200), event_rx.recv()).await;
+    assert!(result.is_err()); // timeout = no event received
+}
+
+#[tokio::test]
+async fn actor_envelopes_accepted_in_migrating() {
+    let (handle, mut event_rx) = spawn_test().await;
+
+    // Activate, then migrate.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-1", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+    }
+
+    // Deliver envelope during migration — should be buffered in inbox.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-2", "feedback", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+
+    // Complete migration.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrationComplete {
+            restore_blocked: false,
+        })
+        .await
+        .unwrap();
+
+    // The workspace is now Active again with env-2 in inbox.
+    // The workspace actor doesn't emit events for inbox pushes,
+    // but it should still be alive and functional.
+    let mut alive = false;
+    for _ in 0..5 {
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            event_rx.recv(),
+        )
+        .await
+        {
+            if to == wacp_types::WorkspaceState::Active {
+                alive = true;
+                break;
+            }
+        }
+    }
+    assert!(alive);
 }

@@ -18,6 +18,7 @@ pub enum WorkspaceTrigger {
     CoordinatorResume,
     CoordinatorMigrate,
     MigrationSucceeded,
+    MigrationSucceededBlocked,
     MigrationFailed,
     // Integration
     IntegrationSucceeded,
@@ -76,7 +77,8 @@ impl StateMachine for WorkspaceFsm {
 
             // Migrating
             (Migrating, MigrationSucceeded) => Ok(Active),
-            (Migrating, MigrationFailed) => Ok(Failed),
+            (Migrating, MigrationSucceededBlocked) => Ok(Blocked),
+            (Migrating, MigrationFailed | CoordinatorAbort) => Ok(Failed),
 
             // Suspended
             (Suspended, CoordinatorResume) => Ok(Active),

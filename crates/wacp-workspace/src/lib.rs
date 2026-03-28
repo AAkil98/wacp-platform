@@ -9,7 +9,7 @@ pub mod state;
 pub use actor::{
     AgentMessage, CoordinatorCommand, WorkspaceActor, WorkspaceEvent, WorkspaceHandle,
 };
-pub use state::{ArchivedWorkspace, ResourceMeter, WorkspaceConfig, WorkspaceState};
+pub use state::{ArchivedWorkspace, MigrationSnapshot, ResourceMeter, WorkspaceConfig, WorkspaceState};
 
 #[cfg(test)]
 mod tests;

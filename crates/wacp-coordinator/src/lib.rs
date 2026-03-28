@@ -8,6 +8,7 @@ pub mod events;
 pub mod gate;
 pub mod handler;
 pub mod integration;
+pub mod migration;
 pub mod orchestrator;
 pub mod ownership;
 pub mod port_rights;
@@ -30,6 +31,10 @@ pub use integration::{
     IntegrationDecision, IntegrationEngine, IntegrationPipeline, IntegrationQueue,
     IntegrationRequest, IntegrationResult, MergeContext, MergeExecutor, MergeResult,
     ResolutionOutcome, SalvageIntegration,
+};
+pub use migration::{
+    AgentRef, MigrationCompletedEvent, MigrationContext, MigrationCoordinator, MigrationError,
+    MigrationFailedEvent, MigrationRequest, MigrationStartedEvent,
 };
 pub use orchestrator::{Coordinator, DispatchRequest, SystemSnapshot};
 pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};

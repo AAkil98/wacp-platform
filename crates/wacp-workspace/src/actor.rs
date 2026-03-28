@@ -2,7 +2,7 @@ use tokio::sync::mpsc;
 use wacp_types::*;
 use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
 
-use crate::state::{ArchivedWorkspace, WorkspaceConfig, WorkspaceState};
+use crate::state::{ArchivedWorkspace, MigrationSnapshot, WorkspaceConfig, WorkspaceState};
 
 /// Commands from the coordinator (high-priority channel).
 #[derive(Debug)]
@@ -10,7 +10,14 @@ pub enum CoordinatorCommand {
     Abort,
     Suspend,
     Resume,
-    Migrate,
+    MigrateBegin,
+    MigrationComplete { restore_blocked: bool },
+    MigrationFailed,
+    IntegrationSucceeded,
+    IntegrationFailed,
+    ConflictDetected,
+    ConflictResolved,
+    ConflictUnresolvable,
     GrantVisibility(Vec<String>),
     UpdateBudget(ResourceBudget),
     DeliverEnvelope(Envelope),
@@ -47,6 +54,10 @@ pub enum WorkspaceEvent {
     },
     Terminated(Box<ArchivedWorkspace>),
     CheckpointCreated(Checkpoint),
+    MigrationSnapshot {
+        workspace_id: WorkspaceId,
+        snapshot: MigrationSnapshot,
+    },
     Error {
         workspace_id: WorkspaceId,
         message: String,
@@ -149,8 +160,45 @@ impl WorkspaceActor {
             CoordinatorCommand::Resume => {
                 self.transition(WorkspaceTrigger::CoordinatorResume).await;
             }
-            CoordinatorCommand::Migrate => {
+            CoordinatorCommand::MigrateBegin => {
                 self.transition(WorkspaceTrigger::CoordinatorMigrate).await;
+                // Capture and emit snapshot if transition succeeded
+                if self.state.status == wacp_types::WorkspaceState::Migrating {
+                    let snapshot = self.state.capture_snapshot();
+                    let _ = self
+                        .event_tx
+                        .send(WorkspaceEvent::MigrationSnapshot {
+                            workspace_id: self.state.id.clone(),
+                            snapshot,
+                        })
+                        .await;
+                }
+            }
+            CoordinatorCommand::MigrationComplete { restore_blocked } => {
+                let trigger = if restore_blocked {
+                    WorkspaceTrigger::MigrationSucceededBlocked
+                } else {
+                    WorkspaceTrigger::MigrationSucceeded
+                };
+                self.transition(trigger).await;
+            }
+            CoordinatorCommand::MigrationFailed => {
+                self.transition(WorkspaceTrigger::MigrationFailed).await;
+            }
+            CoordinatorCommand::IntegrationSucceeded => {
+                self.transition(WorkspaceTrigger::IntegrationSucceeded).await;
+            }
+            CoordinatorCommand::IntegrationFailed => {
+                self.transition(WorkspaceTrigger::IntegrationFailed).await;
+            }
+            CoordinatorCommand::ConflictDetected => {
+                self.transition(WorkspaceTrigger::ConflictDetected).await;
+            }
+            CoordinatorCommand::ConflictResolved => {
+                self.transition(WorkspaceTrigger::ConflictResolved).await;
+            }
+            CoordinatorCommand::ConflictUnresolvable => {
+                self.transition(WorkspaceTrigger::ConflictUnresolvable).await;
             }
             CoordinatorCommand::GrantVisibility(resources) => {
                 self.state.grant_visibility(&resources);
@@ -181,6 +229,10 @@ impl WorkspaceActor {
     }
 
     async fn handle_agent_msg(&mut self, msg: AgentMessage) {
+        // Reject agent messages in Migrating state (migration spec §4.3).
+        if self.state.status == wacp_types::WorkspaceState::Migrating {
+            return;
+        }
         match msg {
             AgentMessage::EmitSignal {
                 signal_type,

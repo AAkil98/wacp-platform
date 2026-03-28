@@ -121,9 +121,25 @@ fn ws_migrating_succeeded() {
 }
 
 #[test]
+fn ws_migrating_succeeded_blocked() {
+    assert_eq!(
+        ws(WorkspaceState::Migrating, WorkspaceTrigger::MigrationSucceededBlocked).unwrap(),
+        WorkspaceState::Blocked
+    );
+}
+
+#[test]
 fn ws_migrating_failed() {
     assert_eq!(
         ws(WorkspaceState::Migrating, WorkspaceTrigger::MigrationFailed).unwrap(),
+        WorkspaceState::Failed
+    );
+}
+
+#[test]
+fn ws_migrating_abort() {
+    assert_eq!(
+        ws(WorkspaceState::Migrating, WorkspaceTrigger::CoordinatorAbort).unwrap(),
         WorkspaceState::Failed
     );
 }

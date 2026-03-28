@@ -6,6 +6,7 @@ use crate::events::*;
 use crate::gate::*;
 use crate::handler::*;
 use crate::integration::*;
+use crate::migration::*;
 use crate::ownership::*;
 use crate::port_rights::*;
 use crate::resource::*;
@@ -2241,6 +2242,7 @@ fn setup_handler() -> (
     IntegrationQueue,
     TimeoutTracker,
     LivenessMonitor,
+    MigrationCoordinator,
     u64,
     u64,
 ) {
@@ -2263,19 +2265,20 @@ fn setup_handler() -> (
     let queue = IntegrationQueue::new();
     let timeout = TimeoutTracker::new();
     let liveness = LivenessMonitor::new(0);
+    let migration = MigrationCoordinator::new(60_000);
 
-    (topo, graph, gate, queue, timeout, liveness, 1, 1)
+    (topo, graph, gate, queue, timeout, liveness, migration, 1, 1)
 }
 
 #[test]
 fn handler_bind_returns_state() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
-    let result = h.handle_bind(&ws("ws-1")).unwrap();
+    let result = h.handle_bind(&ws("ws-1"), None).unwrap();
     assert_eq!(result.workspace_id, ws("ws-1"));
     assert_eq!(result.state, WorkspaceState::Active);
     assert_eq!(result.owner, uid("owner"));
@@ -2283,21 +2286,21 @@ fn handler_bind_returns_state() {
 
 #[test]
 fn handler_bind_not_found() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
-    assert!(h.handle_bind(&ws("nonexistent")).is_err());
+    assert!(h.handle_bind(&ws("nonexistent"), None).is_err());
 }
 
 #[test]
 fn handler_send_envelope_validates_rights() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     // root → ws-1 has a send right (created by TopologySet::create_workspace).
@@ -2309,7 +2312,7 @@ fn handler_send_envelope_validates_rights() {
 
 #[test]
 fn handler_send_envelope_no_right() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
 
     // Create ws-2 with no special rights to ws-1.
@@ -2323,7 +2326,7 @@ fn handler_send_envelope_no_right() {
     }).unwrap();
 
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     // ws-2 → ws-1 has no send right.
@@ -2335,10 +2338,10 @@ fn handler_send_envelope_no_right() {
 
 #[test]
 fn handler_emit_signal_accepted() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let result = h.handle_emit_signal(&ws("ws-1"), SignalType::Started, None);
@@ -2347,10 +2350,10 @@ fn handler_emit_signal_accepted() {
 
 #[test]
 fn handler_emit_signal_unknown_workspace() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     assert!(h.handle_emit_signal(&ws("nonexistent"), SignalType::Started, None).is_err());
@@ -2358,10 +2361,10 @@ fn handler_emit_signal_unknown_workspace() {
 
 #[test]
 fn handler_create_checkpoint_returns_id() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let result = h.handle_create_checkpoint(
@@ -2374,10 +2377,10 @@ fn handler_create_checkpoint_returns_id() {
 
 #[test]
 fn handler_get_workspace_view() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let view = h.handle_get_workspace(&ws("ws-1")).unwrap();
@@ -2388,10 +2391,10 @@ fn handler_get_workspace_view() {
 
 #[test]
 fn handler_get_task_graph_snapshot() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let snapshot = h.handle_get_task_graph();
@@ -2401,10 +2404,10 @@ fn handler_get_task_graph_snapshot() {
 
 #[test]
 fn handler_inject_envelope_succeeds() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let result = h.handle_inject_envelope(
@@ -2415,10 +2418,10 @@ fn handler_inject_envelope_succeeds() {
 
 #[test]
 fn handler_inject_envelope_not_found() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     assert!(h.handle_inject_envelope(&ws("nope"), "directive", b"x", EnvelopePriority::Normal).is_err());
@@ -2426,7 +2429,7 @@ fn handler_inject_envelope_not_found() {
 
 #[test]
 fn handler_gate_response_resolves() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
 
     // Open a gate first.
@@ -2434,7 +2437,7 @@ fn handler_gate_response_resolves() {
     let gate_id = event.gate_id;
 
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let result = h.handle_gate_response(&gate_id, GateDecision::Approve).unwrap();
@@ -2443,10 +2446,10 @@ fn handler_gate_response_resolves() {
 
 #[test]
 fn handler_gate_response_unknown_returns_none() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut env_id, mut cp_id) =
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &mut env_id, &mut cp_id,
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
     );
 
     let result = h.handle_gate_response(&GateId::from("gate-999"), GateDecision::Approve).unwrap();
@@ -2546,4 +2549,1050 @@ fn event_bus_no_buffering_by_default() {
         sequence: 1,
     });
     assert_eq!(bus.buffered_count(), 0);
+}
+
+// ══════════════════════════════════════════
+// Phase 16 — Agent Migration
+// ══════════════════════════════════════════
+
+// ── 16.1: MigrationCoordinator ──
+
+fn make_agent_ref(agent_type: &str) -> AgentRef {
+    AgentRef {
+        agent_type: agent_type.to_string(),
+        config: None,
+    }
+}
+
+fn make_migration_request(ws_id: &str, agent_type: &str) -> MigrationRequest {
+    MigrationRequest {
+        workspace_id: ws(ws_id),
+        new_agent: make_agent_ref(agent_type),
+        reason: "test".to_string(),
+    }
+}
+
+#[test]
+fn migration_start_active_workspace() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    let ctx = mc
+        .start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000)
+        .unwrap();
+    assert_eq!(ctx.workspace_id, ws("ws-1"));
+    assert_eq!(ctx.pre_migration_state, WorkspaceState::Active);
+    assert_eq!(ctx.old_agent, "gpt-4");
+    assert_eq!(ctx.new_agent.agent_type, "gpt-5");
+    assert_eq!(ctx.started_at_ms, 1000);
+    assert!(ctx.snapshot.is_none());
+}
+
+#[test]
+fn migration_start_blocked_workspace() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    let ctx = mc
+        .start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Blocked, "gpt-4".into(), 1000)
+        .unwrap();
+    assert_eq!(ctx.pre_migration_state, WorkspaceState::Blocked);
+}
+
+#[test]
+fn migration_start_invalid_state_idle() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Idle, "a".into(), 0),
+        Err(MigrationError::InvalidState(WorkspaceState::Idle))
+    ));
+}
+
+#[test]
+fn migration_start_invalid_state_suspended() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Suspended, "a".into(), 0),
+        Err(MigrationError::InvalidState(WorkspaceState::Suspended))
+    ));
+}
+
+#[test]
+fn migration_start_invalid_state_migrating() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Migrating, "a".into(), 0),
+        Err(MigrationError::InvalidState(WorkspaceState::Migrating))
+    ));
+}
+
+#[test]
+fn migration_start_invalid_state_terminal() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Closed, "a".into(), 0),
+        Err(MigrationError::InvalidState(WorkspaceState::Closed))
+    ));
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Failed, "a".into(), 0),
+        Err(MigrationError::InvalidState(WorkspaceState::Failed))
+    ));
+}
+
+#[test]
+fn migration_start_already_migrating() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    assert!(matches!(
+        mc.start(make_migration_request("ws-1", "gpt-6"), WorkspaceState::Active, "gpt-4".into(), 0),
+        Err(MigrationError::AlreadyMigrating(_))
+    ));
+}
+
+#[test]
+fn migration_set_snapshot() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+
+    let snap = wacp_workspace::MigrationSnapshot {
+        inbox: vec![],
+        working_memory: vec![1, 2, 3],
+        checkpoint_register: vec![],
+        resource_meter: wacp_workspace::ResourceMeter::default(),
+        trail_sequence: 42,
+        delivered_envelope_ids: Default::default(),
+    };
+    mc.set_snapshot("ws-1", snap).unwrap();
+    assert!(mc.get("ws-1").unwrap().snapshot.is_some());
+}
+
+#[test]
+fn migration_set_snapshot_not_migrating() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    let snap = wacp_workspace::MigrationSnapshot {
+        inbox: vec![],
+        working_memory: vec![],
+        checkpoint_register: vec![],
+        resource_meter: wacp_workspace::ResourceMeter::default(),
+        trail_sequence: 0,
+        delivered_envelope_ids: Default::default(),
+    };
+    assert!(matches!(
+        mc.set_snapshot("ws-1", snap),
+        Err(MigrationError::NotMigrating(_))
+    ));
+}
+
+#[test]
+fn migration_set_snapshot_already_set() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+
+    let snap = || wacp_workspace::MigrationSnapshot {
+        inbox: vec![],
+        working_memory: vec![],
+        checkpoint_register: vec![],
+        resource_meter: wacp_workspace::ResourceMeter::default(),
+        trail_sequence: 0,
+        delivered_envelope_ids: Default::default(),
+    };
+    mc.set_snapshot("ws-1", snap()).unwrap();
+    assert!(matches!(
+        mc.set_snapshot("ws-1", snap()),
+        Err(MigrationError::SnapshotAlreadySet(_))
+    ));
+}
+
+#[test]
+fn migration_complete_returns_context() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+    let ctx = mc.complete("ws-1").unwrap();
+    assert_eq!(ctx.workspace_id, ws("ws-1"));
+    assert_eq!(ctx.old_agent, "gpt-4");
+    assert!(!mc.is_migrating("ws-1"));
+}
+
+#[test]
+fn migration_complete_not_migrating() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    assert!(matches!(mc.complete("ws-1"), Err(MigrationError::NotMigrating(_))));
+}
+
+#[test]
+fn migration_fail_returns_context() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+    let ctx = mc.fail("ws-1", "bind timeout".into(), 6).unwrap();
+    assert_eq!(ctx.workspace_id, ws("ws-1"));
+    assert!(!mc.is_migrating("ws-1"));
+}
+
+#[test]
+fn migration_check_timeouts_expired() {
+    let mut mc = MigrationCoordinator::new(1000); // 1s timeout
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+
+    assert!(mc.check_timeouts(500).is_empty()); // within timeout
+    let expired = mc.check_timeouts(1100); // past timeout
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0], ws("ws-1"));
+}
+
+#[test]
+fn migration_check_timeouts_not_expired() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    assert!(mc.check_timeouts(50_000).is_empty());
+}
+
+#[test]
+fn migration_parallel_different_workspaces() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "a".into(), 0).unwrap();
+    mc.start(make_migration_request("ws-2", "gpt-5"), WorkspaceState::Blocked, "b".into(), 0).unwrap();
+    assert_eq!(mc.active_count(), 2);
+    assert!(mc.is_migrating("ws-1"));
+    assert!(mc.is_migrating("ws-2"));
+}
+
+#[test]
+fn migration_expected_agent() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    assert_eq!(mc.expected_agent("ws-1").unwrap().agent_type, "gpt-5");
+    assert!(mc.expected_agent("ws-2").is_none());
+}
+
+// ── 16.2: Handler migration-aware bind ──
+
+#[test]
+fn handler_bind_migrating_correct_agent() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
+        setup_handler();
+
+    // Put ws-1 in Migrating state and register a migration.
+    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration.start(
+        make_migration_request("ws-1", "new-agent"),
+        WorkspaceState::Active,
+        "old-agent".into(),
+        0,
+    ).unwrap();
+
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_bind(&ws("ws-1"), Some("new-agent"));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().state, WorkspaceState::Migrating);
+}
+
+#[test]
+fn handler_bind_migrating_wrong_agent() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
+        setup_handler();
+
+    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration.start(
+        make_migration_request("ws-1", "new-agent"),
+        WorkspaceState::Active,
+        "old-agent".into(),
+        0,
+    ).unwrap();
+
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_bind(&ws("ws-1"), Some("wrong-agent"));
+    assert!(matches!(result, Err(HandlerError::PermissionDenied(_))));
+}
+
+#[test]
+fn handler_bind_migrating_no_identity() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
+        setup_handler();
+
+    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration.start(
+        make_migration_request("ws-1", "new-agent"),
+        WorkspaceState::Active,
+        "old-agent".into(),
+        0,
+    ).unwrap();
+
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_bind(&ws("ws-1"), None);
+    assert!(matches!(result, Err(HandlerError::PermissionDenied(_))));
+}
+
+#[test]
+fn handler_bind_normal_workspace_no_identity_check() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    // Non-migrating workspace — identity is not checked
+    let result = h.handle_bind(&ws("ws-1"), None);
+    assert!(result.is_ok());
+}
+
+// ── 16.3: Trail event builders ──
+
+#[test]
+fn trail_event_started() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    let ctx = mc.get("ws-1").unwrap();
+    let event = MigrationCoordinator::started_event(ctx);
+    assert_eq!(event.workspace_id, ws("ws-1"));
+    assert_eq!(event.old_agent, "gpt-4");
+    assert_eq!(event.new_agent, "gpt-5");
+    assert_eq!(event.reason, "test");
+    assert_eq!(event.pre_migration_state, "Active");
+}
+
+#[test]
+fn trail_event_completed() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    let ctx = mc.get("ws-1").unwrap();
+    let event = MigrationCoordinator::completed_event(ctx, 3500);
+    assert_eq!(event.duration_ms, 2500);
+    assert_eq!(event.restored_state, "Active");
+}
+
+#[test]
+fn trail_event_failed() {
+    let mut mc = MigrationCoordinator::new(60_000);
+    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    let ctx = mc.get("ws-1").unwrap();
+    let event = MigrationCoordinator::failed_event(ctx, "bind timeout", 6, 5000);
+    assert_eq!(event.error, "bind timeout");
+    assert_eq!(event.failed_at_step, 6);
+    assert_eq!(event.duration_ms, 4000);
+}
+
+// ── 16.4: Resource continuity ──
+
+#[test]
+fn timeout_paused_during_migrating() {
+    let mut tracker = TimeoutTracker::new();
+    tracker.register(&ws("ws-1"), 10_000);
+
+    // Active → timer starts
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 100);
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 500), 400);
+
+    // Active → Migrating → timer pauses
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Migrating, 500);
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 1000), 400); // no change
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 5000), 400); // still no change
+}
+
+#[test]
+fn timeout_resumes_after_migration() {
+    let mut tracker = TimeoutTracker::new();
+    tracker.register(&ws("ws-1"), 10_000);
+
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 100);
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Migrating, 500); // 400ms elapsed
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 2000); // resume
+
+    // 400ms accumulated + new running time
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 3000), 1400);
+}
+
+#[test]
+fn timeout_continuous_across_migration() {
+    let mut tracker = TimeoutTracker::new();
+    tracker.register(&ws("ws-1"), 10_000);
+
+    // Active for 300ms
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 100);
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Migrating, 400);
+    // Migration gap (should not accumulate)
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 1000);
+    // Active for 200ms more
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 1200), 500); // 300 + 200, no gap
+}
+
+#[test]
+fn timeout_migration_to_blocked() {
+    let mut tracker = TimeoutTracker::new();
+    tracker.register(&ws("ws-1"), 10_000);
+
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Blocked, 100);
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Migrating, 600); // 500ms elapsed
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Blocked, 2000); // resume
+
+    assert_eq!(tracker.elapsed_ms(&ws("ws-1"), 2500), 1000); // 500 + 500
+}
+
+#[test]
+fn liveness_reset_on_completion() {
+    let mut monitor = LivenessMonitor::new(5000);
+    monitor.register(&ws("ws-1"), 100);
+
+    // No activity for a while → would be inactive
+    assert!(!monitor.check_inactive(5200).is_empty());
+
+    // Reset activity (migration completion)
+    monitor.reset_activity(&ws("ws-1"), 5200);
+
+    // No longer inactive
+    assert!(monitor.check_inactive(5200).is_empty());
+    assert!(monitor.check_inactive(9000).is_empty()); // still within interval after reset
+}
+
+#[test]
+fn liveness_no_false_warning_after_migration() {
+    let mut monitor = LivenessMonitor::new(3000);
+    monitor.register(&ws("ws-1"), 100);
+
+    // Activity at 100, then migration happens at 200, completes at 5000
+    // Without reset, check at 5100 would fire (5100-100 = 5000 >= 3000)
+    monitor.reset_activity(&ws("ws-1"), 5000);
+
+    // After reset, should NOT fire until 5000+3000 = 8000
+    assert!(monitor.check_inactive(7999).is_empty());
+    assert!(!monitor.check_inactive(8000).is_empty());
+}
+
+#[test]
+fn trail_event_serde_roundtrip() {
+    let started = MigrationStartedEvent {
+        workspace_id: ws("ws-1"),
+        old_agent: "gpt-4".into(),
+        new_agent: "gpt-5".into(),
+        reason: "upgrade".into(),
+        pre_migration_state: "Active".into(),
+    };
+    let json = serde_json::to_string(&started).unwrap();
+    let roundtrip: MigrationStartedEvent = serde_json::from_str(&json).unwrap();
+    assert_eq!(roundtrip.workspace_id, ws("ws-1"));
+    assert_eq!(roundtrip.new_agent, "gpt-5");
+
+    let completed = MigrationCompletedEvent {
+        workspace_id: ws("ws-1"),
+        old_agent: "gpt-4".into(),
+        new_agent: "gpt-5".into(),
+        duration_ms: 2500,
+        restored_state: "Active".into(),
+    };
+    let json = serde_json::to_string(&completed).unwrap();
+    let roundtrip: MigrationCompletedEvent = serde_json::from_str(&json).unwrap();
+    assert_eq!(roundtrip.duration_ms, 2500);
+
+    let failed = MigrationFailedEvent {
+        workspace_id: ws("ws-1"),
+        old_agent: "gpt-4".into(),
+        new_agent: "gpt-5".into(),
+        reason: "upgrade".into(),
+        error: "bind timeout".into(),
+        failed_at_step: 6,
+        duration_ms: 4000,
+    };
+    let json = serde_json::to_string(&failed).unwrap();
+    let roundtrip: MigrationFailedEvent = serde_json::from_str(&json).unwrap();
+    assert_eq!(roundtrip.failed_at_step, 6);
+}
+
+// ══════════════════════════════════════════
+// Phase 17 — End-to-End Tests
+// ══════════════════════════════════════════
+
+use std::time::Duration;
+use tokio::sync::mpsc;
+use wacp_workspace::{
+    AgentMessage, CoordinatorCommand, WorkspaceActor, WorkspaceConfig, WorkspaceEvent,
+};
+
+fn e2e_config(id: &str, parent: &str, owner: &str) -> WorkspaceConfig {
+    WorkspaceConfig {
+        id: ws(id),
+        role: "worker".into(),
+        base_role: BaseRole::Worker,
+        parent: ws(parent),
+        owner: uid(owner),
+        originator: Originator::System,
+        directive: Envelope {
+            id: EnvelopeId::from(format!("dir-{id}")),
+            from_workspace: ws(parent),
+            to_workspace: ws(id),
+            envelope_type: "directive".into(),
+            payload: b"work".to_vec(),
+            in_reply_to: None,
+            timestamp: 0,
+            priority: EnvelopePriority::Normal,
+            origin: EnvelopeOrigin::Agent,
+            state: EnvelopeState::Created,
+        },
+        context: vec![],
+        visibility: Default::default(),
+        authority: Default::default(),
+        delegate: false,
+        budget: None,
+    }
+}
+
+fn e2e_envelope(id: &str, from: &str, to: &str) -> Envelope {
+    Envelope {
+        id: EnvelopeId::from(id),
+        from_workspace: ws(from),
+        to_workspace: ws(to),
+        envelope_type: "directive".into(),
+        payload: b"work".to_vec(),
+        in_reply_to: None,
+        timestamp: 0,
+        priority: EnvelopePriority::Normal,
+        origin: EnvelopeOrigin::Agent,
+        state: EnvelopeState::Created,
+    }
+}
+
+/// Drain events from the workspace actor channel, processing each through the coordinator.
+/// Returns all events collected.
+async fn drain_events(
+    coordinator: &mut crate::orchestrator::Coordinator,
+    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
+    max: usize,
+) -> Vec<WorkspaceEvent> {
+    let mut events = Vec::new();
+    for _ in 0..max {
+        match tokio::time::timeout(Duration::from_millis(200), event_rx.recv()).await {
+            Ok(Some(event)) => {
+                coordinator.handle_event(&event);
+                events.push(event);
+            }
+            _ => break,
+        }
+    }
+    events
+}
+
+/// Find last state for a workspace in an event list.
+fn last_state(events: &[WorkspaceEvent], ws_id: &str) -> Option<WorkspaceState> {
+    events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            WorkspaceEvent::StateChanged {
+                workspace_id, to, ..
+            } if workspace_id.as_ref() == ws_id => Some(*to),
+            _ => None,
+        })
+}
+
+// ── 17.1: Full lifecycle ──
+
+#[tokio::test]
+async fn e2e_single_worker_lifecycle() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Dispatch workspace.
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"),
+        parent: Some(ws("root")),
+        children: vec![],
+        owner: uid("system"),
+        originator: Originator::System,
+        status: WorkspaceState::Idle,
+        task_id: None,
+    }).unwrap();
+
+    // Step 1: Deliver directive → Idle → Active
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(
+        e2e_envelope("dir-1", "root", "ws-1"),
+    )).await.unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 3).await;
+    assert_eq!(last_state(&events, "ws-1"), Some(WorkspaceState::Active));
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+
+    // Step 2: Agent creates checkpoint
+    handle.agent_tx.send(AgentMessage::CreateCheckpoint {
+        checkpoint_type: "artifact".into(),
+        payload: b"output".to_vec(),
+        content_hash: "hash-1".into(),
+        intent: "first draft".into(),
+        status: CheckpointStatus::Final,
+        confidence: Confidence::High,
+        resource_usage: None,
+    }).await.unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::CheckpointCreated(_))));
+
+    // Step 3: Agent signals Complete → Active → Integrating
+    handle.agent_tx.send(AgentMessage::EmitSignal {
+        signal_type: SignalType::Complete,
+        reason: Some("done".into()),
+        context: None,
+    }).await.unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(last_state(&events, "ws-1"), Some(WorkspaceState::Integrating));
+
+    // Step 4: Coordinator completes integration → Integrating → Closed
+    handle.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    // Should see Closed then Terminated
+    assert!(events.iter().any(|e| matches!(e,
+        WorkspaceEvent::StateChanged { to: WorkspaceState::Closed, .. }
+    )));
+    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+}
+
+#[tokio::test]
+async fn e2e_multi_worker_parallel() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Dispatch two workspaces.
+    let h1 = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    let h2 = WorkspaceActor::spawn(e2e_config("ws-2", "root", "system"), event_tx.clone());
+    for id in ["ws-1", "ws-2"] {
+        coord.tree.insert(crate::tree::WorkspaceNode {
+            id: ws(id),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        }).unwrap();
+    }
+
+    // Activate both.
+    h1.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    h2.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d2", "root", "ws-2"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 10).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Active);
+
+    // Both agents complete.
+    h1.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    h2.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 10).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Integrating);
+    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Integrating);
+
+    // Integration succeeds for both.
+    h1.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    h2.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 10).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Closed);
+}
+
+#[tokio::test]
+async fn e2e_delegation_subtask() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Parent workspace.
+    let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-parent"),
+        parent: Some(ws("root")),
+        children: vec![],
+        owner: uid("system"),
+        originator: Originator::System,
+        status: WorkspaceState::Idle,
+        task_id: None,
+    }).unwrap();
+
+    // Activate parent.
+    parent.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d-p", "root", "ws-parent"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+
+    // Parent "delegates" — coordinator creates subtask workspace.
+    let child = WorkspaceActor::spawn(e2e_config("ws-child", "ws-parent", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-child"),
+        parent: Some(ws("ws-parent")),
+        children: vec![],
+        owner: uid("system"),
+        originator: Originator::System,
+        status: WorkspaceState::Idle,
+        task_id: None,
+    }).unwrap();
+
+    // Activate child.
+    child.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d-c", "ws-parent", "ws-child"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+
+    // Child completes and integrates.
+    child.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    child.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    // Child is Closed, parent is still Active.
+    assert_eq!(coord.tree.get(&ws("ws-child")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Active);
+}
+
+#[tokio::test]
+async fn e2e_workspace_survives_full_cycle() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
+        owner: uid("system"), originator: Originator::System,
+        status: WorkspaceState::Idle, task_id: None,
+    }).unwrap();
+
+    // Activate → Complete → Integrate → Close
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    handle.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    // Tree node persists with terminal status.
+    let node = coord.tree.get(&ws("ws-1")).unwrap();
+    assert_eq!(node.status, WorkspaceState::Closed);
+}
+
+// ── 17.2: Failure scenarios ──
+
+#[tokio::test]
+async fn e2e_timeout_expiry() {
+    let mut tracker = TimeoutTracker::new();
+    tracker.register(&ws("ws-1"), 1000);
+    tracker.on_state_change(&ws("ws-1"), WorkspaceState::Active, 100);
+
+    // Time passes beyond timeout.
+    let expired = tracker.check_expired(1200);
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0], ws("ws-1"));
+
+    // Coordinator would abort — test the workspace actor side.
+    let (event_tx, mut event_rx) = mpsc::channel(64);
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx);
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Drain activation event.
+    while event_rx.try_recv().is_ok() {}
+
+    handle.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    let mut got_failed = false;
+    for _ in 0..5 {
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
+            tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
+        {
+            if to == WorkspaceState::Failed { got_failed = true; break; }
+        }
+    }
+    assert!(got_failed);
+}
+
+#[tokio::test]
+async fn e2e_budget_exceeded() {
+    let usage = ResourceUsage { tokens: 1000, wall_time_ms: 0, storage_bytes: 0, network_bytes: 0, cost_micros: 0 };
+    let budget = ResourceBudget {
+        max_tokens: Some(500),
+        max_wall_time_ms: None, max_storage_bytes: None, max_network_bytes: None, max_cost_micros: None,
+        warning_threshold: 0.8,
+    };
+    let result = BudgetEnforcer::check(&usage, &budget);
+    assert!(matches!(result, BudgetCheckResult::Exceeded(_)));
+
+    // Coordinator would abort — same as timeout.
+    let (event_tx, mut event_rx) = mpsc::channel(64);
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx);
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    while event_rx.try_recv().is_ok() {}
+
+    handle.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    let mut got_failed = false;
+    for _ in 0..5 {
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
+            tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
+        {
+            if to == WorkspaceState::Failed { got_failed = true; break; }
+        }
+    }
+    assert!(got_failed);
+}
+
+#[tokio::test]
+async fn e2e_failure_cascade_same_owner() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Parent + same-owner child.
+    let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-parent"), parent: Some(ws("root")), children: vec![],
+        owner: uid("owner-a"), originator: Originator::System,
+        status: WorkspaceState::Active, task_id: None,
+    }).unwrap();
+
+    let _child = WorkspaceActor::spawn(e2e_config("ws-child", "ws-parent", "owner-a"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-child"), parent: Some(ws("ws-parent")), children: vec![],
+        owner: uid("owner-a"), originator: Originator::System,
+        status: WorkspaceState::Active, task_id: None,
+    }).unwrap();
+
+    // Parent fails.
+    parent.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 10).await;
+
+    // Both should be Failed (cascade).
+    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(coord.tree.get(&ws("ws-child")).unwrap().status, WorkspaceState::Failed);
+}
+
+#[tokio::test]
+async fn e2e_failure_cascade_cross_owner() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Parent owned by A, child owned by B.
+    let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-parent"), parent: Some(ws("root")), children: vec![],
+        owner: uid("owner-a"), originator: Originator::System,
+        status: WorkspaceState::Active, task_id: None,
+    }).unwrap();
+
+    let mut child_config = e2e_config("ws-child", "ws-parent", "owner-b");
+    child_config.owner = uid("owner-b");
+    let _child = WorkspaceActor::spawn(child_config, event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-child"), parent: Some(ws("ws-parent")), children: vec![],
+        owner: uid("owner-b"), originator: Originator::System,
+        status: WorkspaceState::Active, task_id: None,
+    }).unwrap();
+
+    // Parent fails.
+    parent.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 10).await;
+
+    // Parent Failed, child reparented to root (still Active in tree).
+    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Failed);
+    let child_node = coord.tree.get(&ws("ws-child")).unwrap();
+    assert_eq!(child_node.parent.as_ref().unwrap().as_ref(), "root");
+    // Cross-owner child is NOT failed — it's reparented.
+    assert_eq!(child_node.status, WorkspaceState::Active);
+}
+
+#[tokio::test]
+async fn e2e_conflict_to_resolution() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
+        owner: uid("system"), originator: Originator::System,
+        status: WorkspaceState::Idle, task_id: None,
+    }).unwrap();
+
+    // Activate → Complete → Integrating
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Integrating);
+
+    // Conflict detected → Conflicted
+    handle.coordinator_tx.send(CoordinatorCommand::ConflictDetected).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Conflicted);
+
+    // Conflict resolved → Closed
+    handle.coordinator_tx.send(CoordinatorCommand::ConflictResolved).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Closed);
+}
+
+#[tokio::test]
+async fn e2e_conflict_unresolvable() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
+        owner: uid("system"), originator: Originator::System,
+        status: WorkspaceState::Idle, task_id: None,
+    }).unwrap();
+
+    // Activate → Complete → Integrating → Conflict → Unresolvable → Failed
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    handle.coordinator_tx.send(CoordinatorCommand::ConflictDetected).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    handle.coordinator_tx.send(CoordinatorCommand::ConflictUnresolvable).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+}
+
+#[tokio::test]
+async fn e2e_integration_failure() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
+        owner: uid("system"), originator: Originator::System,
+        status: WorkspaceState::Idle, task_id: None,
+    }).unwrap();
+
+    // Activate → Complete → Integrating → IntegrationFailed → Failed
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+    handle.coordinator_tx.send(CoordinatorCommand::IntegrationFailed).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+}
+
+// ── 17.3: Highway integration ──
+
+#[test]
+fn e2e_gate_approval_flow() {
+    let mut gate = GateController::new(30_000, GateFallback::AutoApprove);
+    let event = gate.open_gate(tid("t1"), "task_approval".into(), "approve task", None, None);
+    assert!(gate.pending_for_task(&tid("t1")).is_some());
+
+    let resolution = gate.resolve(&event.gate_id, GateDecision::Approve);
+    assert!(resolution.is_some());
+    assert!(matches!(resolution.unwrap(), GateResolution::Approved { .. }));
+    assert!(gate.pending_for_task(&tid("t1")).is_none());
+}
+
+#[test]
+fn e2e_gate_rejection() {
+    let mut gate = GateController::new(30_000, GateFallback::AutoApprove);
+    let event = gate.open_gate(tid("t1"), "task_approval".into(), "approve task", None, None);
+
+    let resolution = gate.resolve(&event.gate_id, GateDecision::Reject);
+    assert!(resolution.is_some());
+    assert!(matches!(resolution.unwrap(), GateResolution::Rejected));
+}
+
+#[test]
+fn e2e_envelope_injection() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_inject_envelope(
+        &ws("ws-1"), "directive", b"injected payload", EnvelopePriority::Urgent,
+    );
+    assert!(result.is_ok());
+    let envelope_id = result.unwrap().envelope_id;
+    assert!(envelope_id.as_ref().starts_with("env-"));
+}
+
+#[tokio::test]
+async fn e2e_migration_full_lifecycle() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    coord.tree.insert(crate::tree::WorkspaceNode {
+        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
+        owner: uid("system"), originator: Originator::System,
+        status: WorkspaceState::Idle, task_id: None,
+    }).unwrap();
+
+    // Activate.
+    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+
+    // Start migration.
+    coord.migration.start(
+        MigrationRequest { workspace_id: ws("ws-1"), new_agent: AgentRef { agent_type: "gpt-5".into(), config: None }, reason: "upgrade".into() },
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        1000,
+    ).unwrap();
+
+    // Send MigrateBegin → workspace transitions to Migrating + emits snapshot.
+    handle.coordinator_tx.send(CoordinatorCommand::MigrateBegin).await.unwrap();
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Migrating);
+    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::MigrationSnapshot { .. })));
+    // Snapshot should have been stored.
+    assert!(coord.migration.get("ws-1").unwrap().snapshot.is_some());
+
+    // Complete migration → Active.
+    let ctx = coord.migration.get("ws-1").unwrap();
+    let restore_blocked = ctx.pre_migration_state == WorkspaceState::Blocked;
+    handle.coordinator_tx.send(CoordinatorCommand::MigrationComplete { restore_blocked }).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+
+    // Clean up migration context.
+    coord.migration.complete("ws-1").unwrap();
+    assert!(!coord.migration.is_migrating("ws-1"));
+}
+
+#[tokio::test]
+async fn e2e_migration_timeout() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Use dispatch() so the coordinator has the workspace handle for fail_migration.
+    coord.dispatch(crate::orchestrator::DispatchRequest {
+        task_id: tid("t1"),
+        config: e2e_config("ws-1", "root", "system"),
+    });
+
+    // Activate via the coordinator's stored handle.
+    let coord_tx = coord.handle(&ws("ws-1")).unwrap().coordinator_tx.clone();
+    coord_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 3).await;
+
+    // Start migration with short timeout.
+    coord.migration = MigrationCoordinator::new(100); // 100ms
+    coord.migration.start(
+        MigrationRequest { workspace_id: ws("ws-1"), new_agent: AgentRef { agent_type: "gpt-5".into(), config: None }, reason: "test".into() },
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        0,
+    ).unwrap();
+
+    coord_tx.send(CoordinatorCommand::MigrateBegin).await.unwrap();
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    // Check timeout.
+    let expired = coord.migration.check_timeouts(200);
+    assert_eq!(expired.len(), 1);
+
+    // Fail the migration — coordinator sends MigrationFailed to workspace actor.
+    coord.fail_migration(&ws("ws-1"), "timeout".into(), 6).await;
+    drain_events(&mut coord, &mut event_rx, 5).await;
+
+    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+    assert!(!coord.migration.is_migrating("ws-1"));
 }

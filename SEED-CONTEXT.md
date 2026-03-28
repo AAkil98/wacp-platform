@@ -20,7 +20,11 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 15: complete.** Storage enhancements — FileSnapshotStorage with SHA-256 checksums, coordinator state serialization (all topology types), snapshot-accelerated recovery, tiered storage (zstd compression, hot/warm/cold transitions, recovery window invariant), background compaction with retention policies. 67 tests in `wacp-trail` (was 48).
 
-**Phase: 16 next.** Agent migration (7-step procedure, snapshot, unbind/bind, rollback). See `IMPLEMENTATION.md` for the full 42-task plan (Phases 9–18).
+**Phase 16: complete.** Agent migration — MigrationCoordinator (precondition validation, timeout tracking, lifecycle management), MigrationSnapshot (capture/restore of 5 mutable workspace components), migration-aware bind with identity verification, FSM additions (MigrationSucceededBlocked, Migrating+Abort→Failed), workspace actor migration commands (MigrateBegin/MigrationComplete/MigrationFailed) with agent message guard, resource continuity (timeout pause, liveness reset), trail event types. 245 tests in `wacp-coordinator` (was 214), 31 in `wacp-workspace` (was 17), 43 in `wacp-fsm` (was 41).
+
+**Phase 17: complete.** E2E integration tests — full lifecycle (dispatch → activate → checkpoint → complete → integrate → close), multi-worker parallel, delegation/subtask, failure scenarios (timeout, budget, cascade with ownership boundaries, conflict resolution), highway integration (gate approval/rejection, envelope injection, migration lifecycle). Packaging: Dockerfile (multi-stage, non-root, healthcheck) + systemd unit (17 security hardening directives). 261 tests in `wacp-coordinator` (was 245), 31 in `wacp-workspace` (was 31, +5 integration commands).
+
+**Phase 18 next.** Highway UI (TypeScript SPA). See `IMPLEMENTATION.md` for the full plan.
 
 ## Repository Map
 
@@ -66,17 +70,19 @@ wacp/
 │   ├── phase11-*.md                 # Phase 11: integration (3 specs, complete)
 │   ├── phase13-*.md                 # Phase 13: request handler (1 spec, complete)
 │   ├── phase14-*.md                 # Phase 14: deployment (6 specs, complete)
-│   └── phase15-*.md                 # Phase 15: storage enhancements (4 specs, complete)
+│   ├── phase15-*.md                 # Phase 15: storage enhancements (4 specs, complete)
+│   ├── phase16-*.md                 # Phase 16: agent migration (4 specs, complete)
+│   └── phase17-*.md                 # Phase 17: E2E tests + packaging (4 specs, complete)
 │
 ├── crates/                  # Rust implementation (12 crates)
 │   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 11 tests
 │   ├── wacp-clock/          # HLC: Timestamp, Clock<TimeSource>, ManualTimeSource — 14 tests
-│   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 41 tests
+│   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 43 tests
 │   ├── wacp-taxonomy/       # YAML/JSON loader, 11 validation checks, role resolution — 22 tests
 │   ├── wacp-permissions/    # Permission matrix, checkpoint table, port rights, default-deny — 20 tests
 │   ├── wacp-trail/          # Storage traits, filesystem backends, hash chain, SQLite index, snapshots, tiered storage, compaction — 67 tests
-│   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, envelope/checkpoint — 17 tests
-│   ├── wacp-coordinator/    # Full coordinator decision engine — 214 tests (see below)
+│   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, migration snapshot, integration commands — 31 tests
+│   ├── wacp-coordinator/    # Full coordinator decision engine + migration + E2E tests — 261 tests (see below)
 │   ├── wacp-transport/      # Transport trait, InProcessTransport, gRPC (tonic + TLS), Authenticator trait, PSK provider, rate limiter — 17 tests
 │   ├── wacp-recovery/       # Trail integrity check, state reconstruction, clock recovery — 6 tests
 │   ├── wacp-runtime/        # Binary: config (47 fields), clap CLI, tracing logging, TLS, metrics, health — 40 tests
@@ -92,9 +98,9 @@ wacp/
     └── tests/
 ```
 
-## wacp-coordinator Modules (Phases 9–13)
+## wacp-coordinator Modules (Phases 9–13, 16)
 
-The coordinator crate grew from 28 to 214 tests across Phases 9–13. It now contains the full decision engine:
+The coordinator crate grew from 28 to 245 tests across Phases 9–13, 16. It now contains the full decision engine and migration coordinator:
 
 | Module | Purpose | Phase |
 |--------|---------|-------|
@@ -108,10 +114,11 @@ The coordinator crate grew from 28 to 214 tests across Phases 9–13. It now con
 | `dispatch.rs` | Dispatcher — task selection, budget allocation with margin, capacity limits | 10 |
 | `scheduling.rs` | SchedulingOps — context assembly, retry policy, cancellation cascade, subtask decomposition | 10 |
 | `integration.rs` | IntegrationQueue + Pipeline + MergeExecutor (direct/layered/evaluated) + ConflictResolver + SalvageIntegration | 11 |
-| `resource.rs` | TimeoutTracker, BudgetEnforcer, LivenessMonitor — pure state tracking | 12 |
-| `handler.rs` | RequestHandler — domain-level agent/highway/gate RPC handling (no tonic dep) | 13 |
+| `resource.rs` | TimeoutTracker, BudgetEnforcer, LivenessMonitor (+ reset_activity for migration) — pure state tracking | 12, 16 |
+| `handler.rs` | RequestHandler — domain-level agent/highway/gate RPC handling, migration-aware bind | 13, 16 |
 | `events.rs` | EventBus — callback subscribers + buffering for streaming RPCs | 13 |
-| `orchestrator.rs` | Original coordinator actor (dispatch, event handling, envelope routing) | 0–8 |
+| `migration.rs` | MigrationCoordinator — precondition validation, timeout tracking, lifecycle (start/complete/fail), trail events | 16 |
+| `orchestrator.rs` | Coordinator actor (dispatch, event handling, envelope routing, migration orchestration) | 0–8, 16 |
 
 ## Key Decisions (from IMPLEMENTATION.md)
 
@@ -179,15 +186,13 @@ The coordinator crate grew from 28 to 214 tests across Phases 9–13. It now con
 
 ## What's Next
 
-Phases 9–15 complete (topology, scheduling, integration, resource enforcement, request routing, deployment infrastructure, storage enhancements). The remaining work:
+Phases 9–17 complete (topology, scheduling, integration, resource enforcement, request routing, deployment infrastructure, storage enhancements, agent migration, E2E testing + packaging). The remaining work:
 
 | Phase | Work item | Spec source | Status |
 |-------|-----------|-------------|--------|
-| 14 | Deployment infrastructure (config, CLI, TLS, auth, logging, metrics, health) | deployment.md §2–12 | **Complete** |
-| 15 | Storage enhancements (system snapshots, tiered storage, retention) | storage.md §7–9 | **Complete** |
-| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | **Next** |
-| 17 | End-to-end testing + Docker/systemd packaging | all impl specs | Pending |
-| 18 | Highway UI (TypeScript SPA) | highway-ui.md | Pending |
+| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | **Complete** |
+| 17 | End-to-end testing + Docker/systemd packaging | all impl specs | **Complete** |
+| 18 | Highway UI (TypeScript SPA) | highway-ui.md | **Next** |
 
 See `IMPLEMENTATION.md` for the full task breakdown within each phase.
 

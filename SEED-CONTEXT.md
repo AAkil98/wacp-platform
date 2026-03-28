@@ -24,13 +24,13 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 17: complete.** E2E integration tests — full lifecycle (dispatch → activate → checkpoint → complete → integrate → close), multi-worker parallel, delegation/subtask, failure scenarios (timeout, budget, cascade with ownership boundaries, conflict resolution), highway integration (gate approval/rejection, envelope injection, migration lifecycle). Packaging: Dockerfile (multi-stage, non-root, healthcheck) + systemd unit (17 security hardening directives). 261 tests in `wacp-coordinator` (was 245), 31 in `wacp-workspace` (was 31, +5 integration commands).
 
-**Phase 18 next.** Highway UI (TypeScript SPA). See `IMPLEMENTATION.md` for the full plan.
+**Phase 18 next.** Coverage hardening — systematic test coverage audit, targeting near-100% branch coverage across all 12 crates. Then Phase 19 (Highway UI). See `IMPLEMENTATION.md` for the full plan.
 
 ## Repository Map
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Decision log, spec tracking, Phase 9–18 plan (42 tasks)
+├── IMPLEMENTATION.md        # Forward plan — Phase 18 (coverage) + Phase 19 (highway UI)
 ├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 12 crates
@@ -63,16 +63,7 @@ wacp/
 │   ├── highway.proto        # HighwayService — 12 RPCs (8 unary, 4 streaming)
 │   └── taxonomy.proto       # Taxonomy configuration messages
 │
-├── specs/coding/            # Coding specs (one per task)
-│   ├── phase0-*.md – phase8-*.md    # Phases 0–8 (28 specs, all complete)
-│   ├── phase9-*.md                  # Phase 9: topology (5 specs, complete)
-│   ├── phase10-*.md                 # Phase 10: scheduling (4 specs, complete)
-│   ├── phase11-*.md                 # Phase 11: integration (3 specs, complete)
-│   ├── phase13-*.md                 # Phase 13: request handler (1 spec, complete)
-│   ├── phase14-*.md                 # Phase 14: deployment (6 specs, complete)
-│   ├── phase15-*.md                 # Phase 15: storage enhancements (4 specs, complete)
-│   ├── phase16-*.md                 # Phase 16: agent migration (4 specs, complete)
-│   └── phase17-*.md                 # Phase 17: E2E tests + packaging (4 specs, complete)
+├── specs/                   # (coding specs archived to ../archive/wacp/specs/coding/)
 │
 ├── crates/                  # Rust implementation (12 crates)
 │   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 11 tests
@@ -186,13 +177,13 @@ The coordinator crate grew from 28 to 245 tests across Phases 9–13, 16. It now
 
 ## What's Next
 
-Phases 9–17 complete (topology, scheduling, integration, resource enforcement, request routing, deployment infrastructure, storage enhancements, agent migration, E2E testing + packaging). The remaining work:
+Phases 0–17 complete. The remaining work:
 
-| Phase | Work item | Spec source | Status |
-|-------|-----------|-------------|--------|
-| 16 | Agent migration (7-step procedure, snapshot, unbind/bind, rollback) | migration.md §2–8 | **Complete** |
-| 17 | End-to-end testing + Docker/systemd packaging | all impl specs | **Complete** |
-| 18 | Highway UI (TypeScript SPA) | highway-ui.md | **Next** |
+| Phase | Work item | Status |
+|-------|-----------|--------|
+| 18a | Coverage hardening: core crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator) | **Next** |
+| 18b | Coverage hardening: boundary crates (trail, transport, recovery, runtime) | Pending |
+| 19 | Highway UI (TypeScript SPA) | Pending |
 
 See `IMPLEMENTATION.md` for the full task breakdown within each phase.
 

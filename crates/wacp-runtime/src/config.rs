@@ -1313,4 +1313,163 @@ observability:
         assert_eq!(parsed.resources.warning_threshold, d.resources.warning_threshold);
         assert_eq!(parsed.observability.health.path, d.observability.health.path);
     }
+
+    // ── Phase 18b.4: Runtime config coverage ──
+
+    #[test]
+    fn env_override_invalid_bool() {
+        let mut config = RuntimeConfig::default();
+        let err = override_one(&mut config, "WACP_TLS__ENABLED", "maybe");
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn env_override_invalid_u64() {
+        let mut config = RuntimeConfig::default();
+        let err = override_one(&mut config, "WACP_STORAGE__TRAIL__SEGMENT_SIZE_BYTES", "abc");
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn env_override_invalid_f32() {
+        let mut config = RuntimeConfig::default();
+        let err = override_one(&mut config, "WACP_RESOURCES__WARNING_THRESHOLD", "not_a_number");
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn env_override_u32() {
+        let mut config = RuntimeConfig::default();
+        override_one(&mut config, "WACP_STORAGE__TRAIL__INDEX_BATCH_SIZE", "200").unwrap();
+        assert_eq!(config.storage.trail.index_batch_size, 200);
+    }
+
+    #[test]
+    fn defaults_yaml_contains_all_sections() {
+        let yaml = RuntimeConfig::default_yaml();
+        // Verify all 9 top-level sections are present.
+        for section in [
+            "server:", "tls:", "auth:", "taxonomy:", "storage:",
+            "resources:", "delivery:", "logging:", "observability:",
+        ] {
+            assert!(yaml.contains(section), "defaults YAML missing {section}");
+        }
+    }
+
+    #[test]
+    fn defaults_yaml_roundtrip_all_fields() {
+        let yaml = RuntimeConfig::default_yaml();
+        let parsed = RuntimeConfig::parse(&yaml).unwrap();
+        let d = RuntimeConfig::default();
+
+        // Server
+        assert_eq!(parsed.server.agent_listen, d.server.agent_listen);
+        assert_eq!(parsed.server.highway_listen, d.server.highway_listen);
+        // TLS
+        assert_eq!(parsed.tls.enabled, d.tls.enabled);
+        assert_eq!(parsed.tls.cert_file, d.tls.cert_file);
+        assert_eq!(parsed.tls.key_file, d.tls.key_file);
+        assert_eq!(parsed.tls.client_ca_file, d.tls.client_ca_file);
+        assert_eq!(parsed.tls.min_version, d.tls.min_version);
+        // Auth
+        assert_eq!(parsed.auth.provider, d.auth.provider);
+        assert_eq!(parsed.auth.external.url, d.auth.external.url);
+        assert_eq!(parsed.auth.external.timeout_ms, d.auth.external.timeout_ms);
+        assert_eq!(parsed.auth.rate_limit.max_failures, d.auth.rate_limit.max_failures);
+        assert_eq!(parsed.auth.rate_limit.window_seconds, d.auth.rate_limit.window_seconds);
+        // Storage
+        assert_eq!(parsed.storage.data_dir, d.storage.data_dir);
+        assert_eq!(parsed.storage.trail.segment_size_bytes, d.storage.trail.segment_size_bytes);
+        assert_eq!(parsed.storage.snapshots.system_retention_count, d.storage.snapshots.system_retention_count);
+        assert_eq!(parsed.storage.tiered.hot_segments, d.storage.tiered.hot_segments);
+        assert_eq!(parsed.storage.tiered.cold_retention, d.storage.tiered.cold_retention);
+        // Resources
+        assert_eq!(parsed.resources.default_timeout_ms, d.resources.default_timeout_ms);
+        assert!((parsed.resources.warning_threshold - d.resources.warning_threshold).abs() < f32::EPSILON);
+        // Delivery
+        assert_eq!(parsed.delivery.max_retries, d.delivery.max_retries);
+        assert_eq!(parsed.delivery.retry_backoff_ms, d.delivery.retry_backoff_ms);
+        // Logging
+        assert_eq!(parsed.logging.level, d.logging.level);
+        assert_eq!(parsed.logging.format, d.logging.format);
+        assert_eq!(parsed.logging.output, d.logging.output);
+        // Observability
+        assert_eq!(parsed.observability.metrics.enabled, d.observability.metrics.enabled);
+        assert_eq!(parsed.observability.health.enabled, d.observability.health.enabled);
+        assert_eq!(parsed.observability.health.path, d.observability.health.path);
+    }
+
+    #[test]
+    fn validate_tls_enabled_missing_key_only() {
+        let mut config = RuntimeConfig::default();
+        config.tls.enabled = true;
+        config.tls.cert_file = "/cert.pem".into();
+        // key_file still empty
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("tls.key_file"));
+    }
+
+    #[test]
+    fn validate_data_dir_empty() {
+        let mut config = RuntimeConfig::default();
+        config.storage.data_dir = String::new();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("storage.data_dir"));
+    }
+
+    #[test]
+    fn validate_delivery_backoff_zero_with_retries() {
+        let mut config = RuntimeConfig::default();
+        config.delivery.max_retries = 3;
+        config.delivery.retry_backoff_ms = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("retry_backoff_ms"));
+    }
+
+    #[test]
+    fn validate_delivery_backoff_zero_no_retries_ok() {
+        let mut config = RuntimeConfig::default();
+        config.delivery.max_retries = 0;
+        config.delivery.retry_backoff_ms = 0;
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_all_enum_log_formats() {
+        let mut config = RuntimeConfig::default();
+        for valid in ["json", "pretty"] {
+            config.logging.format = valid.into();
+            assert!(config.validate().is_ok(), "{valid} should be valid");
+        }
+        config.logging.format = "xml".into();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn validate_all_enum_log_outputs() {
+        let mut config = RuntimeConfig::default();
+        config.logging.output = "stderr".into();
+        assert!(config.validate().is_ok());
+
+        config.logging.output = "file".into();
+        config.logging.file = "/tmp/wacp.log".into();
+        assert!(config.validate().is_ok());
+
+        config.logging.output = "stdout".into();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn validate_all_enum_auth_providers() {
+        let mut config = RuntimeConfig::default();
+        config.auth.provider = "psk".into();
+        assert!(config.validate().is_ok());
+
+        config.auth.provider = "external".into();
+        config.auth.external.url = "https://auth.example.com".into();
+        assert!(config.validate().is_ok());
+
+        config.auth.provider = "ldap".into();
+        assert!(config.validate().is_err());
+    }
 }

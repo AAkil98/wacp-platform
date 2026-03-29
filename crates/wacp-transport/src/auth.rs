@@ -291,4 +291,107 @@ mod tests {
         limiter.record_failure(&ip);
         assert!(limiter.check(&ip).is_ok());
     }
+
+    // ── Phase 18b.2: Auth + rate limiter coverage ──
+
+    #[test]
+    fn psk_human_wrong_token() {
+        let psk = PskAuthenticator::new();
+        let _token = psk.register_human(UserId::from("user-1"));
+        let err = psk.authenticate_human("bogus").unwrap_err();
+        assert!(matches!(err, AuthError::InvalidToken));
+    }
+
+    #[test]
+    fn psk_human_revoke() {
+        let psk = PskAuthenticator::new();
+        let user = UserId::from("user-1");
+        let token = psk.register_human(user);
+        psk.revoke_human(&token);
+        let err = psk.authenticate_human(&token).unwrap_err();
+        assert!(matches!(err, AuthError::InvalidToken));
+    }
+
+    #[test]
+    fn psk_multiple_agents_same_workspace() {
+        let psk = PskAuthenticator::new();
+        let ws = WorkspaceId::from("ws-1");
+        let t1 = psk.register_agent(ws.clone(), "worker".into());
+        let t2 = psk.register_agent(ws.clone(), "observer".into());
+
+        let id1 = psk.authenticate_agent(&t1, &ws).unwrap();
+        let id2 = psk.authenticate_agent(&t2, &ws).unwrap();
+        assert_eq!(id1.role, "worker");
+        assert_eq!(id2.role, "observer");
+    }
+
+    #[test]
+    fn psk_revoke_one_workspace_keeps_others() {
+        let psk = PskAuthenticator::new();
+        let ws1 = WorkspaceId::from("ws-1");
+        let ws2 = WorkspaceId::from("ws-2");
+        let t1 = psk.register_agent(ws1.clone(), "worker".into());
+        let t2 = psk.register_agent(ws2.clone(), "worker".into());
+
+        psk.revoke_agent(&ws1);
+        assert!(psk.authenticate_agent(&t1, &ws1).is_err());
+        assert!(psk.authenticate_agent(&t2, &ws2).is_ok());
+    }
+
+    #[test]
+    fn psk_tokens_are_unique() {
+        let psk = PskAuthenticator::new();
+        let tokens: Vec<_> = (0..10)
+            .map(|i| {
+                psk.register_agent(
+                    WorkspaceId::from(format!("ws-{i}")),
+                    "worker".into(),
+                )
+            })
+            .collect();
+        let unique: std::collections::HashSet<_> = tokens.iter().collect();
+        assert_eq!(unique.len(), tokens.len(), "all tokens must be unique");
+    }
+
+    #[test]
+    fn rate_limiter_window_expiry() {
+        // Use a very short window (1 second) and verify expired entries are cleared.
+        let limiter = AuthRateLimiter::new(2, 1);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+
+        limiter.record_failure(&ip);
+        limiter.record_failure(&ip);
+        assert!(limiter.check(&ip).is_err()); // at limit
+
+        // Wait for window to expire.
+        std::thread::sleep(Duration::from_millis(1100));
+
+        // Should be allowed again after window.
+        assert!(limiter.check(&ip).is_ok());
+    }
+
+    #[test]
+    fn rate_limiter_under_limit_ok() {
+        let limiter = AuthRateLimiter::new(5, 60);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+
+        // Record fewer than limit.
+        limiter.record_failure(&ip);
+        limiter.record_failure(&ip);
+        assert!(limiter.check(&ip).is_ok()); // 2 < 5
+    }
+
+    #[test]
+    fn rate_limiter_record_disabled_noop() {
+        let limiter = AuthRateLimiter::new(0, 60);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+
+        // When disabled, record_failure doesn't track.
+        for _ in 0..100 {
+            limiter.record_failure(&ip);
+        }
+        assert!(limiter.check(&ip).is_ok());
+        // Internal map should be empty since disabled.
+        assert_eq!(limiter.failures.lock().len(), 0);
+    }
 }

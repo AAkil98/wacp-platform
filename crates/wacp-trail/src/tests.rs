@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use wacp_types::WorkspaceId;
 
 use crate::*;
@@ -626,4 +628,137 @@ fn index_batch_insert() {
     let entries: Vec<_> = (1..=5).map(|i| make_entry(i, Some("ws-1"), "worker", "evt")).collect();
     idx.insert_batch(&entries).unwrap();
     assert_eq!(idx.last_sequence().unwrap(), Some(5));
+}
+
+// ══════════════════════════════════════════
+// Phase 18b.1 — Trail error paths
+// ══════════════════════════════════════════
+
+#[test]
+fn fs_read_nonexistent_segment() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FileTrailStorage::open(FileTrailConfig {
+        dir: dir.path().to_path_buf(),
+        max_segment_size: 1024 * 1024,
+    })
+    .unwrap();
+
+    let result = store.read(SegmentId(999), 0, 10);
+    assert!(matches!(result, Err(StorageError::SegmentNotFound(999))));
+}
+
+#[test]
+fn fs_scan_nonexistent_segment() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FileTrailStorage::open(FileTrailConfig {
+        dir: dir.path().to_path_buf(),
+        max_segment_size: 1024 * 1024,
+    })
+    .unwrap();
+
+    let result = store.scan(SegmentId(999), 0);
+    assert!(matches!(result, Err(StorageError::SegmentNotFound(999))));
+}
+
+#[test]
+fn fs_scan_skips_partial_tail_entry() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = FileTrailStorage::open(FileTrailConfig {
+        dir: dir.path().to_path_buf(),
+        max_segment_size: 1024 * 1024,
+    })
+    .unwrap();
+
+    // Write one valid entry.
+    let hash = compute_chain_hash(&ChainHash::GENESIS, b"good");
+    store.append(b"good", hash.as_ref()).unwrap();
+
+    // Append garbage (partial entry) directly to the segment file.
+    let seg_path = dir.path().join("segment-000000.trail");
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&seg_path)
+        .unwrap();
+    // Write a length prefix but not the full entry.
+    f.write_all(&100u32.to_be_bytes()).unwrap();
+    f.write_all(b"incomplete").unwrap();
+    drop(f);
+
+    // Scan should return only the valid entry.
+    let entries = store.scan(SegmentId(0), 0).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].1, b"good");
+}
+
+#[test]
+fn fs_rotate_exact_boundary() {
+    let dir = tempfile::tempdir().unwrap();
+    // Entry overhead is 4 (length prefix) + 32 (hash) = 36 bytes per entry.
+    // With a 10-byte payload: 36 + 10 = 46 bytes per entry.
+    let mut store = FileTrailStorage::open(FileTrailConfig {
+        dir: dir.path().to_path_buf(),
+        max_segment_size: 46, // Exactly one entry fits.
+    })
+    .unwrap();
+
+    let hash1 = compute_chain_hash(&ChainHash::GENESIS, b"0123456789");
+    let r1 = store.append(b"0123456789", hash1.as_ref()).unwrap();
+    assert_eq!(r1.segment, SegmentId(0));
+
+    // After first entry, active_size == 46 == max_segment_size → rotation triggered.
+    // Second entry goes to segment 1.
+    let hash2 = compute_chain_hash(&hash1, b"second");
+    let r2 = store.append(b"second", hash2.as_ref()).unwrap();
+    assert_eq!(r2.segment, SegmentId(1));
+}
+
+#[test]
+fn fs_crash_recovery_preserves_valid_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = FileTrailConfig {
+        dir: dir.path().to_path_buf(),
+        max_segment_size: 1024 * 1024,
+    };
+
+    // Write two valid entries.
+    {
+        let mut store = FileTrailStorage::open(FileTrailConfig {
+            dir: dir.path().to_path_buf(),
+            max_segment_size: 1024 * 1024,
+        })
+        .unwrap();
+        let h1 = compute_chain_hash(&ChainHash::GENESIS, b"entry1");
+        store.append(b"entry1", h1.as_ref()).unwrap();
+        let h2 = compute_chain_hash(&h1, b"entry2");
+        store.append(b"entry2", h2.as_ref()).unwrap();
+    }
+
+    // Append garbage to simulate crash.
+    let seg_path = dir.path().join("segment-000000.trail");
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&seg_path)
+        .unwrap();
+    f.write_all(b"CRASH_GARBAGE").unwrap();
+    drop(f);
+
+    // Recover should truncate garbage, keep valid entries.
+    let store = FileTrailStorage::recover(config).unwrap();
+    let entries = store.scan(SegmentId(0), 0).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].1, b"entry1");
+    assert_eq!(entries[1].1, b"entry2");
+}
+
+#[test]
+fn index_query_all_entries_no_filter() {
+    let idx = TrailIndex::open_in_memory().unwrap();
+    for i in 1..=5 {
+        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt"))
+            .unwrap();
+    }
+
+    let result = idx.query(&TrailQuery::new()).unwrap();
+    assert_eq!(result.entries.len(), 5);
+    assert!(!result.has_more);
 }

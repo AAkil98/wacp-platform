@@ -265,4 +265,69 @@ mod tests {
         let (_dir, storage) = test_storage();
         assert_eq!(storage.read_latest_system().unwrap(), None);
     }
+
+    // ── Phase 18b.1: Snapshot error paths ──
+
+    #[test]
+    fn snapshot_partial_file_detected() {
+        let (dir, storage) = test_storage();
+        let ws = WorkspaceId::from("ws-partial");
+
+        // Write a file shorter than CHECKSUM_LEN (32 bytes).
+        let path = dir.path().join("ws-ws-partial.snapshot");
+        fs::write(&path, b"only 10 bytes!").unwrap();
+
+        let result = storage.read_workspace(&ws);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("too small"), "got: {err}");
+    }
+
+    #[test]
+    fn snapshot_zero_byte_file_detected() {
+        let (dir, storage) = test_storage();
+        let ws = WorkspaceId::from("ws-empty");
+
+        let path = dir.path().join("ws-ws-empty.snapshot");
+        fs::write(&path, b"").unwrap();
+
+        let result = storage.read_workspace(&ws);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too small"));
+    }
+
+    #[test]
+    fn snapshot_exactly_checksum_size_wrong_hash() {
+        let (dir, storage) = test_storage();
+        let ws = WorkspaceId::from("ws-exact");
+
+        // 32 bytes: all zeros (checksum for empty payload is NOT all zeros).
+        let path = dir.path().join("ws-ws-exact.snapshot");
+        fs::write(&path, &[0u8; 32]).unwrap();
+
+        let result = storage.read_workspace(&ws);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("checksum"));
+    }
+
+    #[test]
+    fn system_snapshot_partial_file() {
+        let (dir, storage) = test_storage();
+
+        // Write a system snapshot file that's too small.
+        let path = dir.path().join("system-000000000099.snapshot");
+        fs::write(&path, b"short").unwrap();
+
+        let result = storage.read_latest_system();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too small"));
+    }
+
+    #[test]
+    fn workspace_delete_nonexistent_is_ok() {
+        let (_dir, storage) = test_storage();
+        let ws = WorkspaceId::from("ws-ghost");
+        // Deleting a non-existent workspace should not error.
+        assert!(storage.delete_workspace(&ws).is_ok());
+    }
 }

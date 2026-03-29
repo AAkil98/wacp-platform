@@ -12,7 +12,7 @@ authors:
 
 ## Current State
 
-**Phases 0–18 complete.** 12 Rust crates, 687 Rust tests, 14 Python tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. All coding specs archived.
+**Phases 0–18 complete. Phase 19.1 complete.** 12 Rust crates, 687 Rust tests, 14 Python tests, 21 TypeScript tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. Highway UI scaffold with gRPC-Web transport, Zustand store, and all panel components. All coding specs archived.
 
 Test counts by crate:
 
@@ -108,7 +108,7 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 
 | # | Task | Output | Spec source |
 |---|------|--------|-------------|
-| 19.1 | TypeScript scaffold | Vite + framework, `ts-proto` codegen from `.proto` files, gRPC-Web transport, dev server with proxy to runtime, build pipeline producing static files | highway-ui.md §2–4 |
+| 19.1 | TypeScript scaffold | Vite + React 19, `@bufbuild/protobuf` + `@connectrpc/connect-web` codegen from `.proto` files, gRPC-Web transport layer, Zustand store (6 slices), Tailwind CSS, Vitest (21 tests), dev server with proxy, production build (static files). All panel components with initial implementations. | highway-ui.md §2–4 |
 | 19.2 | Trail viewer + workspace tree | Real-time trail streaming via `StreamTrail`, filtering by workspace/event type/time range, workspace tree visualization, workspace detail view (state, role, directive, checkpoint register, resource meter) | highway-ui.md §5–8 |
 | 19.3 | Gate + escalation management | Gate event stream via `StreamGates`, approval/reject/modify UI, escalation event stream, escalation response UI, notification system for pending actions | highway-ui.md §9–11 |
 | 19.4 | Envelope injection + autonomy | Injection form (target workspace, envelope type, payload, priority), validation, autonomy presets (full-auto, supervised, manual), preset switching at run-time | highway-ui.md §12–14 |
@@ -124,7 +124,7 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 |-------|------|-------|------------|--------|
 | 18a | Coverage: Core Crates | 7 | — | **Complete** |
 | 18b | Coverage: Boundary Crates | 4 | 18a | **Complete** |
-| 19 | Highway UI | 4 | Phase 13 | Next |
+| 19 | Highway UI | 4 | Phase 13 | **19.1 complete**, 19.2–19.4 next |
 | | **Total** | **15** | | |
 
 ---

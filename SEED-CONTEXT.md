@@ -24,13 +24,15 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 17: complete.** E2E integration tests — full lifecycle (dispatch → activate → checkpoint → complete → integrate → close), multi-worker parallel, delegation/subtask, failure scenarios (timeout, budget, cascade with ownership boundaries, conflict resolution), highway integration (gate approval/rejection, envelope injection, migration lifecycle). Packaging: Dockerfile (multi-stage, non-root, healthcheck) + systemd unit (17 security hardening directives). 261 tests in `wacp-coordinator` (was 245), 31 in `wacp-workspace` (was 31, +5 integration commands).
 
-**Phase 18 complete (18a + 18b).** Coverage hardening across all 12 crates — 152 new tests total. 535 → 687 Rust tests. Core crates: serde roundtrips, exhaustive FSM tables, HLC overflow, permission inheritance, taxonomy validation, workspace commands, coordinator error paths. Boundary crates: snapshot corruption detection, trail segment edge cases, auth rate limiter window expiry, snapshot-accelerated recovery, config validation completeness. Phase 19 (Highway UI) is next. See `IMPLEMENTATION.md` for the full plan.
+**Phase 18 complete (18a + 18b).** Coverage hardening across all 12 crates — 152 new tests total. 535 → 687 Rust tests. Core crates: serde roundtrips, exhaustive FSM tables, HLC overflow, permission inheritance, taxonomy validation, workspace commands, coordinator error paths. Boundary crates: snapshot corruption detection, trail segment edge cases, auth rate limiter window expiry, snapshot-accelerated recovery, config validation completeness.
+
+**Phase 19.1 complete.** Highway UI scaffold — Vite + React 19 + TypeScript (strict), `@connectrpc/connect-web` gRPC-Web transport, `@bufbuild/protobuf` codegen from `.proto` files, Zustand store (6 slices: session, trail, gates, escalations, workspaces, taskGraph), Tailwind CSS v4, Vitest (21 tests). All panel components implemented: LoginScreen, TrailViewer, GatePanel, EscalationPanel, WorkspaceTreeView, TaskGraphView, InjectionForm, SettingsPanel. Client-side routing with react-router. Production build produces static files (346 KB JS). Tasks 19.2–19.4 are next. See `IMPLEMENTATION.md` for the full plan.
 
 ## Repository Map
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Forward plan — Phase 18 (coverage) + Phase 19 (highway UI)
+├── IMPLEMENTATION.md        # Forward plan — Phase 19 (highway UI, 19.2–19.4 remaining)
 ├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 12 crates
@@ -78,6 +80,16 @@ wacp/
 │   ├── wacp-recovery/       # Trail integrity check, state reconstruction, clock recovery — 14 tests
 │   ├── wacp-runtime/        # Binary: config (47 fields), clap CLI, tracing logging, TLS, metrics, health — 53 tests
 │   └── wacp-sdk/            # Rust agent SDK: Agent, builders, streams — 3 tests
+│
+├── highway-ui/              # Highway UI — TypeScript SPA (21 tests)
+│   ├── package.json         # pnpm, Vite, React 19, Connect-Web, Zustand, Tailwind, Vitest
+│   ├── buf.gen.yaml         # Protobuf codegen config → src/gen/
+│   ├── src/
+│   │   ├── gen/             # Generated protobuf types (4 files from proto/)
+│   │   ├── transport/       # gRPC-Web client, error classification
+│   │   ├── store/           # Zustand store (6 slices: session, trail, gates, escalations, workspaces, taskGraph)
+│   │   └── components/      # React components: layout, trail, gates, escalations, workspaces, tasks, injection, settings
+│   └── dist/                # Production build output (static files)
 │
 └── sdk-python/              # Python agent SDK (14 tests)
     ├── pyproject.toml
@@ -183,7 +195,8 @@ Phases 0–17 complete. The remaining work:
 |-------|-----------|--------|
 | 18a | Coverage hardening: core crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator) | **Complete** — 535→647 tests (+112) |
 | 18b | Coverage hardening: boundary crates (trail, transport, recovery, runtime) | **Complete** — 647→687 tests (+40) |
-| 19 | Highway UI (TypeScript SPA) | **Next** |
+| 19.1 | Highway UI scaffold (Vite, React, Connect-Web, Zustand, codegen, all panels) | **Complete** — 21 TS tests |
+| 19.2–19.4 | Trail streaming, gate/escalation management, injection, autonomy presets | **Next** |
 
 See `IMPLEMENTATION.md` for the full task breakdown within each phase.
 

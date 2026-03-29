@@ -24,7 +24,7 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 17: complete.** E2E integration tests — full lifecycle (dispatch → activate → checkpoint → complete → integrate → close), multi-worker parallel, delegation/subtask, failure scenarios (timeout, budget, cascade with ownership boundaries, conflict resolution), highway integration (gate approval/rejection, envelope injection, migration lifecycle). Packaging: Dockerfile (multi-stage, non-root, healthcheck) + systemd unit (17 security hardening directives). 261 tests in `wacp-coordinator` (was 245), 31 in `wacp-workspace` (was 31, +5 integration commands).
 
-**Phase 18 next.** Coverage hardening — systematic test coverage audit, targeting near-100% branch coverage across all 12 crates. Then Phase 19 (Highway UI). See `IMPLEMENTATION.md` for the full plan.
+**Phase 18a complete.** Coverage hardening for core crates — 112 new tests across 7 crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator). 535 → 647 Rust tests. Every public type has serde roundtrip tests. Every FSM (state, trigger) pair tested exhaustively. All error paths exercised. Phase 18b (boundary crates) is next. Then Phase 19 (Highway UI). See `IMPLEMENTATION.md` for the full plan.
 
 ## Repository Map
 
@@ -66,14 +66,14 @@ wacp/
 ├── specs/                   # (coding specs archived to ../archive/wacp/specs/coding/)
 │
 ├── crates/                  # Rust implementation (12 crates)
-│   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 11 tests
-│   ├── wacp-clock/          # HLC: Timestamp, Clock<TimeSource>, ManualTimeSource — 14 tests
-│   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 43 tests
-│   ├── wacp-taxonomy/       # YAML/JSON loader, 11 validation checks, role resolution — 22 tests
-│   ├── wacp-permissions/    # Permission matrix, checkpoint table, port rights, default-deny — 20 tests
+│   ├── wacp-types/          # Protocol enums (19), identifier newtypes (8), structs (12) — 39 tests
+│   ├── wacp-clock/          # HLC: Timestamp, Clock<TimeSource>, ManualTimeSource — 28 tests
+│   ├── wacp-fsm/            # StateMachine trait + workspace/envelope/task FSMs — 50 tests
+│   ├── wacp-taxonomy/       # YAML/JSON loader, 11 validation checks, role resolution — 36 tests
+│   ├── wacp-permissions/    # Permission matrix, checkpoint table, port rights, default-deny — 38 tests
 │   ├── wacp-trail/          # Storage traits, filesystem backends, hash chain, SQLite index, snapshots, tiered storage, compaction — 67 tests
-│   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, migration snapshot, integration commands — 31 tests
-│   ├── wacp-coordinator/    # Full coordinator decision engine + migration + E2E tests — 261 tests (see below)
+│   ├── wacp-workspace/      # Workspace actor: 9 components, biased select loop, migration snapshot, integration commands — 44 tests
+│   ├── wacp-coordinator/    # Full coordinator decision engine + migration + E2E tests — 279 tests (see below)
 │   ├── wacp-transport/      # Transport trait, InProcessTransport, gRPC (tonic + TLS), Authenticator trait, PSK provider, rate limiter — 17 tests
 │   ├── wacp-recovery/       # Trail integrity check, state reconstruction, clock recovery — 6 tests
 │   ├── wacp-runtime/        # Binary: config (47 fields), clap CLI, tracing logging, TLS, metrics, health — 40 tests
@@ -181,8 +181,8 @@ Phases 0–17 complete. The remaining work:
 
 | Phase | Work item | Status |
 |-------|-----------|--------|
-| 18a | Coverage hardening: core crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator) | **Next** |
-| 18b | Coverage hardening: boundary crates (trail, transport, recovery, runtime) | Pending |
+| 18a | Coverage hardening: core crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator) | **Complete** — 535→647 tests (+112) |
+| 18b | Coverage hardening: boundary crates (trail, transport, recovery, runtime) | **Next** |
 | 19 | Highway UI (TypeScript SPA) | Pending |
 
 See `IMPLEMENTATION.md` for the full task breakdown within each phase.

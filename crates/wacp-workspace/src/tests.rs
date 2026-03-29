@@ -713,6 +713,408 @@ async fn actor_agent_msg_rejected_in_migrating() {
     assert!(result.is_err()); // timeout = no event received
 }
 
+// ── Phase 18a.6: Workspace command coverage ──
+
+// --- State-level tests ---
+
+#[test]
+fn pop_inbox_empty_returns_none() {
+    let mut ws = WsState::new(test_config());
+    assert!(ws.pop_inbox().is_none());
+}
+
+#[test]
+fn archive_from_closed() {
+    let mut ws = WsState::new(test_config());
+    ws.status = wacp_types::WorkspaceState::Closed;
+    let archived = ws.archive();
+    assert_eq!(archived.terminal_state, wacp_types::WorkspaceState::Closed);
+    assert_eq!(archived.id, WorkspaceId::from("ws-test"));
+    assert_eq!(archived.role, "worker");
+    assert_eq!(archived.owner, UserId::from("user-1"));
+}
+
+#[test]
+fn snapshot_full_roundtrip_all_fields() {
+    let mut ws = WsState::new(test_config());
+
+    // Mark an envelope as delivered first (for dedup set).
+    ws.push_inbox(test_envelope("e-delivered", "feedback", EnvelopePriority::Normal));
+    let popped = ws.pop_inbox().unwrap();
+    assert_eq!(popped.id, EnvelopeId::from("e-delivered"));
+
+    // Now push envelopes that will remain in inbox for snapshot.
+    ws.push_inbox(test_envelope("e1", "feedback", EnvelopePriority::Normal));
+    ws.push_inbox(test_envelope("e2", "feedback", EnvelopePriority::Urgent));
+    ws.working_memory = vec![0xAA, 0xBB, 0xCC];
+    ws.push_checkpoint(Checkpoint {
+        id: CheckpointId::from("cp-1"),
+        workspace_id: WorkspaceId::from("ws-test"),
+        checkpoint_type: "artifact".into(),
+        payload: vec![1, 2, 3],
+        content_hash: "hash123".into(),
+        intent: "test intent".into(),
+        parent_checkpoint: None,
+        status: CheckpointStatus::Provisional,
+        confidence: Confidence::Medium,
+        timestamp: 42,
+        resource_usage: Some(ResourceUsage {
+            tokens: 10,
+            wall_time_ms: 20,
+            storage_bytes: 30,
+            network_bytes: 40,
+            cost_micros: 50,
+        }),
+    });
+    ws.resource_meter.usage.tokens = 777;
+    ws.resource_meter.budget = Some(ResourceBudget {
+        max_tokens: Some(1000),
+        max_wall_time_ms: None,
+        max_storage_bytes: None,
+        max_network_bytes: None,
+        max_cost_micros: None,
+        warning_threshold: 0.9,
+    });
+    ws.trail_sequence = 99;
+
+    let snap = ws.capture_snapshot();
+    let json = serde_json::to_string(&snap).unwrap();
+    let restored_snap: MigrationSnapshot = serde_json::from_str(&json).unwrap();
+
+    let restored = WsState::restore_from_snapshot(
+        test_config(),
+        restored_snap,
+        wacp_types::WorkspaceState::Active,
+    );
+
+    assert_eq!(restored.status, wacp_types::WorkspaceState::Active);
+    assert_eq!(restored.inbox_len(), 2); // e2 (Urgent) + e1 (Normal)
+    assert_eq!(restored.working_memory, vec![0xAA, 0xBB, 0xCC]);
+    assert_eq!(restored.checkpoints().len(), 1);
+    assert_eq!(restored.checkpoints()[0].intent, "test intent");
+    assert_eq!(restored.resource_meter.usage.tokens, 777);
+    assert!(restored.resource_meter.budget.is_some());
+    assert_eq!(restored.trail_sequence, 99);
+    assert!(restored.is_envelope_delivered("e-delivered"));
+    // Immutable fields from config
+    assert_eq!(restored.directive().envelope_type, "directive");
+    assert_eq!(restored.context(), b"ctx");
+    assert!(restored.visibility().contains("res-1"));
+    assert!(restored.authority().contains("res-1"));
+}
+
+// --- Actor-level helpers ---
+
+/// Activate workspace: deliver first envelope, drain StateChanged.
+async fn activate(
+    handle: &WorkspaceHandle,
+    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
+) {
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(
+            test_envelope("env-activate", "directive", EnvelopePriority::Normal),
+        ))
+        .await
+        .unwrap();
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+}
+
+/// Collect events until timeout, returning all collected events.
+async fn drain_events(
+    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
+    max: usize,
+) -> Vec<WorkspaceEvent> {
+    let mut events = Vec::new();
+    for _ in 0..max {
+        match tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await {
+            Ok(Some(evt)) => events.push(evt),
+            _ => break,
+        }
+    }
+    events
+}
+
+// --- Actor command tests ---
+
+#[tokio::test]
+async fn actor_suspend_from_active() {
+    let (handle, mut event_rx) = spawn_test().await;
+    activate(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Suspend)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 3).await;
+    let state_change = events.iter().find(|e| {
+        matches!(e, WorkspaceEvent::StateChanged { to, .. }
+            if *to == wacp_types::WorkspaceState::Suspended)
+    });
+    assert!(state_change.is_some(), "expected transition to Suspended");
+}
+
+#[tokio::test]
+async fn actor_resume_from_suspended() {
+    let (handle, mut event_rx) = spawn_test().await;
+    activate(&handle, &mut event_rx).await;
+
+    // Suspend
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Suspend)
+        .await
+        .unwrap();
+    let _ = drain_events(&mut event_rx, 3).await;
+
+    // Resume
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Resume)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 3).await;
+    let state_change = events.iter().find(|e| {
+        matches!(e, WorkspaceEvent::StateChanged { from, to, .. }
+            if *from == wacp_types::WorkspaceState::Suspended
+            && *to == wacp_types::WorkspaceState::Active)
+    });
+    assert!(state_change.is_some(), "expected Suspended → Active");
+}
+
+#[tokio::test]
+async fn actor_grant_visibility() {
+    let (handle, mut event_rx) = spawn_test().await;
+    activate(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::GrantVisibility(vec![
+            "res-new-1".into(),
+            "res-new-2".into(),
+        ]))
+        .await
+        .unwrap();
+
+    // GrantVisibility doesn't emit events, so verify the actor is still alive
+    // by sending another command that does produce an event.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let terminated = events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_)));
+    assert!(terminated, "actor should still be alive after GrantVisibility");
+}
+
+#[tokio::test]
+async fn actor_update_budget() {
+    let (handle, mut event_rx) = spawn_test().await;
+    activate(&handle, &mut event_rx).await;
+
+    let budget = ResourceBudget {
+        max_tokens: Some(5000),
+        max_wall_time_ms: Some(60000),
+        max_storage_bytes: None,
+        max_network_bytes: None,
+        max_cost_micros: Some(100),
+        warning_threshold: 0.75,
+    };
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::UpdateBudget(budget))
+        .await
+        .unwrap();
+
+    // Verify actor is alive.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+}
+
+#[tokio::test]
+async fn actor_graceful_termination_noop() {
+    let (handle, mut event_rx) = spawn_test().await;
+    activate(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::GracefulTermination {
+            grace_period_ms: 1000,
+        })
+        .await
+        .unwrap();
+
+    // Placeholder — no events expected. Verify actor is still alive.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+}
+
+// --- Integration + conflict command tests ---
+
+/// Get workspace to Integrating state: activate → agent sends Complete.
+async fn to_integrating(
+    handle: &WorkspaceHandle,
+    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
+) {
+    activate(handle, event_rx).await;
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
+    let _ = drain_events(event_rx, 5).await;
+}
+
+#[tokio::test]
+async fn actor_integration_succeeded_to_closed() {
+    let (handle, mut event_rx) = spawn_test().await;
+    to_integrating(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let terminated = events.iter().find_map(|e| match e {
+        WorkspaceEvent::Terminated(archived) => Some(archived),
+        _ => None,
+    });
+    assert!(terminated.is_some(), "should terminate");
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Closed
+    );
+}
+
+#[tokio::test]
+async fn actor_integration_failed_to_failed() {
+    let (handle, mut event_rx) = spawn_test().await;
+    to_integrating(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationFailed)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let terminated = events.iter().find_map(|e| match e {
+        WorkspaceEvent::Terminated(archived) => Some(archived),
+        _ => None,
+    });
+    assert!(terminated.is_some());
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Failed
+    );
+}
+
+#[tokio::test]
+async fn actor_conflict_detected_to_conflicted() {
+    let (handle, mut event_rx) = spawn_test().await;
+    to_integrating(&handle, &mut event_rx).await;
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictDetected)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let state_change = events.iter().find(|e| {
+        matches!(e, WorkspaceEvent::StateChanged { to, .. }
+            if *to == wacp_types::WorkspaceState::Conflicted)
+    });
+    assert!(state_change.is_some(), "expected transition to Conflicted");
+}
+
+#[tokio::test]
+async fn actor_conflict_resolved_to_closed() {
+    let (handle, mut event_rx) = spawn_test().await;
+    to_integrating(&handle, &mut event_rx).await;
+
+    // Integrating → Conflicted
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictDetected)
+        .await
+        .unwrap();
+    let _ = drain_events(&mut event_rx, 3).await;
+
+    // Conflicted → Closed
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictResolved)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let terminated = events.iter().find_map(|e| match e {
+        WorkspaceEvent::Terminated(archived) => Some(archived),
+        _ => None,
+    });
+    assert!(terminated.is_some());
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Closed
+    );
+}
+
+#[tokio::test]
+async fn actor_conflict_unresolvable_to_failed() {
+    let (handle, mut event_rx) = spawn_test().await;
+    to_integrating(&handle, &mut event_rx).await;
+
+    // Integrating → Conflicted
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictDetected)
+        .await
+        .unwrap();
+    let _ = drain_events(&mut event_rx, 3).await;
+
+    // Conflicted → Failed
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictUnresolvable)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut event_rx, 5).await;
+    let terminated = events.iter().find_map(|e| match e {
+        WorkspaceEvent::Terminated(archived) => Some(archived),
+        _ => None,
+    });
+    assert!(terminated.is_some());
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Failed
+    );
+}
+
 #[tokio::test]
 async fn actor_envelopes_accepted_in_migrating() {
     let (handle, mut event_rx) = spawn_test().await;

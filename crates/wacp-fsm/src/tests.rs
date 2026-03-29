@@ -464,3 +464,528 @@ fn task_cancelled_rejects_all() {
         ));
     }
 }
+
+// ── Phase 18a.2: Exhaustive transition tables ──
+
+/// Expected result for a (state, trigger) pair.
+enum Expect<S> {
+    Ok(S),
+    Terminal,
+    Illegal,
+}
+
+// ── Envelope: 5 states × 5 triggers = 25 pairs ──
+
+#[test]
+fn envelope_exhaustive_transition_table() {
+    use EnvelopeState::*;
+    use EnvelopeTrigger::*;
+    use Expect::*;
+
+    let table: Vec<(EnvelopeState, EnvelopeTrigger, Expect<EnvelopeState>)> = vec![
+        // Created
+        (Created, Submit, Illegal),
+        (Created, ValidationPassed, Ok(Validated)),
+        (Created, ValidationFailed, Ok(Rejected)),
+        (Created, Deliver, Illegal),
+        (Created, Acknowledge, Illegal),
+        // Validated
+        (Validated, Submit, Illegal),
+        (Validated, ValidationPassed, Illegal),
+        (Validated, ValidationFailed, Illegal),
+        (Validated, Deliver, Ok(Delivered)),
+        (Validated, Acknowledge, Illegal),
+        // Delivered
+        (Delivered, Submit, Illegal),
+        (Delivered, ValidationPassed, Illegal),
+        (Delivered, ValidationFailed, Illegal),
+        (Delivered, Deliver, Illegal),
+        (Delivered, Acknowledge, Ok(Acknowledged)),
+        // Acknowledged (terminal)
+        (Acknowledged, Submit, Terminal),
+        (Acknowledged, ValidationPassed, Terminal),
+        (Acknowledged, ValidationFailed, Terminal),
+        (Acknowledged, Deliver, Terminal),
+        (Acknowledged, Acknowledge, Terminal),
+        // Rejected (terminal)
+        (Rejected, Submit, Terminal),
+        (Rejected, ValidationPassed, Terminal),
+        (Rejected, ValidationFailed, Terminal),
+        (Rejected, Deliver, Terminal),
+        (Rejected, Acknowledge, Terminal),
+    ];
+
+    assert_eq!(table.len(), 25, "5 states × 5 triggers");
+    for (state, trigger, expected) in &table {
+        let result = env(*state, *trigger);
+        match expected {
+            Ok(target) => assert_eq!(
+                result.as_ref().unwrap(),
+                target,
+                "{state:?} + {trigger:?} should → {target:?}"
+            ),
+            Terminal => assert!(
+                matches!(&result, Err(TransitionError::TerminalState { .. })),
+                "{state:?} + {trigger:?} should be TerminalState, got {result:?}"
+            ),
+            Illegal => assert!(
+                matches!(&result, Err(TransitionError::IllegalTransition { .. })),
+                "{state:?} + {trigger:?} should be IllegalTransition, got {result:?}"
+            ),
+        }
+    }
+}
+
+// ── Task: 8 states × 7 triggers = 56 pairs ──
+
+#[test]
+fn task_exhaustive_transition_table() {
+    use Expect::*;
+    use TaskStatus::*;
+    use TaskTrigger::*;
+
+    let table: Vec<(TaskStatus, TaskTrigger, Expect<TaskStatus>)> = vec![
+        // Draft
+        (Draft, Approve, Ok(Pending)),
+        (Draft, Assign, Illegal),
+        (Draft, Start, Illegal),
+        (Draft, Complete, Illegal),
+        (Draft, Fail, Illegal),
+        (Draft, Integrate, Illegal),
+        (Draft, Cancel, Ok(Cancelled)),
+        // Pending
+        (Pending, Approve, Illegal),
+        (Pending, Assign, Ok(Assigned)),
+        (Pending, Start, Illegal),
+        (Pending, Complete, Illegal),
+        (Pending, Fail, Illegal),
+        (Pending, Integrate, Illegal),
+        (Pending, Cancel, Ok(Cancelled)),
+        // Assigned
+        (Assigned, Approve, Illegal),
+        (Assigned, Assign, Illegal),
+        (Assigned, Start, Ok(InProgress)),
+        (Assigned, Complete, Illegal),
+        (Assigned, Fail, Illegal),
+        (Assigned, Integrate, Illegal),
+        (Assigned, Cancel, Ok(Cancelled)),
+        // InProgress
+        (InProgress, Approve, Illegal),
+        (InProgress, Assign, Illegal),
+        (InProgress, Start, Illegal),
+        (InProgress, Complete, Ok(Completed)),
+        (InProgress, Fail, Ok(Failed)),
+        (InProgress, Integrate, Illegal),
+        (InProgress, Cancel, Ok(Cancelled)),
+        // Completed
+        (Completed, Approve, Illegal),
+        (Completed, Assign, Illegal),
+        (Completed, Start, Illegal),
+        (Completed, Complete, Illegal),
+        (Completed, Fail, Ok(Failed)),
+        (Completed, Integrate, Ok(Integrated)),
+        (Completed, Cancel, Illegal),
+        // Failed (retriable)
+        (Failed, Approve, Illegal),
+        (Failed, Assign, Ok(Assigned)),
+        (Failed, Start, Illegal),
+        (Failed, Complete, Illegal),
+        (Failed, Fail, Illegal),
+        (Failed, Integrate, Illegal),
+        (Failed, Cancel, Illegal),
+        // Integrated (terminal)
+        (Integrated, Approve, Terminal),
+        (Integrated, Assign, Terminal),
+        (Integrated, Start, Terminal),
+        (Integrated, Complete, Terminal),
+        (Integrated, Fail, Terminal),
+        (Integrated, Integrate, Terminal),
+        (Integrated, Cancel, Terminal),
+        // Cancelled (terminal)
+        (Cancelled, Approve, Terminal),
+        (Cancelled, Assign, Terminal),
+        (Cancelled, Start, Terminal),
+        (Cancelled, Complete, Terminal),
+        (Cancelled, Fail, Terminal),
+        (Cancelled, Integrate, Terminal),
+        (Cancelled, Cancel, Terminal),
+    ];
+
+    assert_eq!(table.len(), 56, "8 states × 7 triggers");
+    for (state, trigger, expected) in &table {
+        let result = task(*state, *trigger);
+        match expected {
+            Ok(target) => assert_eq!(
+                result.as_ref().unwrap(),
+                target,
+                "{state:?} + {trigger:?} should → {target:?}"
+            ),
+            Terminal => assert!(
+                matches!(&result, Err(TransitionError::TerminalState { .. })),
+                "{state:?} + {trigger:?} should be TerminalState, got {result:?}"
+            ),
+            Illegal => assert!(
+                matches!(&result, Err(TransitionError::IllegalTransition { .. })),
+                "{state:?} + {trigger:?} should be IllegalTransition, got {result:?}"
+            ),
+        }
+    }
+}
+
+// ── Workspace: 9 states × 21 triggers = 189 pairs ──
+
+#[test]
+fn workspace_exhaustive_transition_table() {
+    use Expect::*;
+    use WorkspaceState::*;
+    use WorkspaceTrigger::*;
+
+    // All 21 triggers, in declaration order.
+    let all_triggers = [
+        AgentReady,
+        AgentStarted,
+        AgentBlocked,
+        AgentComplete,
+        AgentFailed,
+        ReceiveFirstEnvelope,
+        CoordinatorAbort,
+        CoordinatorSuspend,
+        CoordinatorResume,
+        CoordinatorMigrate,
+        MigrationSucceeded,
+        MigrationSucceededBlocked,
+        MigrationFailed,
+        IntegrationSucceeded,
+        IntegrationFailed,
+        ConflictDetected,
+        ConflictResolved,
+        ConflictUnresolvable,
+        TimeoutExceeded,
+        BudgetExceeded,
+        CreationError,
+    ];
+
+    // 7 non-terminal states × 21 triggers.
+    // Each row: (state, expected results for each trigger in order).
+    let rows: Vec<(WorkspaceState, Vec<Expect<WorkspaceState>>)> = vec![
+        (
+            Idle,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Ok(Active),      // ReceiveFirstEnvelope
+                Ok(Failed),      // CoordinatorAbort
+                Illegal,         // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Illegal,         // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Ok(Failed),      // TimeoutExceeded
+                Ok(Failed),      // BudgetExceeded
+                Ok(Failed),      // CreationError
+            ],
+        ),
+        (
+            Active,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Ok(Blocked),     // AgentBlocked
+                Ok(Integrating), // AgentComplete
+                Ok(Failed),      // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Ok(Failed),      // CoordinatorAbort
+                Ok(Suspended),   // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Ok(Migrating),   // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Ok(Failed),      // TimeoutExceeded
+                Ok(Failed),      // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+        (
+            Blocked,
+            vec![
+                Illegal,         // AgentReady
+                Ok(Active),      // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Ok(Failed),      // CoordinatorAbort
+                Ok(Suspended),   // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Ok(Migrating),   // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Ok(Failed),      // TimeoutExceeded
+                Ok(Failed),      // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+        (
+            Suspended,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Ok(Failed),      // CoordinatorAbort
+                Illegal,         // CoordinatorSuspend
+                Ok(Active),      // CoordinatorResume
+                Illegal,         // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Illegal,         // TimeoutExceeded
+                Illegal,         // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+        (
+            Migrating,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Ok(Failed),      // CoordinatorAbort
+                Illegal,         // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Illegal,         // CoordinatorMigrate
+                Ok(Active),      // MigrationSucceeded
+                Ok(Blocked),     // MigrationSucceededBlocked
+                Ok(Failed),      // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Illegal,         // TimeoutExceeded
+                Illegal,         // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+        (
+            Integrating,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Illegal,         // CoordinatorAbort
+                Illegal,         // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Illegal,         // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Ok(Closed),      // IntegrationSucceeded
+                Ok(Failed),      // IntegrationFailed
+                Ok(Conflicted),  // ConflictDetected
+                Illegal,         // ConflictResolved
+                Illegal,         // ConflictUnresolvable
+                Illegal,         // TimeoutExceeded
+                Illegal,         // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+        (
+            Conflicted,
+            vec![
+                Illegal,         // AgentReady
+                Illegal,         // AgentStarted
+                Illegal,         // AgentBlocked
+                Illegal,         // AgentComplete
+                Illegal,         // AgentFailed
+                Illegal,         // ReceiveFirstEnvelope
+                Illegal,         // CoordinatorAbort
+                Illegal,         // CoordinatorSuspend
+                Illegal,         // CoordinatorResume
+                Illegal,         // CoordinatorMigrate
+                Illegal,         // MigrationSucceeded
+                Illegal,         // MigrationSucceededBlocked
+                Illegal,         // MigrationFailed
+                Illegal,         // IntegrationSucceeded
+                Illegal,         // IntegrationFailed
+                Illegal,         // ConflictDetected
+                Ok(Closed),      // ConflictResolved
+                Ok(Failed),      // ConflictUnresolvable
+                Illegal,         // TimeoutExceeded
+                Illegal,         // BudgetExceeded
+                Illegal,         // CreationError
+            ],
+        ),
+    ];
+
+    // Non-terminal: 7 states × 21 triggers = 147.
+    let mut count = 0;
+    for (state, expected_row) in &rows {
+        assert_eq!(
+            expected_row.len(),
+            all_triggers.len(),
+            "row for {state:?} has wrong length"
+        );
+        for (trigger, expected) in all_triggers.iter().zip(expected_row.iter()) {
+            let result = ws(*state, *trigger);
+            match expected {
+                Ok(target) => assert_eq!(
+                    result.as_ref().unwrap(),
+                    target,
+                    "{state:?} + {trigger:?} should → {target:?}"
+                ),
+                Terminal => unreachable!("terminal not expected for non-terminal states"),
+                Illegal => assert!(
+                    matches!(&result, Err(TransitionError::IllegalTransition { .. })),
+                    "{state:?} + {trigger:?} should be IllegalTransition, got {result:?}"
+                ),
+            }
+            count += 1;
+        }
+    }
+    assert_eq!(count, 147, "7 non-terminal states × 21 triggers");
+
+    // Terminal: 2 states × 21 triggers = 42.
+    for terminal in [Closed, Failed] {
+        for trigger in &all_triggers {
+            assert!(
+                matches!(
+                    ws(terminal, *trigger),
+                    Err(TransitionError::TerminalState { .. })
+                ),
+                "{terminal:?} + {trigger:?} should be TerminalState"
+            );
+        }
+    }
+}
+
+#[test]
+fn workspace_valid_transition_count() {
+    use WorkspaceState::*;
+    use WorkspaceTrigger::*;
+
+    let all_triggers = [
+        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
+        ReceiveFirstEnvelope, CoordinatorAbort, CoordinatorSuspend, CoordinatorResume,
+        CoordinatorMigrate, MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
+        IntegrationSucceeded, IntegrationFailed, ConflictDetected, ConflictResolved,
+        ConflictUnresolvable, TimeoutExceeded, BudgetExceeded, CreationError,
+    ];
+    let non_terminal = [Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted];
+
+    let valid_count: usize = non_terminal
+        .iter()
+        .flat_map(|s| all_triggers.iter().map(move |t| ws(*s, *t)))
+        .filter(|r| r.is_ok())
+        .count();
+
+    assert_eq!(valid_count, 30, "exactly 30 valid transitions in workspace FSM");
+}
+
+#[test]
+fn task_valid_transition_count() {
+    use TaskStatus::*;
+    use TaskTrigger::*;
+
+    let all_triggers = [Approve, Assign, Start, Complete, Fail, Integrate, Cancel];
+    let non_terminal = [Draft, Pending, Assigned, InProgress, Completed, Failed];
+
+    let valid_count: usize = non_terminal
+        .iter()
+        .flat_map(|s| all_triggers.iter().map(move |t| task(*s, *t)))
+        .filter(|r| r.is_ok())
+        .count();
+
+    assert_eq!(valid_count, 12, "exactly 12 valid transitions in task FSM");
+}
+
+#[test]
+fn envelope_valid_transition_count() {
+    use EnvelopeState::*;
+    use EnvelopeTrigger::*;
+
+    let all_triggers = [Submit, ValidationPassed, ValidationFailed, Deliver, Acknowledge];
+    let non_terminal = [Created, Validated, Delivered];
+
+    let valid_count: usize = non_terminal
+        .iter()
+        .flat_map(|s| all_triggers.iter().map(move |t| env(*s, *t)))
+        .filter(|r| r.is_ok())
+        .count();
+
+    assert_eq!(valid_count, 4, "exactly 4 valid transitions in envelope FSM");
+}
+
+#[test]
+fn terminal_states_produce_no_valid_successors() {
+    use WorkspaceState::*;
+    use WorkspaceTrigger::*;
+
+    let all_triggers = [
+        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
+        ReceiveFirstEnvelope, CoordinatorAbort, CoordinatorSuspend, CoordinatorResume,
+        CoordinatorMigrate, MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
+        IntegrationSucceeded, IntegrationFailed, ConflictDetected, ConflictResolved,
+        ConflictUnresolvable, TimeoutExceeded, BudgetExceeded, CreationError,
+    ];
+
+    for terminal in [Closed, Failed] {
+        for trigger in &all_triggers {
+            let result = ws(terminal, *trigger);
+            assert!(result.is_err(), "{terminal:?} should reject {trigger:?}");
+        }
+    }
+
+    for terminal in [TaskStatus::Integrated, TaskStatus::Cancelled] {
+        for trigger in [
+            TaskTrigger::Approve, TaskTrigger::Assign, TaskTrigger::Start,
+            TaskTrigger::Complete, TaskTrigger::Fail, TaskTrigger::Integrate, TaskTrigger::Cancel,
+        ] {
+            assert!(task(terminal, trigger).is_err());
+        }
+    }
+
+    for terminal in [EnvelopeState::Acknowledged, EnvelopeState::Rejected] {
+        for trigger in [
+            EnvelopeTrigger::Submit, EnvelopeTrigger::ValidationPassed,
+            EnvelopeTrigger::ValidationFailed, EnvelopeTrigger::Deliver,
+            EnvelopeTrigger::Acknowledge,
+        ] {
+            assert!(env(terminal, trigger).is_err());
+        }
+    }
+}

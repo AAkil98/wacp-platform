@@ -3596,3 +3596,320 @@ async fn e2e_migration_timeout() {
     assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
     assert!(!coord.migration.is_migrating("ws-1"));
 }
+
+// ══════════════════════════════════════════
+// Phase 18a.7 — Error path coverage
+// ══════════════════════════════════════════
+
+// --- Handler error paths ---
+
+#[test]
+fn handler_create_checkpoint_nonexistent_workspace() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_create_checkpoint(
+        &ws("nonexistent"),
+        "artifact",
+        b"payload",
+        "intent",
+        CheckpointStatus::Provisional,
+        Confidence::High,
+    );
+    assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
+}
+
+#[test]
+fn handler_send_envelope_from_nonexistent() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_send_envelope(
+        &ws("ghost"), &ws("ws-1"), "directive", b"", EnvelopePriority::Normal,
+    );
+    assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
+}
+
+#[test]
+fn handler_send_envelope_to_nonexistent() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_send_envelope(
+        &ws("root"), &ws("ghost"), "directive", b"", EnvelopePriority::Normal,
+    );
+    assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
+}
+
+#[test]
+fn handler_send_envelope_with_revoked_right() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+
+    // Find and revoke the send right from root → ws-1.
+    let right_id = topo
+        .port_rights
+        .validate_send(&ws("root"), &ws("ws-1"))
+        .unwrap();
+    topo.port_rights.revoke(&right_id).unwrap();
+
+    let mut h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_send_envelope(
+        &ws("root"), &ws("ws-1"), "directive", b"", EnvelopePriority::Normal,
+    );
+    assert!(matches!(result, Err(HandlerError::NoSendRight(_))));
+}
+
+#[test]
+fn handler_get_workspace_not_found() {
+    let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
+        setup_handler();
+    let h = RequestHandler::new(
+        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+    );
+
+    let result = h.handle_get_workspace(&ws("nonexistent"));
+    assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
+}
+
+// --- Topology: duplicate ID ---
+
+#[test]
+fn topology_create_workspace_duplicate_id() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("ws-1"),
+        parent: ws("root"),
+        owner: uid("owner"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    })
+    .unwrap();
+
+    // Second creation with same ID → DuplicateNode.
+    let err = topo.create_workspace(CreateWorkspaceParams {
+        id: ws("ws-1"),
+        parent: ws("root"),
+        owner: uid("owner"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    });
+    assert!(matches!(err, Err(TreeError::DuplicateNode(_))));
+}
+
+#[test]
+fn tree_insert_duplicate_node() {
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    tree.insert(make_node("child", Some("root"), "owner", Originator::System, WorkspaceState::Active))
+        .unwrap();
+
+    let err = tree.insert(make_node("child", Some("root"), "owner", Originator::System, WorkspaceState::Active));
+    assert!(matches!(err, Err(TreeError::DuplicateNode(_))));
+}
+
+// --- Topology: deep cascade (3+ levels) ---
+
+#[test]
+fn topology_cascade_deep_tree_same_owner() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+
+    // Build 4-level tree: root → L1 → L2 → L3, all same owner.
+    for (child, parent) in [("L1", "root"), ("L2", "L1"), ("L3", "L2")] {
+        topo.create_workspace(CreateWorkspaceParams {
+            id: ws(child),
+            parent: ws(parent),
+            owner: uid("owner"),
+            originator: Originator::System,
+            status: WorkspaceState::Active,
+            task_id: None,
+        })
+        .unwrap();
+    }
+
+    // Terminate L1 as Failed → same-owner cascade should fail L2 and L3.
+    let effect = topo.terminate_workspace(&ws("L1"), WorkspaceState::Failed);
+
+    // L2 and L3 should be in the failed list.
+    assert!(effect.failed.contains(&ws("L2")) || effect.failed.contains(&ws("L3")),
+        "deep cascade should fail descendants: {:?}", effect.failed);
+
+    // Verify all are marked Failed in the tree.
+    assert_eq!(topo.tree.get(&ws("L1")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(topo.tree.get(&ws("L2")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(topo.tree.get(&ws("L3")).unwrap().status, WorkspaceState::Failed);
+
+    // Port rights should be expired.
+    assert!(effect.rights_expired > 0);
+}
+
+#[test]
+fn topology_cascade_deep_tree_cross_owner_stops() {
+    let mut topo = TopologySet::new(ws("root"), uid("owner-A"));
+
+    // root (owner-A) → child-A (owner-A) → child-B (owner-B) → grandchild-B (owner-B)
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("child-A"),
+        parent: ws("root"),
+        owner: uid("owner-A"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    }).unwrap();
+
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("child-B"),
+        parent: ws("child-A"),
+        owner: uid("owner-B"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    }).unwrap();
+
+    topo.create_workspace(CreateWorkspaceParams {
+        id: ws("grandchild-B"),
+        parent: ws("child-B"),
+        owner: uid("owner-B"),
+        originator: Originator::System,
+        status: WorkspaceState::Active,
+        task_id: None,
+    }).unwrap();
+
+    // Fail child-A → cascade stops at child-B (different owner), reparents it.
+    let effect = topo.terminate_workspace(&ws("child-A"), WorkspaceState::Failed);
+
+    assert_eq!(topo.tree.get(&ws("child-A")).unwrap().status, WorkspaceState::Failed);
+    // child-B is reparented, not failed.
+    assert_eq!(topo.tree.get(&ws("child-B")).unwrap().status, WorkspaceState::Active);
+    assert!(!effect.reparented.is_empty(), "child-B should be reparented");
+    // grandchild-B also stays active.
+    assert_eq!(topo.tree.get(&ws("grandchild-B")).unwrap().status, WorkspaceState::Active);
+}
+
+// --- Port rights: transfer/consume expired ---
+
+#[test]
+fn port_right_transfer_expired_right() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("a"), ws("b"), PortRightType::Send);
+
+    // Expire via workspace termination.
+    graph.expire_workspace(&ws("a"));
+    assert_eq!(graph.get(&id).unwrap().status, PortRightStatus::Expired);
+
+    // Transfer should fail: NotActive.
+    let err = graph.transfer(&id, &ws("c"));
+    assert!(matches!(err, Err(PortRightError::NotActive)));
+}
+
+#[test]
+fn port_right_consume_expired_send_once() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("a"), ws("b"), PortRightType::SendOnce);
+
+    // Expire.
+    graph.expire_workspace(&ws("a"));
+
+    // Consume should fail: NotActive.
+    let err = graph.consume(&id);
+    assert!(matches!(err, Err(PortRightError::NotActive)));
+}
+
+#[test]
+fn port_right_consume_send_right_not_send_once() {
+    let mut graph = PortRightsGraph::new();
+    let id = graph.create(ws("a"), ws("b"), PortRightType::Send);
+
+    // Consume a Send (not SendOnce) should fail: NotSendOnce.
+    let err = graph.consume(&id);
+    assert!(matches!(err, Err(PortRightError::NotSendOnce)));
+}
+
+#[test]
+fn port_right_validate_send_after_expiry() {
+    let mut graph = PortRightsGraph::new();
+    graph.create(ws("a"), ws("b"), PortRightType::Send);
+
+    // Works before expiry.
+    assert!(graph.validate_send(&ws("a"), &ws("b")).is_ok());
+
+    // Fail after expiry.
+    graph.expire_workspace(&ws("a"));
+    assert!(graph.validate_send(&ws("a"), &ws("b")).is_err());
+}
+
+// --- Migration: error paths ---
+
+fn migration_request(ws_id: &str) -> MigrationRequest {
+    MigrationRequest {
+        workspace_id: ws(ws_id),
+        new_agent: AgentRef {
+            agent_type: "gpt-4".into(),
+            config: None,
+        },
+        reason: "test".into(),
+    }
+}
+
+#[test]
+fn migration_start_rejects_idle_state() {
+    let mut migration = MigrationCoordinator::new(60_000);
+    let result = migration.start(
+        migration_request("ws-test"),
+        WorkspaceState::Idle,
+        "old-agent".into(),
+        0,
+    );
+    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Idle))));
+}
+
+#[test]
+fn migration_start_rejects_closed_state() {
+    let mut migration = MigrationCoordinator::new(60_000);
+    let result = migration.start(
+        migration_request("ws-test"),
+        WorkspaceState::Closed,
+        "old-agent".into(),
+        0,
+    );
+    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Closed))));
+}
+
+#[test]
+fn migration_start_rejects_failed_state() {
+    let mut migration = MigrationCoordinator::new(60_000);
+    let result = migration.start(
+        migration_request("ws-test"),
+        WorkspaceState::Failed,
+        "old-agent".into(),
+        0,
+    );
+    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Failed))));
+}
+
+#[test]
+fn migration_complete_nonexistent_workspace() {
+    let mut migration = MigrationCoordinator::new(60_000);
+    let result = migration.complete("ws-nonexistent");
+    assert!(matches!(result, Err(MigrationError::NotMigrating(_))));
+}
+
+#[test]
+fn migration_fail_nonexistent_workspace() {
+    let mut migration = MigrationCoordinator::new(60_000);
+    let result = migration.fail("ws-nonexistent", "error".into(), 1);
+    assert!(matches!(result, Err(MigrationError::NotMigrating(_))));
+}

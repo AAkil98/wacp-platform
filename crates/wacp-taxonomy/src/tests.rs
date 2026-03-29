@@ -405,3 +405,217 @@ fn is_valid_role_unknown() {
     let t = Taxonomy::empty(PV);
     assert!(!t.is_valid_role("ghost"));
 }
+
+// ── Phase 18a.5: Taxonomy edge cases ──
+
+#[test]
+fn reject_malformed_yaml() {
+    let yaml = "invalid: [unclosed bracket";
+    let err = Taxonomy::load_yaml(yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::ParseError(_)));
+}
+
+#[test]
+fn reject_malformed_json() {
+    let json = r#"{"id": "test", invalid json}"#;
+    let err = Taxonomy::load_json(json, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::ParseError(_)));
+}
+
+#[test]
+fn reject_yaml_missing_required_field() {
+    // Missing "id" field.
+    let yaml = format!(
+        r#"
+version: "1.0"
+protocol_version: "{PV}"
+roles: []
+envelope_types: []
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::ParseError(_)));
+}
+
+#[test]
+fn reject_json_missing_required_field() {
+    let json = format!(
+        r#"{{"version": "1.0", "protocol_version": "{PV}", "roles": [], "envelope_types": [], "checkpoint_types": []}}"#
+    );
+    let err = Taxonomy::load_json(&json, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::ParseError(_)));
+}
+
+#[test]
+fn reject_base_role_collision_coordinator() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles:
+  - name: coordinator
+    extends: worker
+envelope_types: []
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::BaseNameCollision(n) if n == "coordinator"));
+}
+
+#[test]
+fn reject_base_role_collision_observer() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles:
+  - name: observer
+    extends: worker
+envelope_types: []
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::BaseNameCollision(n) if n == "observer"));
+}
+
+#[test]
+fn reject_base_envelope_collision_feedback() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles: []
+envelope_types:
+  - name: feedback
+    permissions:
+      - sender_role: worker
+        receiver_role: coordinator
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::BaseNameCollision(n) if n == "feedback"));
+}
+
+#[test]
+fn reject_base_envelope_collision_query() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles: []
+envelope_types:
+  - name: query
+    permissions:
+      - sender_role: worker
+        receiver_role: coordinator
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::BaseNameCollision(n) if n == "query"));
+}
+
+#[test]
+fn reject_base_checkpoint_collision_observation() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles: []
+envelope_types: []
+checkpoint_types:
+  - name: observation
+    permitted_roles: [observer]
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::BaseNameCollision(n) if n == "observation"));
+}
+
+#[test]
+fn reject_privilege_escalation_all_coordinator_caps() {
+    let coordinator_caps = [
+        "create_workspace",
+        "perform_integration",
+        "manage_budgets",
+        "abort_workspace",
+        "assign_roles",
+    ];
+    for cap in coordinator_caps {
+        let yaml = format!(
+            r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles:
+  - name: sneaky
+    extends: worker
+    add:
+      - {cap}
+envelope_types: []
+checkpoint_types: []
+"#
+        );
+        let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+        assert!(
+            matches!(&err, TaxonomyError::PrivilegeEscalation { role, capability }
+                if role == "sneaky" && capability.contains(cap)),
+            "{cap} should trigger PrivilegeEscalation, got {err:?}"
+        );
+    }
+}
+
+#[test]
+fn reject_extends_unknown_base() {
+    let yaml = format!(
+        r#"
+id: test
+version: "1.0"
+protocol_version: "{PV}"
+roles:
+  - name: custom
+    extends: nonexistent
+envelope_types: []
+checkpoint_types: []
+"#
+    );
+    let err = Taxonomy::load_yaml(&yaml, PV).unwrap_err();
+    assert!(matches!(err, TaxonomyError::InvalidInheritance { .. }));
+}
+
+#[test]
+fn empty_taxonomy_has_base_types_only() {
+    let t = Taxonomy::empty(PV);
+    assert_eq!(t.envelope_types.len(), 3);
+    assert_eq!(t.checkpoint_types.len(), 2);
+    assert_eq!(t.resolved_roles.len(), 0);
+    assert_eq!(t.protocol_version, PV);
+}
+
+#[test]
+fn minimal_yaml_loads_successfully() {
+    let t = Taxonomy::load_yaml(&minimal_yaml(), PV).unwrap();
+    assert!(t.is_valid_role("coordinator"));
+    assert!(t.is_valid_role("worker"));
+    assert!(t.is_valid_role("observer"));
+    assert!(t.is_valid_envelope_type("directive"));
+    assert!(!t.is_valid_role("custom"));
+}
+
+#[test]
+fn resolve_role_returns_none_for_base() {
+    let t = Taxonomy::empty(PV);
+    assert!(t.resolve_role("coordinator").is_none());
+    assert!(t.resolve_role("worker").is_none());
+    assert!(t.resolve_role("observer").is_none());
+    assert!(t.resolve_role("nonexistent").is_none());
+}

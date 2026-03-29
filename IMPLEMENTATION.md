@@ -12,25 +12,25 @@ authors:
 
 ## Current State
 
-**Phases 0–17 complete.** 12 Rust crates, 335 Rust tests, 14 Python tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. All coding specs archived.
+**Phases 0–17 complete. Phase 18a complete.** 12 Rust crates, 647 Rust tests, 14 Python tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. All coding specs archived.
 
 Test counts by crate:
 
 | Crate | Tests | Modules | Role |
 |-------|-------|---------|------|
-| wacp-types | 11 | 11 | Protocol enums, ID newtypes, structs |
-| wacp-clock | 14 | 4 | HLC timestamps |
-| wacp-fsm | 43 | 4 | Workspace/envelope/task FSMs |
-| wacp-taxonomy | 22 | 5 | YAML/JSON taxonomy loader |
-| wacp-permissions | 20 | 2 | Permission matrix, port rights |
+| wacp-types | 39 | 11 | Protocol enums, ID newtypes, structs |
+| wacp-clock | 28 | 4 | HLC timestamps |
+| wacp-fsm | 50 | 4 | Workspace/envelope/task FSMs |
+| wacp-taxonomy | 36 | 5 | YAML/JSON taxonomy loader |
+| wacp-permissions | 38 | 2 | Permission matrix, port rights |
 | wacp-trail | 67 | 12 | Trail storage, snapshots, tiered storage |
-| wacp-workspace | 31 | 3 | Workspace actor, 9 components |
-| wacp-coordinator | 261 | 15 | Decision engine, migration, E2E |
+| wacp-workspace | 44 | 3 | Workspace actor, 9 components |
+| wacp-coordinator | 279 | 15 | Decision engine, migration, E2E |
 | wacp-transport | 17 | 10 | gRPC, auth, rate limiter |
 | wacp-recovery | 6 | 2 | Trail replay, snapshot recovery |
 | wacp-runtime | 40 | 9 | Config, CLI, TLS, metrics, health |
 | wacp-sdk | 3 | 6 | Rust agent SDK |
-| **Total** | **535** | **83** | |
+| **Total** | **647** | **83** | |
 
 ---
 
@@ -120,12 +120,12 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 
 ## Summary
 
-| Phase | Name | Tasks | Depends on |
-|-------|------|-------|------------|
-| 18a | Coverage: Core Crates | 7 | — |
-| 18b | Coverage: Boundary Crates | 4 | 18a |
-| 19 | Highway UI | 4 | Phase 13 |
-| | **Total** | **15** | |
+| Phase | Name | Tasks | Depends on | Status |
+|-------|------|-------|------------|--------|
+| 18a | Coverage: Core Crates | 7 | — | **Complete** |
+| 18b | Coverage: Boundary Crates | 4 | 18a | Next |
+| 19 | Highway UI | 4 | Phase 13 | Pending |
+| | **Total** | **15** | | |
 
 ---
 

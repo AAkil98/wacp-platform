@@ -159,3 +159,165 @@ fn clock_with_initial() {
     let ts = clock.now();
     assert!(ts > initial);
 }
+
+// ── Phase 18a.3: Clock edge cases ──
+
+#[test]
+fn succ_from_zero() {
+    let ts = Timestamp::ZERO.succ();
+    assert_eq!(ts.physical_us(), 0);
+    assert_eq!(ts.logical(), 1);
+    assert!(ts > Timestamp::ZERO);
+}
+
+#[test]
+fn succ_at_max_physical_low_logical() {
+    let ts = Timestamp::new(u64::MAX, 0);
+    let next = ts.succ();
+    assert_eq!(next.physical_us(), u64::MAX);
+    assert_eq!(next.logical(), 1);
+    assert!(next > ts);
+}
+
+#[test]
+#[should_panic]
+fn succ_at_absolute_max_overflows() {
+    // (u64::MAX, u16::MAX) has no successor — physical + 1 overflows.
+    let ts = Timestamp::new(u64::MAX, u16::MAX);
+    let _ = ts.succ();
+}
+
+#[test]
+fn bytes_roundtrip_zero() {
+    let ts = Timestamp::ZERO;
+    let bytes = ts.to_bytes();
+    assert_eq!(bytes, [0u8; 10]);
+    assert_eq!(Timestamp::from_bytes(bytes), ts);
+}
+
+#[test]
+fn bytes_roundtrip_max_physical() {
+    let ts = Timestamp::new(u64::MAX, 0);
+    let bytes = ts.to_bytes();
+    assert_eq!(&bytes[..8], &[0xFF; 8]);
+    assert_eq!(&bytes[8..10], &[0, 0]);
+    assert_eq!(Timestamp::from_bytes(bytes), ts);
+}
+
+#[test]
+fn bytes_roundtrip_max_logical() {
+    let ts = Timestamp::new(0, u16::MAX);
+    let bytes = ts.to_bytes();
+    assert_eq!(&bytes[..8], &[0u8; 8]);
+    assert_eq!(&bytes[8..10], &[0xFF, 0xFF]);
+    assert_eq!(Timestamp::from_bytes(bytes), ts);
+}
+
+#[test]
+fn bytes_roundtrip_all_max() {
+    let ts = Timestamp::new(u64::MAX, u16::MAX);
+    let bytes = ts.to_bytes();
+    assert_eq!(bytes, [0xFF; 10]);
+    assert_eq!(Timestamp::from_bytes(bytes), ts);
+}
+
+#[test]
+fn send_is_equivalent_to_now() {
+    let source = ManualTimeSource::new(1000);
+    let mut c1 = Clock::new(source);
+    let source2 = ManualTimeSource::new(1000);
+    let mut c2 = Clock::new(source2);
+
+    let a = c1.send();
+    let b = c2.now();
+    assert_eq!(a, b);
+
+    let a2 = c1.send();
+    let b2 = c2.now();
+    assert_eq!(a2, b2);
+}
+
+#[test]
+fn send_monotonic() {
+    let mut clock = manual_clock(1000);
+    let a = clock.send();
+    let b = clock.send();
+    let c = clock.send();
+    assert!(a < b);
+    assert!(b < c);
+}
+
+#[test]
+fn now_logical_saturation_at_max() {
+    // Set clock state to just below logical max.
+    let near_max = Timestamp::new(1000, u16::MAX - 1);
+    let mut clock = Clock::with_initial(ManualTimeSource::new(1000), near_max);
+
+    let a = clock.now(); // logical = MAX (saturating_add of MAX-1 + 1)
+    assert_eq!(a.logical(), u16::MAX);
+
+    let b = clock.now(); // logical = MAX (saturating_add of MAX + 1 = MAX)
+    assert_eq!(b.logical(), u16::MAX);
+    assert_eq!(b.physical_us(), 1000);
+}
+
+#[test]
+fn recv_logical_saturation_three_way_tie() {
+    // All three physical times equal, both logicals at MAX.
+    let near_max = Timestamp::new(1000, u16::MAX - 1);
+    let mut clock = Clock::with_initial(ManualTimeSource::new(1000), near_max);
+
+    // Advance logical to MAX.
+    let _ = clock.now(); // (1000, MAX)
+
+    let remote = Timestamp::new(1000, u16::MAX);
+    let merged = clock.recv(remote);
+
+    // max(MAX, MAX).saturating_add(1) = MAX
+    assert_eq!(merged.physical_us(), 1000);
+    assert_eq!(merged.logical(), u16::MAX);
+}
+
+#[test]
+fn recv_remote_far_future_with_max_logical() {
+    let mut clock = manual_clock(1000);
+    let _ = clock.now();
+
+    let remote = Timestamp::new(999_999_999, u16::MAX);
+    let merged = clock.recv(remote);
+
+    // Remote physical is max → remote.logical.saturating_add(1) = MAX
+    assert_eq!(merged.physical_us(), 999_999_999);
+    assert_eq!(merged.logical(), u16::MAX);
+}
+
+#[test]
+fn recv_physical_advances_resets_logical() {
+    let source = ManualTimeSource::new(1000);
+    let mut clock = Clock::new(source);
+    let _ = clock.now(); // (1000, 0)
+    let _ = clock.now(); // (1000, 1)
+
+    // Advance physical time beyond both local and remote.
+    clock.time_source.set(5000);
+    let remote = Timestamp::new(3000, 100);
+    let merged = clock.recv(remote);
+
+    // local_physical (5000) > last.physical (1000) && > remote.physical (3000) → logical = 0
+    assert_eq!(merged.physical_us(), 5000);
+    assert_eq!(merged.logical(), 0);
+}
+
+#[test]
+fn recv_local_physical_is_max() {
+    // Last physical is the max, remote is lower.
+    let near_max = Timestamp::new(1000, 5);
+    let mut clock = Clock::with_initial(ManualTimeSource::new(500), near_max);
+
+    let remote = Timestamp::new(800, 10);
+    let merged = clock.recv(remote);
+
+    // last.physical (1000) is max → last.logical.saturating_add(1) = 6
+    assert_eq!(merged.physical_us(), 1000);
+    assert_eq!(merged.logical(), 6);
+}

@@ -64,3 +64,55 @@ class TestPriority:
     def test_to_proto(self):
         assert Priority.to_proto("normal") == 1
         assert Priority.to_proto("blocking") == 3
+
+
+# ── Extended coverage (Phase T1.3) ──────────────────────
+
+
+class TestSignalExtended:
+    def test_to_proto_exhaustive(self):
+        """All 11 signal types map to the correct proto values 1–11."""
+        expected = {
+            "ready": 1, "started": 2, "blocked": 3, "checkpoint": 4,
+            "complete": 5, "failed": 6, "integrate": 7, "acknowledged": 8,
+            "escalation": 9, "suspend": 10, "migrate": 11,
+        }
+        for name, value in expected.items():
+            assert Signal.to_proto(name) == value, f"{name} should map to {value}"
+
+    def test_to_proto_empty_raises(self):
+        with pytest.raises(ValueError, match="unknown signal"):
+            Signal.to_proto("")
+
+    def test_constants_match_proto_keys(self):
+        """Every Signal constant is a valid key in _TO_PROTO."""
+        constants = [
+            Signal.READY, Signal.STARTED, Signal.BLOCKED, Signal.CHECKPOINT,
+            Signal.COMPLETE, Signal.FAILED, Signal.INTEGRATE,
+            Signal.ACKNOWLEDGED, Signal.ESCALATION, Signal.SUSPEND,
+            Signal.MIGRATE,
+        ]
+        for c in constants:
+            assert Signal.to_proto(c) > 0
+
+
+class TestConfidenceExtended:
+    def test_to_proto_all_values(self):
+        assert Confidence.to_proto("high") == 1
+        assert Confidence.to_proto("medium") == 2
+        assert Confidence.to_proto("low") == 3
+
+    def test_to_proto_case_insensitive(self):
+        assert Confidence.to_proto("HIGH") == 1
+        assert Confidence.to_proto("Medium") == 2
+
+
+class TestPriorityExtended:
+    def test_to_proto_all_values(self):
+        assert Priority.to_proto("normal") == 1
+        assert Priority.to_proto("urgent") == 2
+        assert Priority.to_proto("blocking") == 3
+
+    def test_to_proto_case_insensitive(self):
+        assert Priority.to_proto("URGENT") == 2
+        assert Priority.to_proto("Blocking") == 3

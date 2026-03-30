@@ -39,6 +39,7 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 ```
 wacp/
 ├── IMPLEMENTATION.md        # Forward plan — all phases complete
+├── TEST-STRATEGY.md         # Comprehensive test strategy — unit, integration, E2E across all 3 ecosystems
 ├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 12 crates
@@ -195,18 +196,19 @@ The coordinator crate grew from 28 to 245 tests across Phases 9–13, 16. It now
 
 ## What's Next
 
-Phases 0–18 complete. The remaining work:
+All implementation phases (0–19) are complete. 806 tests across 3 ecosystems (687 Rust, 105 TypeScript, 14 Python).
 
-| Phase | Work item | Status |
-|-------|-----------|--------|
-| 18a | Coverage hardening: core crates (types, FSM, clock, permissions, taxonomy, workspace, coordinator) | **Complete** — 535→647 tests (+112) |
-| 18b | Coverage hardening: boundary crates (trail, transport, recovery, runtime) | **Complete** — 647→687 tests (+40) |
-| 19.1 | Highway UI scaffold (Vite, React, Connect-Web, Zustand, codegen, all panels) | **Complete** — 21 TS tests |
-| 19.2 | Trail viewer + workspace tree (streaming, filtering, hierarchy, detail panel, checkpoint viewer) | **Complete** — 21→63 TS tests (+42) |
-| 19.3 | Gate + escalation management (countdown, batch, abort confirm, notifications) | **Complete** — 63→86 TS tests (+23) |
-| 19.4 | Envelope injection + autonomy presets (RPC, settings panel, deadlock warnings) | **Complete** — 86→105 TS tests (+19) |
+`TEST-STRATEGY.md` defines the comprehensive testing plan — 5 phases (T1–T5), 361 new tests targeting 1,167 total:
 
-See `IMPLEMENTATION.md` for the full task breakdown within each phase.
+| Phase | Work item | New tests | Cumulative |
+|-------|-----------|-----------|-----------|
+| T1 | Critical gaps: wacp-sdk (+47), wacp-transport (+45), Python agent (+34), CI pipeline | +126 | 932 |
+| T2 | Runtime config/health/TLS (+32), highway-ui transport/layout (+33) | +65 | 997 |
+| T3 | Rust cross-crate integration (43), TS integration (13), Python integration (8) | +64 | 1,061 |
+| T4 | E2E test harness + 19 full-system scenarios (agent lifecycle, gates, escalation, recovery, migration) | +19 | 1,080 |
+| T5 | Remaining unit test hardening across all modules | +87 | 1,167 |
+
+See `TEST-STRATEGY.md` for per-module test specifications and CI pipeline design.
 
 ---
 

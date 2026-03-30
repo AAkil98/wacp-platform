@@ -118,6 +118,84 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 
 ---
 
+## Phase T1 — Critical Gaps (P0)
+
+Fill the three critically undertested crates and fix CI. See `TEST-STRATEGY.md` §4.9, §4.12, §6.2, §9 for per-test specifications.
+
+| # | Task | Crate / Target | Tests to add | Target total |
+|---|------|----------------|-------------|-------------|
+| T1.1 | wacp-sdk unit tests | wacp-sdk (3 → 50) | Agent properties (6), signal methods (8), checkpoint/builder (5), envelope/builder (5), inbox/commands streams (4), query_trail (2), disconnect (1), error handling (3), concurrent ops (2), reconnection (1). All tests use `InProcessTransport` with test coordinator. | +47 |
+| T1.2 | wacp-transport unit tests | wacp-transport (25 → 70) | `AgentServiceImpl` 8 RPCs (16 tests), `HighwayServiceImpl` 12 RPCs (17 tests), `PskAuthenticator` (3), `AuthRateLimiter` (3), TLS (2), error mapping (1), proto roundtrip (3). | +45 |
+| T1.3 | Python SDK agent tests | sdk-python (14 → 48) | `agent.py` methods (27 — connect, properties, signal ×11, checkpoint, envelope, inbox, commands, query_trail, disconnect, errors, async iteration), `proto/v1.py` (5 — message construction, enum accessibility), `types.py` extensions (7 — round-trips). All use mock gRPC channel. | +34 |
+| T1.4 | CI pipeline | `.github/workflows/ci.yml` | Add TypeScript job (`pnpm install`, typecheck, test, build), Python job (matrix 3.11/3.12/3.13, `pytest`), proto job (`protoc`, `buf lint`, codegen verification). Infrastructure only. | 0 (infra) |
+
+**Depends on:** Nothing — all crates compile, tests are additive.
+**Exit criteria:** `cargo test -p wacp-sdk` (50 pass), `cargo test -p wacp-transport` (70 pass), `pytest sdk-python/tests/` (48 pass), CI runs all three ecosystems. Cumulative: 806 → 932.
+
+---
+
+## Phase T2 — Runtime + Highway Transport (P1)
+
+Fill runtime config/health/TLS gaps and highway-ui transport + remaining components. See `TEST-STRATEGY.md` §4.11, §5.2, §5.3 for per-test specifications.
+
+| # | Task | Crate / Target | Tests to add | Target total |
+|---|------|----------------|-------------|-------------|
+| T2.1 | Runtime config, health, metrics, TLS | wacp-runtime (53 → 85) | RuntimeConfig YAML loading (3), env overrides (2), validation (3), deny unknown (1), CLI validate/defaults (3), health server (3), metrics (2), logging (2), TLS (3), config merge (2), shutdown (2), recovery integration (3), multi-worker (3). | +32 |
+| T2.2 | Highway-UI transport | highway-ui transport (18 → 40) | `client.ts` (3), `session.ts` (5 — connect/disconnect/invalid token/reconnection/max retries), `rpcs.ts` (5 — respondToGate UUID, respondToEscalation abort/delegate, injectEnvelope), streams edge cases (2), proto conversion (2), error classification (5). | +22 |
+| T2.3 | Highway-UI layout + components | highway-ui components (58 → 85) | `MainLayout` (2), `LoginScreen` (4), `Sidebar` (3), `ConnectionBanner` (5), `TaskGraphView` (4), `CheckpointViewer` (5), `App` routing (3), existing component extensions (3). | +29 |
+
+**Depends on:** T1.4 (CI must run TS/Python tests).
+**Exit criteria:** `cargo test -p wacp-runtime` (85 pass), `pnpm test` in highway-ui (155+ pass). Cumulative: 932 → 997.
+
+---
+
+## Phase T3 — Integration Tests (P2)
+
+Cross-boundary tests using real implementations. See `TEST-STRATEGY.md` §7 for per-suite specifications.
+
+| # | Task | Location | Tests to add | Target total |
+|---|------|----------|-------------|-------------|
+| T3.1 | Rust cross-crate integration | `tests/` (workspace root) | 10 suites: trail_recovery (5), taxonomy_permissions (4), fsm_workspace (4), coordinator_workspace (6), coordinator_trail (4), transport_coordinator (5), runtime_assembly (4), sdk_transport (5), migration_e2e (3), gate_lifecycle (3). Real implementations, no mocks. | +43 |
+| T3.2 | TypeScript integration | `highway-ui/src/__integration__/` | 5 suites: store_transport (4), session_lifecycle (3), injection_flow (2), gate_response_flow (2), escalation_feedback (2). Mocked gRPC, real store + components. | +13 |
+| T3.3 | Python integration | `sdk-python/tests/integration/` | 3 suites: agent_lifecycle (3), stream_handling (3), error_propagation (2). Mock gRPC server, real agent + proto. | +8 |
+
+**Depends on:** T1 (crate-level tests must pass first).
+**Exit criteria:** `cargo test --test '*'` (43 pass), TS integration suite (13 pass), Python integration suite (8 pass). Cumulative: 997 → 1,061.
+
+---
+
+## Phase T4 — End-to-End Tests (P2)
+
+Full-system tests across language boundaries. Real Rust runtime, real gRPC, real agents. See `TEST-STRATEGY.md` §8 for scenario specifications.
+
+| # | Task | Location | Tests to add | Target total |
+|---|------|----------|-------------|-------------|
+| T4.1 | E2E test harness | `tests/e2e/` | `wacp-e2e` binary: starts runtime in-process, connects agents via gRPC, exercises highway via gRPC-Web/direct gRPC. Infrastructure only. | 0 (infra) |
+| T4.2 | Agent lifecycle + envelope exchange | `tests/e2e/` | E1 single worker, E2 multi-worker parallel, E3 agent disconnect, E4 worker-to-worker envelope, E5 human injection, E6 blocked send. | +6 |
+| T4.3 | Gate + escalation flows | `tests/e2e/` | E7 gate approval, E8 gate rejection, E9 gate timeout, E10 escalation feedback, E11 escalation abort, E12 escalation delegate. | +6 |
+| T4.4 | Failure, recovery, migration | `tests/e2e/` | E13 cascade failure, E14 budget exhaustion, E15 crash recovery, E16 agent migration, E17 migration failure. | +5 |
+| T4.5 | Integration pipeline | `tests/e2e/` | E18 direct merge, E19 conflict detection + resolution. | +2 |
+
+**Depends on:** T3 (integration tests must pass first), T4.1 (harness).
+**Exit criteria:** `cargo test --test 'e2e_*'` (19 pass). Cumulative: 1,061 → 1,080.
+
+---
+
+## Phase T5 — Hardening (P3)
+
+Remaining unit test gaps across all ecosystems. See `TEST-STRATEGY.md` §4.1–4.8, §5.1, §5.4, §6.1 for per-test specifications.
+
+| # | Task | Crate / Target | Tests to add | Target total |
+|---|------|----------------|-------------|-------------|
+| T5.1 | Remaining Rust unit tests | 9 crates | wacp-types (+6), wacp-clock (+5), wacp-fsm (+5), wacp-taxonomy (+6), wacp-permissions (+7), wacp-trail (+12), wacp-workspace (+16), wacp-coordinator (+31 — handler signals/envelopes, port rights, migration, integration queue, dispatch errors, deep cascade, gate timeout, concurrent creation, EventBus), wacp-recovery (+11). | +71 |
+| T5.2 | Remaining highway-ui unit tests | highway-ui | Store edge cases (+5 — notification slice, cap boundary, non-existent gate), notifications (+4 — browser notification focus/permission, escalation double-tone, AudioContext fallback). | +9 |
+| T5.3 | Remaining Python unit tests | sdk-python | `types.py` extensions (+7 — `Signal.to_proto` all 11 types, `Priority.to_proto` all 3, round-trips). | +7 |
+
+**Depends on:** T1–T2 (foundational coverage in place).
+**Exit criteria:** All per-module targets from `TEST-STRATEGY.md` §4–6 met. Cumulative: 1,080 → 1,167.
+
+---
+
 ## Summary
 
 | Phase | Name | Tasks | Depends on | Status |
@@ -125,7 +203,12 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 | 18a | Coverage: Core Crates | 7 | — | **Complete** |
 | 18b | Coverage: Boundary Crates | 4 | 18a | **Complete** |
 | 19 | Highway UI | 4 | Phase 13 | **Complete** |
-| | **Total** | **15** | | |
+| T1 | Critical Gaps (P0) | 4 | — | Pending |
+| T2 | Runtime + Highway Transport (P1) | 3 | T1.4 | Pending |
+| T3 | Integration Tests (P2) | 3 | T1 | Pending |
+| T4 | End-to-End Tests (P2) | 5 | T3, T4.1 | Pending |
+| T5 | Hardening (P3) | 3 | T1–T2 | Pending |
+| | **Total** | **33** | | |
 
 ---
 

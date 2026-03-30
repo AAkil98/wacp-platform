@@ -207,6 +207,13 @@ export interface HighwayStore {
     lastFetched: number | null;
   };
   setTaskGraph: (tasks: TaskView[]) => void;
+
+  // Notifications
+  notifications: {
+    escalationBanner: { workspaceId: string; escalationId: string } | null;
+  };
+  setEscalationBanner: (banner: { workspaceId: string; escalationId: string } | null) => void;
+  dismissEscalationBanner: () => void;
 }
 
 const emptyFilters: TrailFilter = {
@@ -333,4 +340,11 @@ export const useStore = create<HighwayStore>((set) => ({
   taskGraph: { tasks: [], lastFetched: null },
   setTaskGraph: (tasks) =>
     set(() => ({ taskGraph: { tasks, lastFetched: Date.now() } })),
+
+  // Notifications
+  notifications: { escalationBanner: null },
+  setEscalationBanner: (banner) =>
+    set(() => ({ notifications: { escalationBanner: banner } })),
+  dismissEscalationBanner: () =>
+    set(() => ({ notifications: { escalationBanner: null } })),
 }));

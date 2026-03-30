@@ -23,6 +23,7 @@ function resetStore() {
     escalations: { active: new Map(), resolved: new Map(), inFlight: new Set() },
     workspaces: { views: new Map(), changes: [], expandedNodes: new Set() },
     taskGraph: { tasks: [], lastFetched: null },
+    notifications: { escalationBanner: null },
   });
 }
 

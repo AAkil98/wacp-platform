@@ -2,6 +2,7 @@ import { getClient } from "./client.js";
 import { classifyError } from "./errors.js";
 import { startTrailStream, startWorkspaceStream, fetchTaskGraph, fetchWorkspace } from "./streams.js";
 import { useStore, type SessionState } from "../store/index.js";
+import { notifyGate, notifyEscalation } from "../notifications/notify.js";
 
 const MAX_RETRIES = 5;
 const BACKOFF_BASE_MS = 1000;
@@ -85,11 +86,10 @@ export class SessionManager {
 
   private async runGateStream(signal: AbortSignal): Promise<void> {
     const client = getClient();
-    const { addPendingGate } = useStore.getState();
 
     try {
       for await (const event of client.streamGates({}, { signal })) {
-        addPendingGate({
+        const gate = {
           gateId: event.gateId,
           gateType: event.type.toString(),
           subject: event.subject,
@@ -98,7 +98,9 @@ export class SessionManager {
           timeoutMs: event.timeoutMs,
           fallbackAction: event.fallbackAction,
           createdAt: event.createdAt?.physicalUs ?? 0n,
-        });
+        };
+        useStore.getState().addPendingGate(gate);
+        notifyGate(gate);
       }
     } catch (err: unknown) {
       if (signal.aborted) return;
@@ -108,17 +110,22 @@ export class SessionManager {
 
   private async runEscalationStream(signal: AbortSignal): Promise<void> {
     const client = getClient();
-    const { addEscalation } = useStore.getState();
 
     try {
       for await (const event of client.streamEscalations({}, { signal })) {
-        addEscalation({
+        const esc = {
           escalationId: event.escalationId,
           workspaceId: event.workspaceId,
           owner: event.owner,
           context: new TextDecoder().decode(event.context),
           createdAt: event.createdAt?.physicalUs ?? 0n,
+        };
+        useStore.getState().addEscalation(esc);
+        useStore.getState().setEscalationBanner({
+          workspaceId: esc.workspaceId,
+          escalationId: esc.escalationId,
         });
+        notifyEscalation(esc);
       }
     } catch (err: unknown) {
       if (signal.aborted) return;

@@ -1,10 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 
 export function InjectionForm() {
+  const [searchParams] = useSearchParams();
   const [targetWorkspace, setTargetWorkspace] = useState("");
   const [envelopeType, setEnvelopeType] = useState("directive");
   const [priority, setPriority] = useState("Normal");
   const [payload, setPayload] = useState("");
+
+  // Pre-populate from query params (e.g., from escalation "Send Feedback")
+  useEffect(() => {
+    const ws = searchParams.get("workspace");
+    const type = searchParams.get("type");
+    if (ws) setTargetWorkspace(ws);
+    if (type) setEnvelopeType(type);
+  }, [searchParams]);
 
   return (
     <div>

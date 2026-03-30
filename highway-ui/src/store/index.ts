@@ -36,6 +36,23 @@ export interface ActiveEscalation {
   createdAt: bigint;
 }
 
+export interface ResourceUsage {
+  tokens: bigint;
+  wallTimeMs: bigint;
+  storageBytes: bigint;
+  networkBytes: bigint;
+  costMicros: bigint;
+}
+
+export interface ResourceBudget {
+  maxTokens: bigint;
+  maxWallTimeMs: bigint;
+  maxStorageBytes: bigint;
+  maxNetworkBytes: bigint;
+  maxCostMicros: bigint;
+  warningThreshold: number;
+}
+
 export interface WorkspaceView {
   id: string;
   state: string;
@@ -45,6 +62,10 @@ export interface WorkspaceView {
   originator: string;
   taskId: string;
   checkpointCount: number;
+  currentUsage?: ResourceUsage;
+  budget?: ResourceBudget;
+  createdAt?: bigint;
+  lastActivity?: bigint;
 }
 
 export interface TaskView {
@@ -54,6 +75,73 @@ export interface TaskView {
   workspaceRef: string;
   dependsOn: string[];
   parentTask: string;
+}
+
+export interface TrailFilter {
+  eventTypes: Set<string>;
+  workspaceId: string;
+  actor: string;
+}
+
+export interface WorkspaceTreeNode {
+  workspace: WorkspaceView;
+  children: WorkspaceTreeNode[];
+  expanded: boolean;
+}
+
+// ── Selectors ──
+
+export function selectFilteredTrail(trail: HighwayStore["trail"]): TrailEntry[] {
+  const { entries } = trail;
+  const { eventTypes, workspaceId, actor } = trail.filters;
+
+  const hasEventFilter = eventTypes.size > 0;
+  const hasWorkspaceFilter = workspaceId !== "";
+  const hasActorFilter = actor !== "";
+
+  if (!hasEventFilter && !hasWorkspaceFilter && !hasActorFilter) {
+    return entries;
+  }
+
+  return entries.filter((e) => {
+    if (hasEventFilter && !eventTypes.has(e.eventType)) return false;
+    if (hasWorkspaceFilter && e.workspaceId !== workspaceId) return false;
+    if (hasActorFilter && e.actor !== actor) return false;
+    return true;
+  });
+}
+
+export function selectWorkspaceTree(workspaces: HighwayStore["workspaces"]): WorkspaceTreeNode[] {
+  const { views, expandedNodes } = workspaces;
+
+  if (views.size === 0) return [];
+
+  const childrenMap = new Map<string, WorkspaceView[]>();
+  const roots: WorkspaceView[] = [];
+
+  for (const ws of views.values()) {
+    if (ws.parent === "" || !views.has(ws.parent)) {
+      roots.push(ws);
+    } else {
+      let siblings = childrenMap.get(ws.parent);
+      if (!siblings) {
+        siblings = [];
+        childrenMap.set(ws.parent, siblings);
+      }
+      siblings.push(ws);
+    }
+  }
+
+  function buildNode(ws: WorkspaceView): WorkspaceTreeNode {
+    const children = (childrenMap.get(ws.id) ?? []).map(buildNode);
+    return {
+      workspace: ws,
+      children,
+      expanded: expandedNodes.has(ws.id),
+    };
+  }
+
+  return roots.map(buildNode);
 }
 
 // ── Store shape ──
@@ -74,9 +162,14 @@ export interface HighwayStore {
   trail: {
     entries: TrailEntry[];
     paused: boolean;
+    filters: TrailFilter;
+    expandedEntryIndex: number | null;
   };
   appendTrailEntry: (entry: TrailEntry) => void;
   setTrailPaused: (paused: boolean) => void;
+  setTrailFilter: (filter: Partial<TrailFilter>) => void;
+  clearTrailFilters: () => void;
+  setExpandedEntry: (index: number | null) => void;
 
   // Gates
   gates: {
@@ -102,9 +195,11 @@ export interface HighwayStore {
   workspaces: {
     views: Map<string, WorkspaceView>;
     changes: { workspaceId: string; previous: string; current: string; timestamp: bigint }[];
+    expandedNodes: Set<string>;
   };
   upsertWorkspace: (view: WorkspaceView) => void;
   addWorkspaceChange: (change: { workspaceId: string; previous: string; current: string; timestamp: bigint }) => void;
+  toggleNodeExpanded: (workspaceId: string) => void;
 
   // Task graph
   taskGraph: {
@@ -113,6 +208,12 @@ export interface HighwayStore {
   };
   setTaskGraph: (tasks: TaskView[]) => void;
 }
+
+const emptyFilters: TrailFilter = {
+  eventTypes: new Set(),
+  workspaceId: "",
+  actor: "",
+};
 
 export const useStore = create<HighwayStore>((set) => ({
   // Session
@@ -127,7 +228,7 @@ export const useStore = create<HighwayStore>((set) => ({
     })),
 
   // Trail
-  trail: { entries: [], paused: false },
+  trail: { entries: [], paused: false, filters: { ...emptyFilters, eventTypes: new Set() }, expandedEntryIndex: null },
   appendTrailEntry: (entry) =>
     set((s) => {
       const entries = [...s.trail.entries, entry];
@@ -136,6 +237,22 @@ export const useStore = create<HighwayStore>((set) => ({
     }),
   setTrailPaused: (paused) =>
     set((s) => ({ trail: { ...s.trail, paused } })),
+  setTrailFilter: (filter) =>
+    set((s) => ({
+      trail: {
+        ...s.trail,
+        filters: { ...s.trail.filters, ...filter },
+      },
+    })),
+  clearTrailFilters: () =>
+    set((s) => ({
+      trail: {
+        ...s.trail,
+        filters: { eventTypes: new Set(), workspaceId: "", actor: "" },
+      },
+    })),
+  setExpandedEntry: (index) =>
+    set((s) => ({ trail: { ...s.trail, expandedEntryIndex: index } })),
 
   // Gates
   gates: { pending: new Map(), resolved: new Map(), inFlight: new Set() },
@@ -188,7 +305,7 @@ export const useStore = create<HighwayStore>((set) => ({
     }),
 
   // Workspaces
-  workspaces: { views: new Map(), changes: [] },
+  workspaces: { views: new Map(), changes: [], expandedNodes: new Set() },
   upsertWorkspace: (view) =>
     set((s) => {
       const views = new Map(s.workspaces.views);
@@ -200,6 +317,16 @@ export const useStore = create<HighwayStore>((set) => ({
       const changes = [...s.workspaces.changes, change];
       if (changes.length > CHANGES_CAP) changes.splice(0, changes.length - CHANGES_CAP);
       return { workspaces: { ...s.workspaces, changes } };
+    }),
+  toggleNodeExpanded: (workspaceId) =>
+    set((s) => {
+      const expandedNodes = new Set(s.workspaces.expandedNodes);
+      if (expandedNodes.has(workspaceId)) {
+        expandedNodes.delete(workspaceId);
+      } else {
+        expandedNodes.add(workspaceId);
+      }
+      return { workspaces: { ...s.workspaces, expandedNodes } };
     }),
 
   // Task graph

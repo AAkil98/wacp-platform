@@ -83,4 +83,63 @@ mod tests {
         let err = build_tls_config(&tls).unwrap_err();
         assert!(matches!(err, TlsError::KeyRead { .. }));
     }
+
+    // ── Phase T2.1 additions ──
+
+    #[test]
+    fn tls_valid_cert_and_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
+        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
+
+        let tls = TlsConfig {
+            enabled: true,
+            cert_file: cert_path.to_string_lossy().to_string(),
+            key_file: key_path.to_string_lossy().to_string(),
+            client_ca_file: String::new(),
+            min_version: "1.2".into(),
+        };
+        assert!(build_tls_config(&tls).is_ok());
+    }
+
+    #[test]
+    fn tls_with_client_ca() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        let ca_path = dir.path().join("ca.pem");
+        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
+        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
+        std::fs::write(&ca_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
+
+        let tls = TlsConfig {
+            enabled: true,
+            cert_file: cert_path.to_string_lossy().to_string(),
+            key_file: key_path.to_string_lossy().to_string(),
+            client_ca_file: ca_path.to_string_lossy().to_string(),
+            min_version: "1.3".into(),
+        };
+        assert!(build_tls_config(&tls).is_ok());
+    }
+
+    #[test]
+    fn tls_missing_ca() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
+        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
+
+        let tls = TlsConfig {
+            enabled: true,
+            cert_file: cert_path.to_string_lossy().to_string(),
+            key_file: key_path.to_string_lossy().to_string(),
+            client_ca_file: "/nonexistent/ca.pem".into(),
+            min_version: "1.2".into(),
+        };
+        let err = build_tls_config(&tls).unwrap_err();
+        assert!(matches!(err, TlsError::CaRead { .. }));
+    }
 }

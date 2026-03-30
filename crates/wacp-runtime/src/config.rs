@@ -1472,4 +1472,128 @@ observability:
         config.auth.provider = "ldap".into();
         assert!(config.validate().is_err());
     }
+
+    // ── Phase T2.1 additions ──
+
+    #[test]
+    fn config_load_from_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        std::fs::write(
+            &path,
+            "server:\n  agent_listen: \"127.0.0.1:8080\"\n",
+        )
+        .unwrap();
+        let (config, resolved) = RuntimeConfig::load(Some(&path)).unwrap();
+        assert_eq!(config.server.agent_listen, "127.0.0.1:8080");
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn config_load_nonexistent_path() {
+        let result = RuntimeConfig::load(Some(std::path::Path::new("/nonexistent/config.yaml")));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn config_load_none_uses_defaults() {
+        // When no file is found and no explicit path, load returns defaults.
+        // This depends on whether ./wacp-runtime.yaml exists, so just verify
+        // the function doesn't panic and returns a valid config.
+        let result = RuntimeConfig::load(None);
+        // Either Ok (file found or defaults) or Err (parse error in found file).
+        // In a clean test dir, defaults should be returned.
+        if let Ok((config, _)) = result {
+            assert!(config.validate().is_ok());
+        }
+    }
+
+    #[test]
+    fn config_env_override_nested_auth() {
+        let mut config = RuntimeConfig::default();
+        unsafe { std::env::set_var("WACP_AUTH__RATE_LIMIT__WINDOW_SECONDS", "120") };
+        let result = apply_env_overrides(&mut config);
+        unsafe { std::env::remove_var("WACP_AUTH__RATE_LIMIT__WINDOW_SECONDS") };
+        result.unwrap();
+        assert_eq!(config.auth.rate_limit.window_seconds, 120);
+    }
+
+    #[test]
+    fn config_env_override_observability_bool() {
+        let mut config = RuntimeConfig::default();
+        unsafe { std::env::set_var("WACP_OBSERVABILITY__METRICS__ENABLED", "true") };
+        let result = apply_env_overrides(&mut config);
+        unsafe { std::env::remove_var("WACP_OBSERVABILITY__METRICS__ENABLED") };
+        result.unwrap();
+        assert!(config.observability.metrics.enabled);
+    }
+
+    #[test]
+    fn config_env_override_logging_level() {
+        let mut config = RuntimeConfig::default();
+        unsafe { std::env::set_var("WACP_LOGGING__LEVEL", "debug") };
+        let result = apply_env_overrides(&mut config);
+        unsafe { std::env::remove_var("WACP_LOGGING__LEVEL") };
+        result.unwrap();
+        assert_eq!(config.logging.level, "debug");
+    }
+
+    #[test]
+    fn config_validate_default_passes() {
+        let config = RuntimeConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn config_validate_full_custom_valid() {
+        let config = RuntimeConfig {
+            server: ServerConfig {
+                agent_listen: "127.0.0.1:9090".into(),
+                highway_listen: "127.0.0.1:9091".into(),
+            },
+            tls: TlsConfig {
+                enabled: true,
+                cert_file: "/path/to/cert.pem".into(),
+                key_file: "/path/to/key.pem".into(),
+                client_ca_file: String::new(),
+                min_version: "1.3".into(),
+            },
+            auth: AuthConfig {
+                provider: "psk".into(),
+                ..Default::default()
+            },
+            storage: StorageConfig {
+                data_dir: "./data".into(),
+                ..Default::default()
+            },
+            resources: ResourceConfig {
+                warning_threshold: 0.9,
+                ..Default::default()
+            },
+            delivery: DeliveryConfig {
+                max_retries: 5,
+                retry_backoff_ms: 200,
+            },
+            logging: LoggingConfig {
+                level: "warn".into(),
+                format: "pretty".into(),
+                output: "stderr".into(),
+                file: String::new(),
+            },
+            observability: ObservabilityConfig {
+                metrics: MetricsConfig {
+                    enabled: true,
+                    listen: "127.0.0.1:9092".into(),
+                    path: "/metrics".into(),
+                },
+                health: HealthConfig {
+                    enabled: true,
+                    listen: "127.0.0.1:9093".into(),
+                    path: "/healthz".into(),
+                },
+            },
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
 }

@@ -322,3 +322,159 @@ async fn e2e_grpc_bind_and_authenticate() {
     // Let the runtime finish.
     rt_handle.abort();
 }
+
+// ── Phase T2.1 additions ──
+
+#[test]
+fn init_in_memory_default_taxonomy() {
+    let rt = test_runtime();
+    // Empty taxonomy still has base roles and types.
+    assert!(rt.taxonomy.is_valid_role("worker"));
+    assert!(rt.taxonomy.is_valid_role("observer"));
+    assert!(rt.taxonomy.is_valid_role("coordinator"));
+    assert!(rt.taxonomy.is_valid_envelope_type("directive"));
+    assert!(rt.taxonomy.is_valid_envelope_type("feedback"));
+    assert!(rt.taxonomy.is_valid_envelope_type("query"));
+}
+
+#[test]
+fn init_in_memory_custom_taxonomy() {
+    let dir = tempfile::tempdir().unwrap();
+    let tax_path = dir.path().join("taxonomy.yaml");
+    std::fs::write(
+        &tax_path,
+        r#"
+id: test
+version: "1.0"
+protocol_version: "0.1"
+roles: []
+envelope_types: []
+checkpoint_types: []
+"#,
+    )
+    .unwrap();
+    let mut config = RuntimeConfig::default();
+    config.taxonomy.file = tax_path.to_string_lossy().to_string();
+    let rt = Runtime::init_in_memory(config).unwrap();
+    assert!(rt.taxonomy.is_valid_role("worker"));
+}
+
+#[tokio::test]
+async fn init_creates_data_dirs() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = RuntimeConfig::default();
+    config.storage.data_dir = dir.path().to_string_lossy().to_string();
+    config.server.agent_listen = "127.0.0.1:39400".into();
+    config.server.highway_listen = "127.0.0.1:39401".into();
+
+    let _rt = Runtime::init(config).await.unwrap();
+
+    assert!(dir.path().join("trail").exists());
+    assert!(dir.path().join("checkpoints").exists());
+    assert!(dir.path().join("snapshots").exists());
+}
+
+#[tokio::test]
+async fn coordinator_dispatch_creates_node() {
+    let mut rt = test_runtime();
+    rt.coordinator.dispatch(DispatchRequest {
+        task_id: TaskId::from("task-1"),
+        config: worker_config("ws-1", "task-1"),
+    });
+    assert!(rt.coordinator.tree.get(&WorkspaceId::from("ws-1")).is_some());
+}
+
+#[tokio::test]
+async fn coordinator_dispatch_sets_task_id() {
+    let mut rt = test_runtime();
+    rt.coordinator.dispatch(DispatchRequest {
+        task_id: TaskId::from("task-42"),
+        config: worker_config("ws-42", "task-42"),
+    });
+    let node = rt.coordinator.tree.get(&WorkspaceId::from("ws-42")).unwrap();
+    assert_eq!(node.task_id.as_ref().unwrap(), &TaskId::from("task-42"));
+}
+
+#[tokio::test]
+async fn coordinator_multiple_workspaces() {
+    let mut rt = test_runtime();
+    for i in 0..3 {
+        let ws = format!("ws-{i}");
+        let task = format!("task-{i}");
+        rt.coordinator.dispatch(DispatchRequest {
+            task_id: TaskId::from(task.as_str()),
+            config: worker_config(&ws, &task),
+        });
+    }
+    for i in 0..3 {
+        assert!(
+            rt.coordinator
+                .tree
+                .get(&WorkspaceId::from(format!("ws-{i}")))
+                .is_some()
+        );
+    }
+}
+
+#[tokio::test]
+async fn coordinator_abort_sets_failed() {
+    let mut rt = test_runtime();
+    rt.coordinator.dispatch(DispatchRequest {
+        task_id: TaskId::from("task-abort"),
+        config: worker_config("ws-abort", "task-abort"),
+    });
+    rt.coordinator
+        .abort_workspace(&WorkspaceId::from("ws-abort"))
+        .await;
+
+    // Drain events to let state update propagate.
+    for _ in 0..5 {
+        if let Ok(Some(e)) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            rt.event_rx.recv(),
+        )
+        .await
+        {
+            rt.coordinator.handle_event(&e);
+        }
+    }
+
+    assert_eq!(
+        rt.coordinator
+            .tree
+            .get(&WorkspaceId::from("ws-abort"))
+            .unwrap()
+            .status,
+        WorkspaceState::Failed
+    );
+}
+
+#[tokio::test]
+async fn runtime_shutdown_no_workspaces() {
+    let mut rt = test_runtime();
+    rt.shutdown().await;
+}
+
+#[tokio::test]
+async fn runtime_shutdown_aborts_active_workspaces() {
+    let mut rt = test_runtime();
+    rt.coordinator.dispatch(DispatchRequest {
+        task_id: TaskId::from("task-shutdown"),
+        config: worker_config("ws-shutdown", "task-shutdown"),
+    });
+    assert!(rt
+        .coordinator
+        .tree
+        .get(&WorkspaceId::from("ws-shutdown"))
+        .is_some());
+    rt.shutdown().await;
+    // After shutdown, workspace should be failed.
+    assert_eq!(
+        rt.coordinator
+            .tree
+            .get(&WorkspaceId::from("ws-shutdown"))
+            .unwrap()
+            .status,
+        WorkspaceState::Failed
+    );
+}

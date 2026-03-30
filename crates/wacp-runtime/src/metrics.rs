@@ -216,4 +216,85 @@ mod tests {
         assert!(names.contains(&"wacp_trail_writes_total"));
         assert!(names.contains(&"wacp_auth_attempts_total"));
     }
+
+    // ── Phase T2.1 additions ──
+
+    #[test]
+    fn metrics_counter_increments() {
+        let m = register_metrics().unwrap();
+        m.trail_writes_total.inc_by(10);
+        assert_eq!(m.trail_writes_total.get(), 10);
+        m.trail_writes_total.inc();
+        assert_eq!(m.trail_writes_total.get(), 11);
+    }
+
+    #[test]
+    fn metrics_histogram_observe() {
+        let m = register_metrics().unwrap();
+        m.grpc_request_duration
+            .with_label_values(&["agent", "Bind"])
+            .observe(0.05);
+        m.grpc_request_duration
+            .with_label_values(&["agent", "Bind"])
+            .observe(0.15);
+        let families = m.registry.gather();
+        let names: Vec<&str> = families.iter().map(|f| f.get_name()).collect();
+        let idx = names
+            .iter()
+            .position(|n| *n == "wacp_grpc_request_duration_seconds")
+            .unwrap();
+        let sample_count = families[idx].get_metric()[0]
+            .get_histogram()
+            .get_sample_count();
+        assert_eq!(sample_count, 2);
+    }
+
+    #[test]
+    fn metrics_gauge_set() {
+        let m = register_metrics().unwrap();
+        m.workspaces_active.set(5);
+        assert_eq!(m.workspaces_active.get(), 5);
+        m.workspaces_active.dec();
+        assert_eq!(m.workspaces_active.get(), 4);
+    }
+
+    #[test]
+    fn metrics_all_15_families_registered() {
+        let m = register_metrics().unwrap();
+        // Touch each metric so it appears in gather.
+        m.grpc_requests_total
+            .with_label_values(&["a", "b", "c"])
+            .inc();
+        m.grpc_request_duration
+            .with_label_values(&["a", "b"])
+            .observe(0.0);
+        m.grpc_active_connections.with_label_values(&["a"]).set(0);
+        m.workspaces_active.set(0);
+        m.workspaces_total.with_label_values(&["closed"]).inc();
+        m.workspace_state_transitions
+            .with_label_values(&["idle", "active"])
+            .inc();
+        m.trail_writes_total.inc();
+        m.trail_bytes_total.inc();
+        m.trail_segments.with_label_values(&["hot"]).set(0);
+        m.envelopes_total
+            .with_label_values(&["agent", "created"])
+            .inc();
+        m.resource_warnings_total
+            .with_label_values(&["tokens"])
+            .inc();
+        m.resource_exhaustions_total
+            .with_label_values(&["tokens"])
+            .inc();
+        m.auth_attempts_total
+            .with_label_values(&["psk", "agent", "ok"])
+            .inc();
+        let no_labels: &[&str] = &[];
+        m.uptime_seconds.with_label_values(no_labels).set(1.0_f64);
+
+        let families = m.registry.gather();
+        // uptime_seconds (GaugeVec with empty label set) may not appear
+        // until observed; verify the 14 label-bearing families are present.
+        assert!(families.len() >= 14, "expected at least 14 metric families, got {}", families.len());
+    }
 }

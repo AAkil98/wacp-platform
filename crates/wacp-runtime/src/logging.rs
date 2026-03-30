@@ -69,3 +69,35 @@ fn open_log_file(path: &str) -> Result<std::fs::File, LoggingError> {
             source: e,
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logging_invalid_directive_rejects() {
+        let config = LoggingConfig {
+            level: "[invalid".into(),
+            format: "json".into(),
+            output: "stderr".into(),
+            file: String::new(),
+        };
+        let err = init_logging(&config).unwrap_err();
+        assert!(matches!(err, LoggingError::InvalidLevel(_)));
+    }
+
+    #[test]
+    fn logging_file_creates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.log");
+        let file = open_log_file(path.to_str().unwrap()).unwrap();
+        drop(file);
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn logging_file_nonexistent_dir_fails() {
+        let err = open_log_file("/nonexistent/dir/test.log").unwrap_err();
+        assert!(matches!(err, LoggingError::FileOpen { .. }));
+    }
+}

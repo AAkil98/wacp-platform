@@ -109,4 +109,57 @@ mod tests {
         let response = health_handler(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
+
+    // ── Phase T2.1 additions ──
+
+    #[tokio::test]
+    async fn health_ready_body_has_status() {
+        let state = make_state(HEALTH_READY);
+        let response = health_handler(State(state)).await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ready");
+    }
+
+    #[tokio::test]
+    async fn health_starting_body_has_status() {
+        let state = make_state(HEALTH_STARTING);
+        let response = health_handler(State(state)).await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "starting");
+    }
+
+    #[tokio::test]
+    async fn health_draining_body_has_status() {
+        let state = make_state(HEALTH_DRAINING);
+        let response = health_handler(State(state)).await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "draining");
+    }
+
+    #[tokio::test]
+    async fn health_body_has_uptime() {
+        let state = make_state(HEALTH_READY);
+        let response = health_handler(State(state)).await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["uptime_seconds"].is_number());
+    }
+
+    #[tokio::test]
+    async fn health_unknown_state_returns_500() {
+        let state = make_state(99);
+        let response = health_handler(State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }

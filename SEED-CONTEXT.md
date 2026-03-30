@@ -30,13 +30,15 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 19.2 complete.** Trail viewer + workspace tree — SessionManager (authenticate, stream supervision, exponential backoff reconnection, graceful disconnect), stream wrappers (StreamTrail → store, StreamWorkspaceChanges → store with proto → domain conversion), TrailViewer (windowed virtualization, HLC timestamp formatting, event type badges with 9 color categories, client-side filtering by event type/workspace/actor, event detail expansion, auto-scroll with jump-to-latest, scoped mode), WorkspaceTreeView (hierarchical parent-child tree, expand/collapse, state dots, role badges, resource bars, auto-expand nodes with pending gates/escalations), WorkspaceDetailPanel (header with all fields, 5-dimension resource meter with warning threshold, checkpoint count, scoped trail, inject action), CheckpointViewer (metadata, UTF-8/hex payload, verified badge). 63 TypeScript tests (was 21). Production build 385 KB JS.
 
-**Phase 19.3 complete.** Gate + escalation management — GatePanel (live countdown timer with color transitions green→yellow→red→pulsing, gate type badges for 6 types, subject display, approve/reject/modify with inline editor, urgency-sorted ordering, batch Approve All/Reject All for task_approval gates, in-flight state with disabled buttons, ack feedback flash), EscalationPanel (context display, workspace link, Send Feedback → pre-targeted injection form, Abort with confirmation dialog, Delegate to coordinator, in-flight/ack handling), transport RPC wrappers (respondToGate with GateDecision + client_request_id, respondToEscalation with oneof action union), notification system (AudioContext sine wave tones — 880 Hz gates, 523 Hz escalations, browser Notifications API, dismissible escalation banner in ConnectionBanner), InjectionForm query param pre-population. 86 TypeScript tests (was 63). Production build 396 KB JS. Task 19.4 is next.
+**Phase 19.3 complete.** Gate + escalation management — GatePanel (live countdown timer with color transitions green→yellow→red→pulsing, gate type badges for 6 types, subject display, approve/reject/modify with inline editor, urgency-sorted ordering, batch Approve All/Reject All for task_approval gates, in-flight state with disabled buttons, ack feedback flash), EscalationPanel (context display, workspace link, Send Feedback → pre-targeted injection form, Abort with confirmation dialog, Delegate to coordinator, in-flight/ack handling), transport RPC wrappers (respondToGate with GateDecision + client_request_id, respondToEscalation with oneof action union), notification system (AudioContext sine wave tones — 880 Hz gates, 523 Hz escalations, browser Notifications API, dismissible escalation banner in ConnectionBanner), InjectionForm query param pre-population. 86 TypeScript tests (was 63). Production build 396 KB JS. 
+
+**Phase 19.4 complete.** Envelope injection + autonomy presets — InjectionForm (InjectEnvelope RPC with client_request_id, sending/success/error states, workspace autocomplete from store, query param pre-population for escalation feedback flow, form reset after success), SettingsPanel (3 presets — autonomous/supervised/gated with per-spec defaults, preset selection populates all fields, any field modification switches to "custom", 6 gate type rows with enabled/timeout/fallback, visibility/injection toggles, escalation config, deadlock warning for all-zero timeouts, disabled Apply button with restart tooltip). 105 TypeScript tests (was 86). Production build 403 KB JS. Phase 19 complete.
 
 ## Repository Map
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Forward plan — Phase 19 (highway UI, 19.4 remaining)
+├── IMPLEMENTATION.md        # Forward plan — all phases complete
 ├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 12 crates
@@ -85,7 +87,7 @@ wacp/
 │   ├── wacp-runtime/        # Binary: config (47 fields), clap CLI, tracing logging, TLS, metrics, health — 53 tests
 │   └── wacp-sdk/            # Rust agent SDK: Agent, builders, streams — 3 tests
 │
-├── highway-ui/              # Highway UI — TypeScript SPA (86 tests)
+├── highway-ui/              # Highway UI — TypeScript SPA (105 tests)
 │   ├── package.json         # pnpm, Vite, React 19, Connect-Web, Zustand, Tailwind, Vitest
 │   ├── buf.gen.yaml         # Protobuf codegen config → src/gen/
 │   ├── src/
@@ -202,7 +204,7 @@ Phases 0–18 complete. The remaining work:
 | 19.1 | Highway UI scaffold (Vite, React, Connect-Web, Zustand, codegen, all panels) | **Complete** — 21 TS tests |
 | 19.2 | Trail viewer + workspace tree (streaming, filtering, hierarchy, detail panel, checkpoint viewer) | **Complete** — 21→63 TS tests (+42) |
 | 19.3 | Gate + escalation management (countdown, batch, abort confirm, notifications) | **Complete** — 63→86 TS tests (+23) |
-| 19.4 | Envelope injection + autonomy presets | **Next** |
+| 19.4 | Envelope injection + autonomy presets (RPC, settings panel, deadlock warnings) | **Complete** — 86→105 TS tests (+19) |
 
 See `IMPLEMENTATION.md` for the full task breakdown within each phase.
 

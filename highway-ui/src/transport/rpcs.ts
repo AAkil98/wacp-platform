@@ -8,6 +8,33 @@ import {
   EnvelopeOrigin,
 } from "../gen/primitives_pb.js";
 
+// ── Envelope injection ──
+
+export interface InjectRequest {
+  toWorkspace: string;
+  type: string;
+  priority: string;
+  payload: string;
+}
+
+/**
+ * Inject an envelope into a workspace via the InjectEnvelope RPC.
+ * Returns the assigned envelope ID on success.
+ */
+export async function injectEnvelope(req: InjectRequest): Promise<{ envelopeId: string }> {
+  const client = getClient();
+
+  const response = await client.injectEnvelope({
+    toWorkspace: req.toWorkspace,
+    type: req.type,
+    payload: new TextEncoder().encode(req.payload),
+    priority: PRIORITY_MAP[req.priority] ?? EnvelopePriority.NORMAL,
+    clientRequestId: crypto.randomUUID(),
+  });
+
+  return { envelopeId: response.envelopeId };
+}
+
 // ── Gate response ──
 
 export { GateDecision };

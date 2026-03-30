@@ -12,7 +12,7 @@ authors:
 
 ## Current State
 
-**Phases 0–18 complete. Phase 19.1–19.3 complete.** 12 Rust crates, 687 Rust tests, 14 Python tests, 86 TypeScript tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. Highway UI with trail streaming, filtering, workspace tree, detail panel, gate management (countdown, batch, modify), escalation handling (abort confirm, delegate, feedback), notification system, session lifecycle. All coding specs archived.
+**Phases 0–19 complete.** 12 Rust crates, 687 Rust tests, 14 Python tests, 105 TypeScript tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. Highway UI complete: trail streaming with filtering, workspace tree with detail panel, gate management (countdown, batch, modify), escalation handling (abort confirm, delegate, feedback), notification system, envelope injection with RPC, autonomy preset configuration (read-only). All coding specs archived.
 
 Test counts by crate:
 
@@ -124,7 +124,7 @@ TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web cli
 |-------|------|-------|------------|--------|
 | 18a | Coverage: Core Crates | 7 | — | **Complete** |
 | 18b | Coverage: Boundary Crates | 4 | 18a | **Complete** |
-| 19 | Highway UI | 4 | Phase 13 | **19.1–19.3 complete**, 19.4 next |
+| 19 | Highway UI | 4 | Phase 13 | **Complete** |
 | | **Total** | **15** | | |
 
 ---

@@ -204,7 +204,7 @@ Remaining unit test gaps across all ecosystems. See `TEST-STRATEGY.md` §4.1–4
 | 18b | Coverage: Boundary Crates | 4 | 18a | **Complete** |
 | 19 | Highway UI | 4 | Phase 13 | **Complete** |
 | T1 | Critical Gaps (P0) | 4 | — | **Complete** |
-| T2 | Runtime + Highway Transport (P1) | 3 | T1.4 | Pending |
+| T2 | Runtime + Highway Transport (P1) | 3 | T1.4 | **Complete** |
 | T3 | Integration Tests (P2) | 3 | T1 | Pending |
 | T4 | End-to-End Tests (P2) | 5 | T3, T4.1 | Pending |
 | T5 | Hardening (P3) | 3 | T1–T2 | Pending |

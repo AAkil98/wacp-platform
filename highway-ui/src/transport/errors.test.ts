@@ -45,6 +45,27 @@ describe("classifyError", () => {
   it("classifies unknown value as transient", () => {
     expect(classifyError("string error")).toBe("transient");
   });
+
+  // Phase T2.2 — remaining ConnectError codes
+  it("classifies DEADLINE_EXCEEDED as transient", () => {
+    expect(classifyError(new ConnectError("timeout", Code.DeadlineExceeded))).toBe("transient");
+  });
+
+  it("classifies RESOURCE_EXHAUSTED as transient", () => {
+    expect(classifyError(new ConnectError("budget", Code.ResourceExhausted))).toBe("transient");
+  });
+
+  it("classifies UNIMPLEMENTED as transient", () => {
+    expect(classifyError(new ConnectError("not impl", Code.Unimplemented))).toBe("transient");
+  });
+
+  it("classifies ABORTED as transient", () => {
+    expect(classifyError(new ConnectError("aborted", Code.Aborted))).toBe("transient");
+  });
+
+  it("classifies CANCELED as transient", () => {
+    expect(classifyError(new ConnectError("canceled", Code.Canceled))).toBe("transient");
+  });
 });
 
 describe("errorMessage", () => {

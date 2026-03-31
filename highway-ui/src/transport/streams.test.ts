@@ -131,3 +131,33 @@ describe("toWorkspaceView", () => {
     expect(result.lastActivity).toBeUndefined();
   });
 });
+
+// Phase T2.2 — conversion edge cases
+
+describe("toTrailEntry edge cases", () => {
+  it("handles empty body as empty string", () => {
+    const proto = create(TrailEntrySchema, {
+      id: "entry-empty",
+      eventType: "test",
+      actor: "system",
+      workspaceId: "ws-1",
+      body: new Uint8Array(0),
+      sequenceNumber: 1n,
+    });
+    const result = toTrailEntry(proto);
+    expect(result.body).toBe("");
+  });
+
+  it("handles binary body via TextDecoder", () => {
+    const proto = create(TrailEntrySchema, {
+      id: "entry-utf8",
+      eventType: "test",
+      actor: "system",
+      workspaceId: "ws-1",
+      body: new TextEncoder().encode("hello world"),
+      sequenceNumber: 2n,
+    });
+    const result = toTrailEntry(proto);
+    expect(result.body).toBe("hello world");
+  });
+});

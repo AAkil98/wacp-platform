@@ -1,3 +1,5 @@
+pub mod e2e;
+
 use std::collections::HashSet;
 
 use tokio::sync::mpsc;

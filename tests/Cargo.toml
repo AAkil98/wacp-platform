@@ -19,4 +19,6 @@ wacp-transport = { path = "../crates/wacp-transport" }
 wacp-recovery = { path = "../crates/wacp-recovery" }
 wacp-sdk = { path = "../crates/wacp-sdk" }
 tokio = { workspace = true }
+tonic = { workspace = true }
 serde_json = { workspace = true }
+uuid = { workspace = true }

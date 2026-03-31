@@ -321,3 +321,60 @@ fn recv_local_physical_is_max() {
     assert_eq!(merged.physical_us(), 1000);
     assert_eq!(merged.logical(), 6);
 }
+
+// ── Phase 18b+: Additional clock coverage ──
+
+#[test]
+fn clock_last_returns_initial() {
+    let clock = manual_clock(5000);
+    // No events yet — last() should return ZERO (the initial value).
+    assert_eq!(clock.last(), Timestamp::ZERO);
+}
+
+#[test]
+fn system_time_source_nonzero() {
+    let src = SystemTimeSource;
+    let now = src.now_us();
+    assert!(now > 0, "SystemTimeSource::now_us() should return a nonzero value");
+}
+
+#[test]
+fn timestamp_zero_is_min() {
+    let zero = Timestamp::ZERO;
+    let nonzero_physical = Timestamp::new(1, 0);
+    let nonzero_logical = Timestamp::new(0, 1);
+    let both = Timestamp::new(1, 1);
+
+    assert!(zero < nonzero_physical);
+    assert!(zero < nonzero_logical);
+    assert!(zero < both);
+    assert_eq!(zero, Timestamp::new(0, 0));
+}
+
+#[test]
+fn clock_send_returns_advanced() {
+    let mut clock = manual_clock(1000);
+    let first = clock.send();
+    assert_eq!(first.physical_us(), 1000);
+    assert_eq!(first.logical(), 0);
+
+    let second = clock.send();
+    assert!(second > first, "send() must return a strictly advancing timestamp");
+    assert_eq!(second.physical_us(), 1000);
+    assert_eq!(second.logical(), 1);
+}
+
+#[test]
+fn bytes_10_bytes_length() {
+    let timestamps = [
+        Timestamp::ZERO,
+        Timestamp::new(1, 0),
+        Timestamp::new(0, 1),
+        Timestamp::new(u64::MAX, u16::MAX),
+        Timestamp::new(123456789, 42),
+    ];
+    for ts in timestamps {
+        let bytes = ts.to_bytes();
+        assert_eq!(bytes.len(), 10, "to_bytes() must produce exactly 10 bytes for {ts}");
+    }
+}

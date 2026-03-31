@@ -989,3 +989,125 @@ fn terminal_states_produce_no_valid_successors() {
         }
     }
 }
+
+// ── Phase 18b+: Additional FSM coverage ──
+
+#[test]
+fn transition_error_display_format() {
+    let err = TransitionError::IllegalTransition {
+        state: "Active".into(),
+        trigger: "AgentReady".into(),
+    };
+    let display = format!("{err}");
+    assert!(
+        display.contains("Active"),
+        "display should contain the state name"
+    );
+    assert!(
+        display.contains("AgentReady"),
+        "display should contain the trigger name"
+    );
+    assert!(
+        display.contains("illegal transition"),
+        "display should contain 'illegal transition'"
+    );
+
+    let err2 = TransitionError::TerminalState {
+        state: "Closed".into(),
+    };
+    let display2 = format!("{err2}");
+    assert!(display2.contains("Closed"));
+    assert!(display2.contains("terminal state"));
+}
+
+#[test]
+fn workspace_all_triggers_from_idle() {
+    use WorkspaceState::*;
+    use WorkspaceTrigger::*;
+
+    // Valid transitions from Idle.
+    assert_eq!(ws(Idle, ReceiveFirstEnvelope).unwrap(), Active);
+    assert_eq!(ws(Idle, CreationError).unwrap(), Failed);
+    assert_eq!(ws(Idle, TimeoutExceeded).unwrap(), Failed);
+    assert_eq!(ws(Idle, CoordinatorAbort).unwrap(), Failed);
+    assert_eq!(ws(Idle, BudgetExceeded).unwrap(), Failed);
+
+    // Invalid transitions from Idle — all should be IllegalTransition.
+    let illegal = [
+        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
+        CoordinatorSuspend, CoordinatorResume, CoordinatorMigrate,
+        MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
+        IntegrationSucceeded, IntegrationFailed, ConflictDetected,
+        ConflictResolved, ConflictUnresolvable,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(ws(Idle, t), Err(TransitionError::IllegalTransition { .. })),
+            "Idle + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn task_retry_from_failed() {
+    // Failed → Assigned via Assign (the "retry" path).
+    assert_eq!(
+        task(TaskStatus::Failed, TaskTrigger::Assign).unwrap(),
+        TaskStatus::Assigned
+    );
+    // All other triggers from Failed should be illegal.
+    let illegal = [
+        TaskTrigger::Approve,
+        TaskTrigger::Start,
+        TaskTrigger::Complete,
+        TaskTrigger::Fail,
+        TaskTrigger::Integrate,
+        TaskTrigger::Cancel,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(
+                task(TaskStatus::Failed, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Failed + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn envelope_all_triggers_from_created() {
+    use EnvelopeState::*;
+    use EnvelopeTrigger::*;
+
+    // Valid transitions from Created.
+    assert_eq!(env(Created, ValidationPassed).unwrap(), Validated);
+    assert_eq!(env(Created, ValidationFailed).unwrap(), Rejected);
+
+    // Invalid transitions from Created.
+    let illegal = [Submit, Deliver, Acknowledge];
+    for t in illegal {
+        assert!(
+            matches!(env(Created, t), Err(TransitionError::IllegalTransition { .. })),
+            "Created + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn terminal_state_count() {
+    use WorkspaceState::*;
+
+    let all_states = [
+        Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted, Closed, Failed,
+    ];
+    let terminal_count = all_states.iter().filter(|s| s.is_terminal()).count();
+    assert_eq!(terminal_count, 2, "exactly 2 terminal workspace states: Closed and Failed");
+
+    // Verify which ones are terminal.
+    assert!(Closed.is_terminal());
+    assert!(Failed.is_terminal());
+    for s in [Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted] {
+        assert!(!s.is_terminal(), "{s:?} should not be terminal");
+    }
+}

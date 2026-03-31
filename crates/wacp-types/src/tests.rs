@@ -628,3 +628,87 @@ fn serde_roundtrip_all_port_right_types() {
         assert_eq!(right, back, "roundtrip failed for {prt:?}");
     }
 }
+
+// ── Phase 18b+: Display and default coverage ──
+
+#[test]
+fn display_all_id_types() {
+    let ws = WorkspaceId::from("ws-1");
+    let env = EnvelopeId::from("env-1");
+    let task = TaskId::from("task-1");
+    let cp = CheckpointId::from("cp-1");
+    let trail = TrailEntryId::from("te-1");
+    let user = UserId::from("user-1");
+    let gate = GateId::from("gate-1");
+    let esc = EscalationId::from("esc-1");
+
+    assert_eq!(ws.to_string(), "ws-1");
+    assert_eq!(env.to_string(), "env-1");
+    assert_eq!(task.to_string(), "task-1");
+    assert_eq!(cp.to_string(), "cp-1");
+    assert_eq!(trail.to_string(), "te-1");
+    assert_eq!(user.to_string(), "user-1");
+    assert_eq!(gate.to_string(), "gate-1");
+    assert_eq!(esc.to_string(), "esc-1");
+}
+
+#[test]
+fn default_resource_usage_is_zero() {
+    let usage = ResourceUsage::default();
+    assert_eq!(usage.tokens, 0);
+    assert_eq!(usage.wall_time_ms, 0);
+    assert_eq!(usage.storage_bytes, 0);
+    assert_eq!(usage.network_bytes, 0);
+    assert_eq!(usage.cost_micros, 0);
+    // All fields should be zero — verify by serializing and checking.
+    let json = serde_json::to_string(&usage).unwrap();
+    assert!(json.contains("\"tokens\":0"));
+}
+
+#[test]
+fn default_resource_budget_is_zero() {
+    let budget = ResourceBudget::default();
+    assert_eq!(budget.max_tokens, None);
+    assert_eq!(budget.max_wall_time_ms, None);
+    assert_eq!(budget.max_storage_bytes, None);
+    assert_eq!(budget.max_network_bytes, None);
+    assert_eq!(budget.max_cost_micros, None);
+    // warning_threshold defaults to 0.8, not zero, but all limit fields are None (effectively zero budget).
+    assert!((budget.warning_threshold - 0.8).abs() < f32::EPSILON);
+}
+
+#[test]
+fn envelope_state_display() {
+    let all = [
+        EnvelopeState::Created,
+        EnvelopeState::Validated,
+        EnvelopeState::Delivered,
+        EnvelopeState::Acknowledged,
+        EnvelopeState::Rejected,
+    ];
+    let names = ["Created", "Validated", "Delivered", "Acknowledged", "Rejected"];
+    for (variant, expected) in all.iter().zip(names.iter()) {
+        let display = format!("{variant:?}");
+        assert_eq!(display, *expected, "EnvelopeState::{expected} Debug mismatch");
+    }
+    assert_eq!(all.len(), 5);
+}
+
+#[test]
+fn checkpoint_status_display() {
+    let provisional = format!("{:?}", CheckpointStatus::Provisional);
+    let final_s = format!("{:?}", CheckpointStatus::Final);
+    assert_eq!(provisional, "Provisional");
+    assert_eq!(final_s, "Final");
+}
+
+#[test]
+fn confidence_display() {
+    let all = [Confidence::High, Confidence::Medium, Confidence::Low];
+    let names = ["High", "Medium", "Low"];
+    for (variant, expected) in all.iter().zip(names.iter()) {
+        let display = format!("{variant:?}");
+        assert_eq!(display, *expected, "Confidence::{expected} Debug mismatch");
+    }
+    assert_eq!(all.len(), 3);
+}

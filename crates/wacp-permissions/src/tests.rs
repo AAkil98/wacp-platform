@@ -765,3 +765,131 @@ checkpoint_types: []
         })
         .is_ok());
 }
+
+// ── Phase 18b+: Additional permission coverage ──
+
+#[test]
+fn port_right_grant_multiple_targets() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("ws-a"),
+        target: ws("ws-b"),
+    });
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("ws-a"),
+        target: ws("ws-c"),
+    });
+    assert!(e.has_send_right(&ws("ws-a"), &ws("ws-b")));
+    assert!(e.has_send_right(&ws("ws-a"), &ws("ws-c")));
+    // Reverse direction not granted.
+    assert!(!e.has_send_right(&ws("ws-b"), &ws("ws-a")));
+    assert!(!e.has_send_right(&ws("ws-c"), &ws("ws-a")));
+}
+
+#[test]
+fn port_right_revoke_nonexistent_is_ok() {
+    let mut e = base_engine();
+    // Revoking a right that was never granted should not panic.
+    e.revoke_port_right(&ws("ws-a"), &ws("ws-b"), PortRightType::Send);
+    // And revoking from a holder that has rights to a *different* target should not affect those.
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("ws-a"),
+        target: ws("ws-c"),
+    });
+    e.revoke_port_right(&ws("ws-a"), &ws("ws-b"), PortRightType::Send);
+    assert!(e.has_send_right(&ws("ws-a"), &ws("ws-c")));
+}
+
+#[test]
+fn has_send_right_no_grants_returns_false() {
+    let e = base_engine();
+    assert!(!e.has_send_right(&ws("ws-a"), &ws("ws-b")));
+    assert!(!e.has_send_right(&ws("ws-b"), &ws("ws-a")));
+    assert!(!e.has_send_right(&ws("ws-a"), &ws("ws-a")));
+}
+
+#[test]
+fn coordinator_can_send_directive_with_port_right() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("coord"),
+        target: ws("w1"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("coord"),
+        receiver_workspace: &ws("w1"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(result.is_ok(), "coordinator with port right should send directive to worker");
+}
+
+#[test]
+fn observer_cannot_create_checkpoint() {
+    let e = base_engine();
+    // Observer can create observation but NOT artifact.
+    let result = e.evaluate(&Action::CreateCheckpoint {
+        role: "observer",
+        checkpoint_type: "artifact",
+    });
+    assert!(
+        matches!(result, Err(PermissionDenied::CheckpointTypeNotPermitted { .. })),
+        "observer should be denied artifact checkpoint creation"
+    );
+}
+
+#[test]
+fn derived_role_denied_coordinator_exclusive_signal() {
+    // Create an analyst role (observer-derived) and verify it cannot emit Integrate.
+    let yaml = r#"
+id: test
+version: "1.0"
+protocol_version: "0.1"
+roles:
+  - name: analyst
+    extends: observer
+    add: []
+envelope_types: []
+checkpoint_types: []
+"#;
+    let t = Taxonomy::load_yaml(yaml, PV).unwrap();
+    let e = PermissionEngine::new(&t);
+
+    let result = e.evaluate(&Action::EmitSignal {
+        role: "analyst",
+        signal_type: SignalType::Integrate,
+    });
+    assert!(
+        matches!(result, Err(PermissionDenied::SignalTypeNotPermitted { .. })),
+        "analyst (observer-derived) should not emit Integrate"
+    );
+}
+
+#[test]
+fn empty_engine_denies_unknown_role() {
+    let e = base_engine();
+    // An unknown role should be denied for all action types.
+    let result = e.evaluate(&Action::EmitSignal {
+        role: "ghost",
+        signal_type: SignalType::Ready,
+    });
+    assert!(
+        matches!(result, Err(PermissionDenied::SignalTypeNotPermitted { .. })),
+        "unknown role 'ghost' should be denied signal emission"
+    );
+
+    let result2 = e.evaluate(&Action::CreateCheckpoint {
+        role: "ghost",
+        checkpoint_type: "artifact",
+    });
+    assert!(
+        matches!(result2, Err(PermissionDenied::CheckpointTypeNotPermitted { .. })),
+        "unknown role 'ghost' should be denied checkpoint creation"
+    );
+}

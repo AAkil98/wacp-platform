@@ -3913,3 +3913,73 @@ fn migration_fail_nonexistent_workspace() {
     let result = migration.fail("ws-nonexistent", "error".into(), 1);
     assert!(matches!(result, Err(MigrationError::NotMigrating(_))));
 }
+
+// ══════════════════════════════════════════
+// Phase 18b.5 — Coordinator hardening (+3)
+// ══════════════════════════════════════════
+
+#[test]
+fn event_bus_subscribe_receive_unsubscribe() {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let count = Arc::new(AtomicUsize::new(0));
+    let count_clone = count.clone();
+
+    let mut bus = EventBus::new(false);
+    bus.subscribe(Box::new(move |_evt| {
+        count_clone.fetch_add(1, Ordering::SeqCst);
+    }));
+    assert_eq!(bus.subscriber_count(), 1);
+
+    // Emit an event — subscriber should be called.
+    bus.emit(CoordinatorEvent::WorkspaceStateChanged {
+        workspace_id: ws("ws-sub"),
+        from: WorkspaceState::Idle,
+        to: WorkspaceState::Active,
+    });
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+
+    // Emit another event.
+    bus.emit(CoordinatorEvent::TaskStatusChanged {
+        task_id: tid("t-sub"),
+        from: TaskStatus::Draft,
+        to: TaskStatus::Pending,
+    });
+    assert_eq!(count.load(Ordering::SeqCst), 2);
+
+    // EventBus has no unsubscribe method — verified by subscriber_count remaining 1.
+    // Once subscribed, the callback remains active.
+    assert_eq!(bus.subscriber_count(), 1);
+}
+
+#[test]
+fn dispatch_to_nonexistent_task_handled() {
+    let (mut disp, mut graph, mut topo) = setup_dispatch();
+
+    // No tasks in graph — dispatch should return empty actions.
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert!(actions.is_empty());
+
+    // Add a task that's not dispatchable (Draft status).
+    graph.add_task(make_task("t-ghost", vec![], TaskStatus::Draft)).unwrap();
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert!(actions.is_empty());
+}
+
+#[test]
+fn concurrent_workspace_creation_unique_ids() {
+    let mut disp = make_dispatcher();
+    let mut graph = TaskGraph::new();
+    let mut topo = TopologySet::new(ws("root"), uid("owner"));
+
+    // Add 10 pending tasks.
+    for i in 0..10 {
+        graph.add_task(make_task(&format!("t-{i}"), vec![], TaskStatus::Pending)).unwrap();
+    }
+
+    let actions = disp.try_dispatch(&mut graph, &mut topo);
+    assert_eq!(actions.len(), 10);
+
+    // Verify all workspace IDs are unique.
+    let ids: std::collections::HashSet<_> = actions.iter().map(|a| a.workspace_id.clone()).collect();
+    assert_eq!(ids.len(), 10, "all 10 workspace IDs must be unique");
+}

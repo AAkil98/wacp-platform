@@ -619,3 +619,71 @@ fn resolve_role_returns_none_for_base() {
     assert!(t.resolve_role("observer").is_none());
     assert!(t.resolve_role("nonexistent").is_none());
 }
+
+// ── Phase 18b+: Additional taxonomy coverage ──
+
+#[test]
+fn is_valid_envelope_type_base() {
+    let t = Taxonomy::empty(PV);
+    assert!(t.is_valid_envelope_type("directive"));
+    assert!(t.is_valid_envelope_type("feedback"));
+    assert!(t.is_valid_envelope_type("query"));
+}
+
+#[test]
+fn is_valid_envelope_type_unknown() {
+    let t = Taxonomy::empty(PV);
+    assert!(!t.is_valid_envelope_type("foo"));
+    assert!(!t.is_valid_envelope_type(""));
+    assert!(!t.is_valid_envelope_type("Directive")); // case-sensitive
+}
+
+#[test]
+fn is_valid_checkpoint_type_base() {
+    let t = Taxonomy::empty(PV);
+    assert!(t.is_valid_checkpoint_type("artifact"));
+    assert!(t.is_valid_checkpoint_type("observation"));
+}
+
+#[test]
+fn is_valid_checkpoint_type_unknown() {
+    let t = Taxonomy::empty(PV);
+    assert!(!t.is_valid_checkpoint_type("foo"));
+    assert!(!t.is_valid_checkpoint_type(""));
+    assert!(!t.is_valid_checkpoint_type("Artifact")); // case-sensitive
+}
+
+#[test]
+fn empty_taxonomy_version_matches() {
+    let t = Taxonomy::empty("0.1");
+    assert_eq!(t.protocol_version, "0.1");
+
+    let t2 = Taxonomy::empty("2.0");
+    assert_eq!(t2.protocol_version, "2.0");
+}
+
+#[test]
+fn load_yaml_empty_lists() {
+    let yaml = format!(
+        r#"
+id: empty-lists
+version: "1.0"
+protocol_version: "{PV}"
+roles: []
+envelope_types: []
+checkpoint_types: []
+"#
+    );
+    let t = Taxonomy::load_yaml(&yaml, PV).unwrap();
+    // Should have base types only — no custom additions.
+    assert!(t.is_valid_role("coordinator"));
+    assert!(t.is_valid_role("worker"));
+    assert!(t.is_valid_role("observer"));
+    assert!(t.is_valid_envelope_type("directive"));
+    assert!(t.is_valid_envelope_type("feedback"));
+    assert!(t.is_valid_envelope_type("query"));
+    assert!(t.is_valid_checkpoint_type("artifact"));
+    assert!(t.is_valid_checkpoint_type("observation"));
+    assert_eq!(t.resolved_roles.len(), 0, "no derived roles");
+    assert_eq!(t.envelope_permissions.len(), 3, "only 3 base envelope permissions");
+}

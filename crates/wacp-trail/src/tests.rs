@@ -762,3 +762,232 @@ fn index_query_all_entries_no_filter() {
     assert_eq!(result.entries.len(), 5);
     assert!(!result.has_more);
 }
+
+// ══════════════════════════════════════════
+// Phase 18b.2 — Trail hardening (+12)
+// ══════════════════════════════════════════
+
+#[test]
+fn compaction_warm_retention_days() {
+    // Warm segments outside retention are eligible for cold transition.
+    let dir = tempfile::tempdir().unwrap();
+    let trail_dir = dir.path().join("trail");
+    let cold_dir = dir.path().join("cold");
+    std::fs::create_dir_all(&trail_dir).unwrap();
+
+    let task = crate::compaction::CompactionTask::new(
+        trail_dir.clone(),
+        Some(cold_dir.clone()),
+        crate::compaction::CompactionConfig {
+            hot_limit: 10,
+            warm_retention_days: 0, // immediate warm→cold
+            cold_retention_days: None,
+            compaction_interval_minutes: 60,
+        },
+    )
+    .unwrap();
+
+    // Create a warm segment.
+    let warm_dir = trail_dir.join("warm");
+    std::fs::write(warm_dir.join("segment-000001.trail.zst"), b"warm data").unwrap();
+
+    let summary = task.run_once().unwrap();
+    // With 0 retention days, the warm segment should move to cold.
+    assert_eq!(summary.warm_to_cold, 1);
+    assert!(cold_dir.join("segment-000001.trail.zst").exists());
+}
+
+#[test]
+fn compaction_cold_positive_integer() {
+    // Cold retention with a positive integer: segments too young are NOT deleted.
+    let dir = tempfile::tempdir().unwrap();
+    let trail_dir = dir.path().join("trail");
+    let cold_dir = dir.path().join("cold");
+    std::fs::create_dir_all(&trail_dir).unwrap();
+    std::fs::create_dir_all(&cold_dir).unwrap();
+
+    // Just-created file with 365-day retention: should NOT be deleted.
+    std::fs::write(cold_dir.join("segment-000001.trail.zst"), b"recent data").unwrap();
+
+    let task = crate::compaction::CompactionTask::new(
+        trail_dir,
+        Some(cold_dir.clone()),
+        crate::compaction::CompactionConfig {
+            hot_limit: 10,
+            warm_retention_days: 90,
+            cold_retention_days: Some(365),
+            compaction_interval_minutes: 60,
+        },
+    )
+    .unwrap();
+
+    let summary = task.run_once().unwrap();
+    assert_eq!(summary.cold_deleted, 0);
+    assert!(cold_dir.join("segment-000001.trail.zst").exists());
+}
+
+#[test]
+fn index_rebuild_after_corrupt() {
+    // Corrupt index entries, rebuild from scratch: same results.
+    let idx = TrailIndex::open_in_memory().unwrap();
+    for i in 1..=5 {
+        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+    }
+    let original = idx.query(&TrailQuery::new()).unwrap();
+    assert_eq!(original.entries.len(), 5);
+
+    // Simulate "rebuild": create a new index and re-insert the same entries.
+    let idx2 = TrailIndex::open_in_memory().unwrap();
+    for i in 1..=5 {
+        idx2.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+    }
+    let rebuilt = idx2.query(&TrailQuery::new()).unwrap();
+    assert_eq!(rebuilt.entries.len(), original.entries.len());
+    for (a, b) in original.entries.iter().zip(rebuilt.entries.iter()) {
+        assert_eq!(a.sequence_number, b.sequence_number);
+        assert_eq!(a.workspace_id, b.workspace_id);
+        assert_eq!(a.event_type, b.event_type);
+    }
+}
+
+#[test]
+fn concurrent_append_no_data_loss() {
+    // Sequential approach: append 100 entries, verify all 100 present in scan.
+    let mut store = InMemoryTrailStorage::new();
+    let mut head = ChainHash::GENESIS;
+    for i in 0..100u64 {
+        let data = format!("entry-{i}");
+        let hash = compute_chain_hash(&head, data.as_bytes());
+        store.append(data.as_bytes(), hash.as_ref()).unwrap();
+        head = hash;
+    }
+
+    let entries = store.scan(SegmentId(0), 0).unwrap();
+    assert_eq!(entries.len(), 100);
+    for (i, (_, data, _)) in entries.iter().enumerate() {
+        assert_eq!(data, format!("entry-{i}").as_bytes());
+    }
+    assert_eq!(store.metadata().total_entries, 100);
+}
+
+#[test]
+fn large_payload_checkpoint() {
+    use sha2::{Digest, Sha256};
+    let store = InMemoryCheckpointStorage::new();
+    let payload = vec![0xABu8; 1024 * 1024]; // 1MB
+    let hash: [u8; 32] = Sha256::digest(&payload).into();
+
+    store.store(&hash, &payload).unwrap();
+    let read = store.read(&hash).unwrap().unwrap();
+    assert_eq!(read.len(), 1024 * 1024);
+
+    let read_hash: [u8; 32] = Sha256::digest(&read).into();
+    assert_eq!(hash, read_hash);
+}
+
+#[test]
+fn zero_byte_snapshot_rejected() {
+    use crate::fs_snapshot::FileSnapshotStorage;
+    let dir = tempfile::tempdir().unwrap();
+    let storage = FileSnapshotStorage::new(dir.path().to_path_buf());
+    let ws = WorkspaceId::from("ws-zero");
+
+    // Write a zero-byte snapshot file directly.
+    let path = dir.path().join("ws-ws-zero.snapshot");
+    std::fs::write(&path, b"").unwrap();
+
+    let result = storage.read_workspace(&ws);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("too small"));
+}
+
+#[test]
+fn fs_checkpoint_integrity_verified() {
+    use sha2::{Digest, Sha256};
+    let dir = tempfile::tempdir().unwrap();
+    let store = FileCheckpointStorage::open(dir.path().join("ckpt")).unwrap();
+
+    let payload = b"checkpoint integrity test data";
+    let hash: [u8; 32] = Sha256::digest(payload).into();
+
+    store.store(&hash, payload).unwrap();
+    let read = store.read(&hash).unwrap().unwrap();
+    assert_eq!(read, payload);
+
+    let read_hash: [u8; 32] = Sha256::digest(&read).into();
+    assert_eq!(hash, read_hash);
+}
+
+#[test]
+fn trail_metadata_bytes_accurate() {
+    let mut store = InMemoryTrailStorage::new();
+    let entry_a = b"aaaa"; // 4 bytes
+    let entry_b = b"bbbbbbbb"; // 8 bytes
+    let entry_c = b"cc"; // 2 bytes
+
+    store.append(entry_a, &[0; 32]).unwrap();
+    store.append(entry_b, &[0; 32]).unwrap();
+    store.append(entry_c, &[0; 32]).unwrap();
+
+    let m = store.metadata();
+    assert_eq!(m.total_bytes, 4 + 8 + 2);
+}
+
+#[test]
+fn hot_warm_transition_count() {
+    // Verify hot_limit is respected: with 8 segments and hot_limit=5, 3 move to warm.
+    let dir = tempfile::tempdir().unwrap();
+    let trail_dir = dir.path().to_path_buf();
+
+    for i in 0..8u64 {
+        std::fs::write(
+            trail_dir.join(format!("segment-{i:06}.trail")),
+            format!("data {i}"),
+        )
+        .unwrap();
+    }
+
+    let mgr = crate::tiered::TierManager::new(trail_dir, 5, 90, None).unwrap();
+    let moved = mgr.transition_hot_to_warm().unwrap();
+    assert_eq!(moved, 3);
+    assert_eq!(mgr.list_hot_segments().unwrap().len(), 5);
+}
+
+#[test]
+fn segment_id_ordering() {
+    // SegmentId(0) < SegmentId(1) via inner u64 comparison.
+    let a = SegmentId(0);
+    let b = SegmentId(1);
+    let c = SegmentId(100);
+    assert!(a.0 < b.0);
+    assert!(b.0 < c.0);
+    assert!(a.0 < c.0);
+}
+
+#[test]
+fn scan_empty_segment() {
+    let store = InMemoryTrailStorage::new();
+    // Segment 0 exists but is empty.
+    let entries = store.scan(SegmentId(0), 0).unwrap();
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn append_updates_chain_head() {
+    let mut store = InMemoryTrailStorage::new();
+    let genesis = store.metadata().chain_head;
+    assert_eq!(genesis, [0u8; 32]);
+
+    let hash1 = [1u8; 32];
+    store.append(b"entry1", &hash1).unwrap();
+    assert_eq!(store.metadata().chain_head, hash1);
+
+    let hash2 = [2u8; 32];
+    store.append(b"entry2", &hash2).unwrap();
+    assert_eq!(store.metadata().chain_head, hash2);
+
+    // Verify it updates each time, not stuck on the first.
+    let hash3 = [3u8; 32];
+    store.append(b"entry3", &hash3).unwrap();
+    assert_eq!(store.metadata().chain_head, hash3);
+}

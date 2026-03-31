@@ -206,7 +206,7 @@ Remaining unit test gaps across all ecosystems. See `TEST-STRATEGY.md` §4.1–4
 | T1 | Critical Gaps (P0) | 4 | — | **Complete** |
 | T2 | Runtime + Highway Transport (P1) | 3 | T1.4 | **Complete** |
 | T3 | Integration Tests (P2) | 3 | T1 | **Complete** |
-| T4 | End-to-End Tests (P2) | 5 | T3, T4.1 | Pending |
+| T4 | End-to-End Tests (P2) | 5 | T3, T4.1 | **Complete** |
 | T5 | Hardening (P3) | 3 | T1–T2 | Pending |
 | | **Total** | **33** | | |
 

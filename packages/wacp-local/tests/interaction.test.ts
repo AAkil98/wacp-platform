@@ -69,4 +69,33 @@ describe("InteractionStream", () => {
     const s = new InteractionStream();
     expect(s.flush()).toEqual([]);
   });
+
+  it("classifies empty input as goal", () => {
+    expect(stream.classify("").type).toBe("goal");
+  });
+
+  it("classifies whitespace-only as goal", () => {
+    expect(stream.classify("   ").type).toBe("goal");
+  });
+
+  it("classifies very long input as goal", () => {
+    const long = "implement " + "x".repeat(10_000);
+    expect(stream.classify(long).type).toBe("goal");
+  });
+
+  it("classifies 'y' as approval with pending gate", () => {
+    const gates: Gate[] = [{ id: "gate-1", operation: "file_write" }];
+    expect(stream.classify("y", gates).type).toBe("approval");
+  });
+
+  it("classifies 'n' as approval with pending gate", () => {
+    const gates: Gate[] = [{ id: "gate-1", operation: "file_write" }];
+    expect(stream.classify("n", gates).type).toBe("approval");
+  });
+
+  it("injection with multiword workspace id", () => {
+    const result = stream.classify("@my-workspace-123: do something");
+    expect(result.type).toBe("injection");
+    expect(result.targetWorkspace).toBe("my-workspace-123");
+  });
 });

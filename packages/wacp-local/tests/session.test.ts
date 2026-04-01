@@ -78,4 +78,30 @@ describe("LocalSession", () => {
     expect(session.autonomy.check("file_read")).toBe(true); // assisted preset
     expect(session.autonomy.check("file_write")).toBe(false);
   });
+
+  it("creates unique IDs across sessions", async () => {
+    const s1 = await LocalSession.create(defaultConfig);
+    const s2 = await LocalSession.create(defaultConfig);
+    expect(s1.id).not.toBe(s2.id);
+  });
+
+  it("rejects suspend from open (exhaustive invalid transitions)", async () => {
+    const s = await LocalSession.create(defaultConfig);
+    // open → suspended is invalid
+    await expect(s.suspend()).rejects.toThrow("Cannot transition");
+  });
+
+  it("rejects activate from active", async () => {
+    const s = await LocalSession.create(defaultConfig);
+    await s.activate();
+    // active → active is not a defined transition
+    await expect(s.activate()).rejects.toThrow("Cannot transition");
+  });
+
+  it("preserves config across state changes", async () => {
+    const s = await LocalSession.create(defaultConfig);
+    await s.activate();
+    expect(s.config.workingDir).toBe("/tmp/test-workspace");
+    expect(s.config.autonomyPreset).toBe("assisted");
+  });
 });

@@ -87,4 +87,43 @@ describe("LocalResources", () => {
     const restricted = new LocalResources(tmpDir, new AutonomyManager("supervised"));
     await expect(restricted.exec("echo hi")).rejects.toThrow(AutonomyError);
   });
+
+  // --- Path edge cases ---
+
+  it("resolves dot path within working dir", () => {
+    const resolved = resources.resolvePath("./src/main.ts");
+    expect(resolved).toBe(path.join(tmpDir, "src/main.ts"));
+  });
+
+  it("rejects double-dot traversal in subdirectory", () => {
+    expect(() => resources.resolvePath("src/../../etc/passwd")).toThrow(
+      "escapes working directory",
+    );
+  });
+
+  // --- deleteFile ---
+
+  it("deleteFile removes existing file when explicitly granted", async () => {
+    autonomy.grant("file_delete"); // explicitly grant destructive op
+    await fs.writeFile(path.join(tmpDir, "to-delete.txt"), "bye");
+    await resources.deleteFile("to-delete.txt");
+    await expect(fs.access(path.join(tmpDir, "to-delete.txt"))).rejects.toThrow();
+  });
+
+  it("deleteFile throws when not trusted", async () => {
+    const assisted = new LocalResources(tmpDir, new AutonomyManager("assisted"));
+    await expect(assisted.deleteFile("x.txt")).rejects.toThrow(AutonomyError);
+  });
+
+  // --- Git operations ---
+
+  it("gitStatus throws when not trusted", async () => {
+    const supervised = new LocalResources(tmpDir, new AutonomyManager("supervised"));
+    await expect(supervised.gitStatus()).rejects.toThrow(AutonomyError);
+  });
+
+  it("gitStage throws when not trusted", async () => {
+    const assisted = new LocalResources(tmpDir, new AutonomyManager("assisted"));
+    await expect(assisted.gitStage(["file.txt"])).rejects.toThrow(AutonomyError);
+  });
 });

@@ -196,8 +196,43 @@ mod tests {
             backoff: BackoffStrategy::Exponential,
             ..Default::default()
         };
-        // 2^63 would overflow — should saturate
+        // 2^63 would overflow — should saturate at 1 hour cap
         let delay = compute_delay(&config, 63);
-        assert!(delay.as_millis() > 0); // didn't panic
+        assert!(delay.as_millis() > 0);
+        assert!(delay.as_millis() <= 3_600_000 + 900_000); // 1hr + 25% jitter
+    }
+
+    #[test]
+    fn delay_capped_at_one_hour() {
+        let config = RetryConfig {
+            base_delay_ms: 7_200_000, // 2 hours
+            backoff: BackoffStrategy::Fixed,
+            ..Default::default()
+        };
+        let delay = compute_delay(&config, 0);
+        // Should be capped at 3_600_000 ± 25% jitter
+        assert!(delay.as_millis() <= 4_500_000); // 3.6M + 25%
+    }
+
+    #[test]
+    fn both_retry_after_and_computed_zero() {
+        let result = apply_retry_after(Duration::ZERO, Some(0), &RetryConfig::default());
+        assert_eq!(result, Duration::ZERO);
+    }
+
+    #[test]
+    fn should_retry_all_transient_codes() {
+        for code in [408, 429, 500, 502, 503] {
+            let err = LlmError::from_status(code, "test");
+            assert!(should_retry(&err), "status {code} should be retryable");
+        }
+    }
+
+    #[test]
+    fn should_not_retry_all_permanent_codes() {
+        for code in [400, 401, 403, 404] {
+            let err = LlmError::from_status(code, "test");
+            assert!(!should_retry(&err), "status {code} should NOT be retryable");
+        }
     }
 }

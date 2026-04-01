@@ -321,4 +321,41 @@ mod tests {
         let result = filter.filter("Project: proj-abc12345");
         assert!(result.output.contains("[REDACTED_PROJECT]"));
     }
+
+    // --- Edge cases ---
+
+    #[test]
+    fn filter_with_unicode_content() {
+        let filter = ContentFilter::with_defaults();
+        let input = "Hello 🌍! User admin@example.com sent a résumé";
+        let result = filter.filter(input);
+        assert!(result.output.contains("[REDACTED_EMAIL]"));
+        assert!(result.output.contains("Hello 🌍"));
+        assert!(result.output.contains("résumé"));
+    }
+
+    #[test]
+    fn filter_with_overlapping_patterns() {
+        let filter = ContentFilter::with_defaults();
+        // Email inside an API key-like string — both should be caught
+        let input = "key-abcdefghijklmnopqrstuvwx user@test.com";
+        let result = filter.filter(input);
+        assert!(result.redactions.len() >= 2);
+    }
+
+    #[test]
+    fn filter_empty_string() {
+        let filter = ContentFilter::with_defaults();
+        let result = filter.filter("");
+        assert_eq!(result.output, "");
+        assert!(result.redactions.is_empty());
+    }
+
+    #[test]
+    fn filter_preserves_newlines_and_whitespace() {
+        let filter = ContentFilter::with_defaults();
+        let input = "line 1\n\n  line 3\n\tindented";
+        let result = filter.filter(input);
+        assert_eq!(result.output, input);
+    }
 }

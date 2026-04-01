@@ -224,4 +224,31 @@ mod tests {
         });
         assert!(limiter.is_enabled());
     }
+
+    #[test]
+    fn record_zero_tokens_repeatedly() {
+        let limiter = RateLimiter::new(RateLimitConfig {
+            max_requests_per_window: 0,
+            max_tokens_per_window: 100,
+            window: Duration::from_secs(60),
+        });
+        for _ in 0..50 {
+            limiter.check(0).unwrap();
+            limiter.record(0);
+        }
+        // Token total is 0, should still pass
+        limiter.check(100).unwrap();
+    }
+
+    #[test]
+    fn single_request_exceeds_token_limit() {
+        let limiter = RateLimiter::new(RateLimitConfig {
+            max_requests_per_window: 0,
+            max_tokens_per_window: 100,
+            window: Duration::from_secs(60),
+        });
+        // First request with more tokens than the limit
+        let result = limiter.check(200);
+        assert!(result.is_err());
+    }
 }

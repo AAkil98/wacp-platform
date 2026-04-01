@@ -43,6 +43,12 @@ clap = { version = "4", features = ["derive"] }
 # Error handling
 thiserror = "2"
 
+# JSON Schema
+jsonschema = "0.28"
+
+# Async utilities
+tokio-util = "0.7"
+
 # Observability
 tracing = "0.1"
 prometheus = "0.14"

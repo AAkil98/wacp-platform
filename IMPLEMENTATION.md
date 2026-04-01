@@ -1,7 +1,7 @@
 # WACP — Implementation Plan
 
 ```yaml
-created: 2026-03-28
+created: 2026-04-01
 status: active
 authors:
   - Akil Abderrahim
@@ -10,205 +10,321 @@ authors:
 
 ---
 
-## Current State
+## Baseline
 
-**Phases 0–19 complete.** 12 Rust crates, 687 Rust tests, 14 Python tests, 105 TypeScript tests. Runtime binary, coordinator decision engine, agent migration, Dockerfile, systemd unit. Highway UI complete: trail streaming with filtering, workspace tree with detail panel, gate management (countdown, batch, modify), escalation handling (abort confirm, delegate, feedback), notification system, envelope injection with RPC, autonomy preset configuration (read-only). All coding specs archived.
+**Phases 0–19 + T1–T5: complete.** Protocol runtime fully implemented and tested. 1,192 tests across 3 ecosystems (947 Rust, 181 TypeScript, 64 Python). 12 Rust crates, Python agent SDK, TypeScript Highway UI. See `SEED-CONTEXT.md` for full state.
 
-Test counts by crate:
+Everything below builds on this runtime. The runtime is the OS-equivalent — what follows is middleware, applications, and ecosystem.
 
-| Crate | Tests | Modules | Role |
-|-------|-------|---------|------|
-| wacp-types | 39 | 11 | Protocol enums, ID newtypes, structs |
-| wacp-clock | 28 | 4 | HLC timestamps |
-| wacp-fsm | 50 | 4 | Workspace/envelope/task FSMs |
-| wacp-taxonomy | 36 | 5 | YAML/JSON taxonomy loader |
-| wacp-permissions | 38 | 2 | Permission matrix, port rights |
-| wacp-trail | 78 | 12 | Trail storage, snapshots, tiered storage |
-| wacp-workspace | 44 | 3 | Workspace actor, 9 components |
-| wacp-coordinator | 279 | 15 | Decision engine, migration, E2E |
-| wacp-transport | 25 | 10 | gRPC, auth, rate limiter |
-| wacp-recovery | 14 | 2 | Trail replay, snapshot recovery |
-| wacp-runtime | 53 | 9 | Config, CLI, TLS, metrics, health |
-| wacp-sdk | 3 | 6 | Rust agent SDK |
-| **Total** | **687** | **83** | |
+```
+Ecosystem    (domain verticals — parameterize the platform)
+─────────────────────────────────────────────────────── ecosystem boundary
+Applications (CLI, SDK, API, IDE, dashboard, bridge)
+─────────────────────────────────────────────────────── application boundary
+Middleware   (7 frameworks — contracts for building on the runtime)
+─────────────────────────────────────────────────────── middleware boundary
+WACP Runtime (12 Rust crates + proto + protocol specs)     ← DONE
+```
+
+See `LAYER-MAPPING.md` for the full architectural mapping from mada-os.
 
 ---
 
-## Coverage Audit (2026-03-28)
+## Phase 20 — Tool Framework (M5)
 
-Systematic review of all 83 modules against their test suites. Gaps ranked by risk.
+Foundation for all agent tool use. No middleware dependencies — attaches directly to runtime.
 
-### Critical — Low coverage, high complexity
+### Specs
 
-| Crate | Gap | Risk |
-|-------|-----|------|
-| wacp-types | 12 struct types lack serde roundtrip tests; TrailEntry, GateEvent, EscalationEvent untested | Serialization bugs propagate to every crate |
-| wacp-workspace | 10 of 16 CoordinatorCommand handlers untested in actor context (Suspend, Resume, GrantVisibility, UpdateBudget, GracefulTermination, all 5 integration/conflict commands) | Coordinator sends commands the actor has never been tested to handle |
-| wacp-transport | PskAuthenticator.authenticate_agent/human — zero tests; AuthRateLimiter — zero tests; gRPC handlers untested | Auth bypass or rate limiter failure in production |
-| wacp-recovery | recover_with_snapshot() — only empty trail tested; parse_workspace_state/parse_task_status — untested string matching; corrupted snapshot fallback not verified | Incorrect recovery after crash |
+| # | Spec | Scope |
+|---|------|-------|
+| 20.0 | `impl/tool-framework.md` | Descriptor schema, execution contract, packaging, discovery, sandboxing, resilience. JSON Schema for inputs/outputs. Lifecycle hooks. Circuit breaker state machine. Concurrency model. |
 
-### Important — Moderate coverage, missing edge cases
+### Tasks
 
-| Crate | Gap | Risk |
-|-------|-----|------|
-| wacp-trail | TierManager transitions (hot→warm, warm→cold) error paths; FileSnapshotStorage corruption edge cases; compaction module untested | Data loss on tier transition or compaction |
-| wacp-coordinator | Handler error paths (PermissionDenied, ValidationFailed); integration merge error paths; migration rollback with concurrent abort | Incorrect error handling under load |
-| wacp-permissions | Derived role inheritance chain; coordinator-only capability enforcement; human-origin bypass scope | Permission escalation |
-| wacp-clock | Physical overflow at u64::MAX; logical overflow in recv(); SystemTimeSource error path | Clock regression after long uptime |
-
-### Acceptable — Good coverage, minor gaps
-
-| Crate | Gap | Risk |
-|-------|-----|------|
-| wacp-fsm | All transitions tested; missing concurrent transition stress test | Low — FSM is pure functions |
-| wacp-taxonomy | Version mismatch handling; reserved name collision edge cases | Low — validated at startup |
-
----
-
-## Phase 18 — Coverage Hardening
-
-Goal: bring every crate to near-complete branch coverage. Two sub-phases by crate boundary.
-
-### Phase 18a — Core Crates
-
-Pure logic crates with no IO dependencies. Tests are fast and deterministic.
-
-| # | Task | Crate | Tests to add | Target |
-|---|------|-------|-------------|--------|
-| 18a.1 | Type serde roundtrips | wacp-types | Serde roundtrip for all 12 struct types (Envelope, Checkpoint, Signal, TrailEntry, GateEvent, EscalationEvent, ProtocolError, ResourceUsage, ResourceBudget, Task, PortRight, Originator). Default value verification. Display/Debug impl coverage. Empty/zero/max boundary values. | Every public type has a serialize→deserialize test |
-| 18a.2 | FSM exhaustive coverage | wacp-fsm | Exhaustive transition table: every (state, trigger) pair tested — valid transitions return correct state, invalid transitions return IllegalTransition. Property: terminal states reject all triggers. Property: no transition produces an undefined state. | 100% of the transition table |
-| 18a.3 | Clock edge cases | wacp-clock | Physical overflow at u64::MAX. Logical overflow at u16::MAX in recv(). Timestamp::ZERO successor. Byte encoding at boundary values (0, MAX). send() explicit test. | All arithmetic edge cases covered |
-| 18a.4 | Permission hardening | wacp-permissions | Derived role inheritance (extends + add/remove capabilities). Coordinator-only capability enforcement (no derived role acquires create_workspace, perform_integration). Human-origin bypass scope (does NOT bypass signal/checkpoint permissions). Port rights: SendOnce consumption prevents reuse. | All permission paths exercised |
-| 18a.5 | Taxonomy edge cases | wacp-taxonomy | Version mismatch (taxonomy.protocol_version ≠ runtime). Duplicate envelope type name. Reserved name collision in derived roles. Empty taxonomy (no custom types). Malformed YAML/JSON (syntax errors). | All validation checks tested |
-| 18a.6 | Workspace command coverage | wacp-workspace | Actor tests for: Suspend → Suspended, Resume → Active, GrantVisibility (verify additive), UpdateBudget (verify replacement), GracefulTermination (placeholder behavior). IntegrationSucceeded/IntegrationFailed/ConflictDetected/ConflictResolved/ConflictUnresolvable actor transitions. Snapshot roundtrip: capture → serialize → deserialize → restore → verify all fields. pop_inbox on empty. Archive from Closed (not just Failed). | Every CoordinatorCommand variant tested in actor context |
-| 18a.7 | Coordinator error paths | wacp-coordinator | Handler: bind to non-existent workspace. send_envelope with revoked port right. emit_signal for non-existent workspace. create_checkpoint for non-existent workspace. inject_envelope to non-existent target. gate_response for unknown gate. Migration: start with non-existent workspace in tree. bind with correct identity but workspace not in Migrating state. Topology: create_workspace with duplicate ID. terminate_workspace cascade with deep tree (3+ levels). Port rights: transfer expired right. consume non-SendOnce. | All error branches exercised |
-
-**Depends on:** Nothing — all pure logic.
-**Exit criteria:** `cargo test` for wacp-types, wacp-clock, wacp-fsm, wacp-taxonomy, wacp-permissions, wacp-workspace, wacp-coordinator all pass. Every public method has at least one test. Every error variant is triggered by at least one test.
-
-### Phase 18b — Boundary Crates
-
-Crates with IO, network, or filesystem dependencies. Some require protoc.
-
-| # | Task | Crate | Tests to add | Target |
-|---|------|-------|-------------|--------|
-| 18b.1 | Trail error paths | wacp-trail | FileTrailStorage: append to read-only dir → error. Corrupted segment header → detected on scan. Segment rotation at exact max size. FileCheckpointStorage: read nonexistent hash → None. Store duplicate hash → idempotent. FileSnapshotStorage: partial file (< 32 bytes) → error. Zero-byte file → error. TierManager: hot→warm with recovery window anchor blocking. Compaction: merge two warm segments. Delete with trail entry recorded first. | All error paths return correct errors |
-| 18b.2 | Auth + rate limiter | wacp-transport | PskAuthenticator: register_agent → authenticate → success. Invalid token → InvalidToken. Valid token, wrong workspace → WorkspaceMismatch. revoke_agent → authenticate → InvalidToken. register_human → authenticate → success. AuthRateLimiter: under limit → Ok. At limit → RateLimited. Window expiry → Ok again. Disabled (0) → always Ok. | Auth and rate limiter fully tested |
-| 18b.3 | Recovery paths | wacp-recovery | recover_with_snapshot: valid snapshot + trail delta → correct state. Corrupted snapshot JSON → fallback to full replay (verify same result). Snapshot sequence in middle of trail → replay from anchor. Empty trail + valid snapshot → snapshot state used. Multiple workspace state changes → last state wins. Migration interrupted (migration_started, no migration_completed) → workspace Failed. | All recovery scenarios produce correct state |
-| 18b.4 | Runtime config + CLI | wacp-runtime | RuntimeConfig: all 47 fields have defaults. Environment variable overrides (WACP_SERVER__AGENT_LISTEN). Unknown field → deny_unknown_fields error. Validation: TLS enabled but cert missing → error. CLI: `serve` default subcommand. `validate` with valid config → exit 0. `validate` with invalid config → exit 1. `defaults` prints YAML. | Config validation complete, CLI paths tested |
-
-**Depends on:** Phase 18a. 18b.2 and 18b.4 require protoc for compilation.
-**Exit criteria:** All tests pass. Error paths return correct error types. No silent failure — every IO error is either handled or propagated.
-
----
-
-## Phase 19 — Highway UI
-
-TypeScript SPA for human-in-the-loop interaction. Separate project, gRPC-Web client.
-
-| # | Task | Output | Spec source |
+| # | Task | Target | Deliverables |
 |---|------|--------|-------------|
-| 19.1 | TypeScript scaffold | Vite + React 19, `@bufbuild/protobuf` + `@connectrpc/connect-web` codegen from `.proto` files, gRPC-Web transport layer, Zustand store (6 slices), Tailwind CSS, Vitest (21 tests), dev server with proxy, production build (static files). All panel components with initial implementations. | highway-ui.md §2–4 |
-| 19.2 | Trail viewer + workspace tree | Real-time trail streaming via `StreamTrail`, filtering by workspace/event type/time range, workspace tree visualization, workspace detail view (state, role, directive, checkpoint register, resource meter) | highway-ui.md §5–8 |
-| 19.3 | Gate + escalation management | Gate event stream via `StreamGates`, approval/reject/modify UI, escalation event stream, escalation response UI, notification system for pending actions | highway-ui.md §9–11 |
-| 19.4 | Envelope injection + autonomy | Injection form (target workspace, envelope type, payload, priority), validation, autonomy presets (full-auto, supervised, manual), preset switching at run-time | highway-ui.md §12–14 |
+| 20.1 | Core types + execution | `crates/wacp-tools/` | `ToolDescriptor`, `Capability`, `ToolPackage`, `ToolHandler` trait, `ToolContext`, `ToolError`. Input validation (JSON Schema). Timeout enforcement with `CancellationToken`. Result size limit. Structured error propagation. |
+| 20.2 | Discovery + registry | `crates/wacp-tools/` | Package scanner, descriptor validation, config resolution, `ToolRegistry` (register/lookup/list). Handler-descriptor alignment check. Graceful load failure (skip broken tools). |
+| 20.3 | Resilience | `crates/wacp-tools/` | Per-tool circuit breaker (closed/open/half-open). Concurrency limiter (max concurrent + queue + backpressure). Timeout hierarchy (capability < invocation < framework max). |
+| 20.4 | Sandboxing | `crates/wacp-tools/` | Three isolation levels: none (in-process), process (child process + stdio), container (Docker). `SandboxPolicy` per-tool config. `sideEffects: true` defaults to process isolation. |
+| 20.5 | Python bindings | `sdk-python/src/wacp/tools/` | `ToolDescriptor`, `ToolPackage`, `tool_handler` decorator, `ToolContext`. Calls Rust via gRPC or in-process FFI. |
+| 20.6 | TypeScript bindings | `packages/wacp-tools/` | `ToolDescriptor`, `ToolPackage`, handler registration, `ToolContext`. Used by local-sdk and CLI. |
 
-**Depends on:** Phase 13 (highway gRPC). Independent of Phase 18 (testing).
-**Exit criteria:** UI connects to runtime via gRPC-Web, streams trail in real time, displays workspace tree, handles gate approvals and escalations, allows envelope injection. Static build deployable independently.
-
----
-
-## Phase T1 — Critical Gaps (P0)
-
-Fill the three critically undertested crates and fix CI. See `TEST-STRATEGY.md` §4.9, §4.12, §6.2, §9 for per-test specifications.
-
-| # | Task | Crate / Target | Tests to add | Target total |
-|---|------|----------------|-------------|-------------|
-| T1.1 | wacp-sdk unit tests | wacp-sdk (3 → 50) | Agent properties (6), signal methods (8), checkpoint/builder (5), envelope/builder (5), inbox/commands streams (4), query_trail (2), disconnect (1), error handling (3), concurrent ops (2), reconnection (1). All tests use `InProcessTransport` with test coordinator. | +47 |
-| T1.2 | wacp-transport unit tests | wacp-transport (25 → 70) | `AgentServiceImpl` 8 RPCs (16 tests), `HighwayServiceImpl` 12 RPCs (17 tests), `PskAuthenticator` (3), `AuthRateLimiter` (3), TLS (2), error mapping (1), proto roundtrip (3). | +45 |
-| T1.3 | Python SDK agent tests | sdk-python (14 → 48) | `agent.py` methods (27 — connect, properties, signal ×11, checkpoint, envelope, inbox, commands, query_trail, disconnect, errors, async iteration), `proto/v1.py` (5 — message construction, enum accessibility), `types.py` extensions (7 — round-trips). All use mock gRPC channel. | +34 |
-| T1.4 | CI pipeline | `.github/workflows/ci.yml` | Add TypeScript job (`pnpm install`, typecheck, test, build), Python job (matrix 3.11/3.12/3.13, `pytest`), proto job (`protoc`, `buf lint`, codegen verification). Infrastructure only. | 0 (infra) |
-
-**Depends on:** Nothing — all crates compile, tests are additive.
-**Exit criteria:** `cargo test -p wacp-sdk` (50 pass), `cargo test -p wacp-transport` (70 pass), `pytest sdk-python/tests/` (48 pass), CI runs all three ecosystems. Cumulative: 806 → 932.
+**Depends on:** Runtime (exists).
+**Exit criteria:** Rust crate compiles with full API. Tool package loads, validates, executes, times out, circuit-breaks. Python + TS bindings pass roundtrip tests.
 
 ---
 
-## Phase T2 — Runtime + Highway Transport (P1)
+## Phase 21 — LLM Adapters (M6)
 
-Fill runtime config/health/TLS gaps and highway-ui transport + remaining components. See `TEST-STRATEGY.md` §4.11, §5.2, §5.3 for per-test specifications.
+Provider-agnostic LLM inference. Raw HTTP, no provider SDKs.
 
-| # | Task | Crate / Target | Tests to add | Target total |
-|---|------|----------------|-------------|-------------|
-| T2.1 | Runtime config, health, metrics, TLS | wacp-runtime (53 → 85) | RuntimeConfig YAML loading (3), env overrides (2), validation (3), deny unknown (1), CLI validate/defaults (3), health server (3), metrics (2), logging (2), TLS (3), config merge (2), shutdown (2), recovery integration (3), multi-worker (3). | +32 |
-| T2.2 | Highway-UI transport | highway-ui transport (18 → 40) | `client.ts` (3), `session.ts` (5 — connect/disconnect/invalid token/reconnection/max retries), `rpcs.ts` (5 — respondToGate UUID, respondToEscalation abort/delegate, injectEnvelope), streams edge cases (2), proto conversion (2), error classification (5). | +22 |
-| T2.3 | Highway-UI layout + components | highway-ui components (58 → 85) | `MainLayout` (2), `LoginScreen` (4), `Sidebar` (3), `ConnectionBanner` (5), `TaskGraphView` (4), `CheckpointViewer` (5), `App` routing (3), existing component extensions (3). | +29 |
+### Specs
 
-**Depends on:** T1.4 (CI must run TS/Python tests).
-**Exit criteria:** `cargo test -p wacp-runtime` (85 pass), `pnpm test` in highway-ui (155+ pass). Cumulative: 932 → 997.
+| # | Spec | Scope |
+|---|------|-------|
+| 21.0 | `impl/llm-adapters.md` | Adapter trait, provider implementations, streaming protocol, cost model, retry/circuit-breaker/rate-limiting, health monitoring. Token budget enforcement. Tool-use message format. |
 
----
+### Tasks
 
-## Phase T3 — Integration Tests (P2)
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 21.1 | Adapter trait + types | `crates/wacp-llm/` | `LlmAdapter` trait (`complete`, `complete_stream`, `models`, `health`). `CompletionResult`, `TokenUsage`, `Cost`, `ToolCall`, `ModelInfo`, `ProviderHealth`. Message types (`system`, `user`, `assistant`, `tool_result`). |
+| 21.2 | Anthropic provider | `crates/wacp-llm/` | Claude Messages API via `reqwest`. Streaming SSE parser. Tool-use request/response mapping. Cost calculation from model pricing table. |
+| 21.3 | OpenAI + generic providers | `crates/wacp-llm/` | Chat Completions API. Function-calling mapping. Generic OpenAI-compatible provider (configurable base URL — covers Ollama, llama.cpp, vLLM, any OpenAI-compatible endpoint). |
+| 21.4 | Resilience layer | `crates/wacp-llm/` | Retry with exponential backoff + jitter. Error classification (transient: 429/500/502/503, permanent: 400/401/403). Per-provider circuit breaker. Token bucket rate limiter. Per-request timeout with `AbortSignal`. |
+| 21.5 | Cost tracking | `crates/wacp-llm/` | Per-request cost from usage + model pricing. Aggregation: per-workspace, per-session. Integration with runtime `BudgetEnforcer` (inference dimension). |
+| 21.6 | Python package | `sdk-python/src/wacp/llm/` | `LlmAdapter` protocol, `AnthropicAdapter`, `OpenAiAdapter`, `GenericAdapter`. Async streaming. Raw `httpx` / `aiohttp`. |
+| 21.7 | TypeScript package | `packages/wacp-llm/` | `LlmAdapter` interface, provider implementations. Raw `fetch()`. SSE stream parsing. Used by local-sdk and CLI. |
 
-Cross-boundary tests using real implementations. See `TEST-STRATEGY.md` §7 for per-suite specifications.
-
-| # | Task | Location | Tests to add | Target total |
-|---|------|----------|-------------|-------------|
-| T3.1 | Rust cross-crate integration | `tests/` (workspace root) | 10 suites: trail_recovery (5), taxonomy_permissions (4), fsm_workspace (4), coordinator_workspace (6), coordinator_trail (4), transport_coordinator (5), runtime_assembly (4), sdk_transport (5), migration_e2e (3), gate_lifecycle (3). Real implementations, no mocks. | +43 |
-| T3.2 | TypeScript integration | `highway-ui/src/__integration__/` | 5 suites: store_transport (4), session_lifecycle (3), injection_flow (2), gate_response_flow (2), escalation_feedback (2). Mocked gRPC, real store + components. | +13 |
-| T3.3 | Python integration | `sdk-python/tests/integration/` | 3 suites: agent_lifecycle (3), stream_handling (3), error_propagation (2). Mock gRPC server, real agent + proto. | +8 |
-
-**Depends on:** T1 (crate-level tests must pass first).
-**Exit criteria:** `cargo test --test '*'` (43 pass), TS integration suite (13 pass), Python integration suite (8 pass). Cumulative: 997 → 1,061.
+**Depends on:** Runtime (exists). Independent of Phase 20.
+**Exit criteria:** All 3 providers pass completion + streaming tests. Circuit breaker triggers on repeated failures. Cost tracking matches manual calculation. Python + TS pass roundtrip tests.
 
 ---
 
-## Phase T4 — End-to-End Tests (P2)
+## Phase 22 — Agent SDK v2 + Coordinator SDK (M1, M2)
 
-Full-system tests across language boundaries. Real Rust runtime, real gRPC, real agents. See `TEST-STRATEGY.md` §8 for scenario specifications.
+Ergonomic workspace context for agents. Client-facing coordinator access.
 
-| # | Task | Location | Tests to add | Target total |
-|---|------|----------|-------------|-------------|
-| T4.1 | E2E test harness | `tests/e2e/` | `wacp-e2e` binary: starts runtime in-process, connects agents via gRPC, exercises highway via gRPC-Web/direct gRPC. Infrastructure only. | 0 (infra) |
-| T4.2 | Agent lifecycle + envelope exchange | `tests/e2e/` | E1 single worker, E2 multi-worker parallel, E3 agent disconnect, E4 worker-to-worker envelope, E5 human injection, E6 blocked send. | +6 |
-| T4.3 | Gate + escalation flows | `tests/e2e/` | E7 gate approval, E8 gate rejection, E9 gate timeout, E10 escalation feedback, E11 escalation abort, E12 escalation delegate. | +6 |
-| T4.4 | Failure, recovery, migration | `tests/e2e/` | E13 cascade failure, E14 budget exhaustion, E15 crash recovery, E16 agent migration, E17 migration failure. | +5 |
-| T4.5 | Integration pipeline | `tests/e2e/` | E18 direct merge, E19 conflict detection + resolution. | +2 |
+### Specs
 
-**Depends on:** T3 (integration tests must pass first), T4.1 (harness).
-**Exit criteria:** `cargo test --test 'e2e_*'` (19 pass). Cumulative: 1,061 → 1,080.
+| # | Spec | Scope |
+|---|------|-------|
+| 22.0a | `impl/agent-sdk-v2.md` | `AgentContext` contract (20+ methods), tool integration (M5), directive/checkpoint/signal lifecycle, Rust + Python surface. |
+| 22.0b | `impl/coordinator-sdk.md` | `CoordinatorContext` contract (15+ methods), new proto RPCs, goal/decompose/dispatch/integrate lifecycle, Rust + Python surface. |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 22.1 | Rust AgentContext | `crates/wacp-sdk/` (enrich) | `AgentContext` wrapping existing `Agent`. Methods: `directive()`, `checkpoint()`, `complete()`, `blocked()`, `escalate()`, `query()`, `inbox()`, `send()`, `tool()`, `tools()`, `budget()`, `trail()`, `visible_workspaces()`, `read_workspace()`. Integrates M5 `ToolRegistry` for `tool()`/`tools()`. |
+| 22.2 | Python AgentContext | `sdk-python/src/wacp/agent.py` (enrich) | Same contract as Rust, Pythonic idiom. `async/await` for blocking ops. Context manager for lifecycle. |
+| 22.3 | Coordinator proto RPCs | `proto/coordinator.proto` (new) | New service: `CoordinatorService`. RPCs: `SubmitGoal`, `Decompose`, `GetReadyTasks`, `Dispatch`, `AbortWorkspace`, `SuspendWorkspace`, `ResumeWorkspace`, `SendDirective`, `SendFeedback`, `GetSignals`, `StreamSignals`, `TriggerIntegration`, `Escalate`, `GetAllocatable`. |
+| 22.4 | Coordinator gRPC server | `crates/wacp-transport/` | Implement `CoordinatorService` server-side, bridging RPCs to `wacp-coordinator` internals. |
+| 22.5 | Rust CoordinatorContext | `crates/wacp-coordinator-sdk/` (new) | `CoordinatorContext` struct. Wraps gRPC client for `CoordinatorService`. Methods map 1:1 to proto RPCs. |
+| 22.6 | Python CoordinatorContext | `sdk-python/src/wacp/coordinator.py` (new) | Same contract, async Python. |
+
+**Depends on:** Phase 20 (tool-framework — for `tool()`/`tools()` in AgentContext).
+**Exit criteria:** AgentContext passes all 20 method tests in Rust + Python. CoordinatorContext passes all 15 method tests. New proto compiles and serves.
 
 ---
 
-## Phase T5 — Hardening (P3)
+## Phase 23 — Security + Transport Extensions (M7, M4)
 
-Remaining unit test gaps across all ecosystems. See `TEST-STRATEGY.md` §4.1–4.8, §5.1, §5.4, §6.1 for per-test specifications.
+Cross-cutting security contract. Non-gRPC transport bindings.
 
-| # | Task | Crate / Target | Tests to add | Target total |
-|---|------|----------------|-------------|-------------|
-| T5.1 | Remaining Rust unit tests | 9 crates | wacp-types (+6), wacp-clock (+5), wacp-fsm (+5), wacp-taxonomy (+6), wacp-permissions (+7), wacp-trail (+12), wacp-workspace (+16), wacp-coordinator (+31 — handler signals/envelopes, port rights, migration, integration queue, dispatch errors, deep cascade, gate timeout, concurrent creation, EventBus), wacp-recovery (+11). | +71 |
-| T5.2 | Remaining highway-ui unit tests | highway-ui | Store edge cases (+5 — notification slice, cap boundary, non-existent gate), notifications (+4 — browser notification focus/permission, escalation double-tone, AudioContext fallback). | +9 |
-| T5.3 | Remaining Python unit tests | sdk-python | `types.py` extensions (+7 — `Signal.to_proto` all 11 types, `Priority.to_proto` all 3, round-trips). | +7 |
+### Specs
 
-**Depends on:** T1–T2 (foundational coverage in place).
-**Exit criteria:** All per-module targets from `TEST-STRATEGY.md` §4–6 met. Cumulative: 1,080 → 1,167.
+| # | Spec | Scope |
+|---|------|-------|
+| 23.0a | `impl/security.md` | Trust boundaries (4), authorization model (3 tiers), secret management, content filtering (PII redaction, secret scanning), audit events. |
+| 23.0b | `impl/transport-ext.md` | REST gateway (HTTP verbs + paths + SSE), WebSocket binding (JSON-RPC), auth providers (API key, OAuth/OIDC, session tokens). |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 23.1 | Content filter | `crates/wacp-security/` (new) | `ContentFilter` trait. PII redaction at LLM boundary (regex patterns + configurable rules). Secret scanning in checkpoint payloads. Per-workspace filter policy. |
+| 23.2 | Secret management | `crates/wacp-security/` | `SecretStore` trait. Config-injected secrets (LLM API keys, tool credentials). Never logged, never in trail. Session-scoped auth tokens with expiry + rotation. |
+| 23.3 | Audit events | `crates/wacp-security/` | Auth events (login/failure/rate-limit/token-refresh) as trail entries. Tool invocation audit (input hash, output hash, duration, error). Extends `wacp-trail` event types. |
+| 23.4 | REST gateway | `crates/wacp-transport/` | HTTP server (`axum` or `hyper`). Maps proto operations to REST endpoints. SSE for event streaming. JSON request/response. Shares auth with gRPC. |
+| 23.5 | WebSocket binding | `crates/wacp-transport/` | WebSocket upgrade from HTTP. JSON-RPC framing. Bidirectional event channel. Connection lifecycle (open/ping/close). |
+| 23.6 | Auth providers | `crates/wacp-transport/` | `ApiKeyAuthenticator` (lookup + rate limit). `OAuthAuthenticator` (OIDC token validation, JWKS). `SessionTokenAuthenticator` (stateful, expiry, renewal). All implement existing `Authenticator` trait. |
+
+**Depends on:** Phase 22 (SDKs define what transport exposes).
+**Exit criteria:** Content filter redacts PII in test payloads. REST gateway serves all proto operations. WebSocket streams events. All auth providers pass positive + negative tests.
+
+---
+
+## Phase 24 — Local SDK (M3)
+
+Session = root workspace. The composition layer for CLI, IDE, desktop.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 24.0 | `impl/local-sdk.md` | Session lifecycle (4 states), interaction stream classification, autonomy manager (dynamic trust surface), local resources (fs/shell/git), self-orchestration model, boot profile, session context + checkpoints, nested sessions. |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 24.1 | Session lifecycle | `packages/wacp-local/` (new, TypeScript) | `LocalSession` class. States: OPEN → ACTIVE → SUSPENDED → CLOSED. Maps to root workspace states. Session create (boot runtime or connect to existing), close (graceful shutdown). |
+| 24.2 | Interaction stream | `packages/wacp-local/` | `InteractionStream`. Classify human input → goal / amendment / query / approval / injection. Bidirectional channel. Input buffering during agent work. |
+| 24.3 | Autonomy manager | `packages/wacp-local/` | `AutonomyManager`. `TrustSurface: Set<OperationType>`. `grant(op)`, `revoke(op)`, `check(op) → bool`. Presets (supervised/assisted/autonomous). Dynamic evolution within session. Gate auto-resolution when operation is trusted. |
+| 24.4 | Local resources | `packages/wacp-local/` | `FileSystem` (scoped to working dir, read/write/glob/search). `Shell` (subprocess execution, stdout/stderr capture, timeout). `Git` (status, diff, log, stage, commit). All gated by autonomy manager. |
+| 24.5 | Self-orchestration | `packages/wacp-local/` | Root agent embeds `CoordinatorContext` + `AgentContext`. Can dispatch child workspaces AND execute work directly. Routing: classify work → delegate or self-execute. |
+| 24.6 | Boot profile | `packages/wacp-local/` | Fast startup (<500ms). Single-node topology. Minimal config (provider + working dir). Embedded runtime or connect to external. |
+| 24.7 | Session context | `packages/wacp-local/` | Cross-task continuity. Accumulated trust decisions. Session checkpoints (capture/restore). History for context window management. |
+| 24.8 | Python local-sdk | `sdk-python/src/wacp/local/` | Same contract, Python idiom. Async session. Subprocess tools. |
+
+**Depends on:** Phase 22 (agent-sdk + coordinator-sdk).
+**Exit criteria:** Session boots in <500ms. Input classification correct for all 5 types. Autonomy grants/revokes propagate to gate resolution. Local resources pass filesystem + shell + git tests. Self-orchestration dispatches child and self-executes.
+
+---
+
+## Phase 25 — CLI Agent (A1)
+
+Primary user-facing product. Terminal REPL composing local-sdk + tools + LLM.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 25.0 | `impl/cli-agent.md` | REPL loop, config schema (YAML/TOML), streaming output rendering, tool result display, gate prompt UI, autonomy controls, boot sequence, error handling, signal handling (Ctrl-C). |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 25.1 | Config + boot | `packages/wacp-cli/` (new, TypeScript) | Config schema (Zod): provider, model, API key, working directory, trust preset, tool paths. YAML + TOML parsing. Boot: load config → start LocalSession → display prompt. |
+| 25.2 | REPL loop | `packages/wacp-cli/` | `readline`-based input. Input → InteractionStream → classify → route. History. Multi-line input. Ctrl-C handling (cancel current, not exit). |
+| 25.3 | Streaming output | `packages/wacp-cli/` | Token-by-token rendering from LLM stream. Markdown formatting in terminal. Tool invocation display (name, args, result). Progress indicators for long operations. |
+| 25.4 | Gate prompts | `packages/wacp-cli/` | When autonomy check fails → render gate prompt. Approve/reject/modify. "Always allow" → update trust surface. Batch approval for task_approval gates. |
+| 25.5 | Tool integration | `packages/wacp-cli/` | Built-in tools: `file_read`, `file_write`, `file_search`, `shell_exec`, `git_status`, `git_diff`, `web_search`. Registered via M5 tool-framework. LLM tool-use ↔ M5 execution. |
+| 25.6 | Autonomy controls | `packages/wacp-cli/` | `/trust`, `/revoke`, `/preset` commands. Display current trust surface. Preset switching (supervised/assisted/autonomous). |
+
+**Depends on:** Phase 24 (local-sdk), Phase 20 (tools), Phase 21 (LLM).
+**Exit criteria:** CLI boots, accepts goal, decomposes via LLM, executes tools, streams output, prompts for gates, completes task. End-to-end demo: "fix the bug in X" → plan → edit → test → done.
+
+---
+
+## Phase 26 — SWE Vertical (E1)
+
+First ecosystem vertical. Parameterizes the platform for software engineering.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 26.0 | `ecosystem/swe/SWE.md` | 4 roles, 7 task types, 6 artifact types, 6 quality dimensions, 4 workflows, tool catalog, agent profiles, gate policies, decomposition patterns, failure/retry model. |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 26.1 | Role + task taxonomy | `ecosystem/swe/src/taxonomy.ts` | Register 4 derived roles (planner, implementer, tester, reviewer) via `wacp-taxonomy`. Register 7 task types with decomposition mappings. |
+| 26.2 | Tool catalog | `ecosystem/swe/src/tools/` | SWE-specific tools: `code_search`, `code_edit`, `test_run`, `lint_check`, `type_check`, `git_commit`, `git_branch`, `dependency_check`, `doc_generate`. Each as `ToolPackage` via M5. |
+| 26.3 | Agent profiles | `ecosystem/swe/src/profiles/` | One profile per role: system prompt, tool whitelist, autonomy level, context priorities. Planner (read-only, gated). Implementer (read+write, gated). Tester (read+write+test, gated). Reviewer (read-only, autonomous). |
+| 26.4 | Workflows | `ecosystem/swe/src/workflows/` | 4 multi-agent workflows as decomposition patterns: `implement-feature` (plan → implement → test → review), `refactor`, `fix-bug`, `write-tests`. Each defines task DAG, role assignments, gate points, integration strategy. |
+| 26.5 | Quality criteria | `ecosystem/swe/src/quality/` | 6 dimensions: correctness, type-safety, style, coverage, scope, design. Evaluation functions for integration pipeline. Pass/fail thresholds. |
+| 26.6 | Gate policies | `ecosystem/swe/src/` | Per-transition gate config: plan→implement (human approval), implement→test (optional), test→review (auto on pass), review→deliver (human approval). |
+| 26.7 | Integration test | `ecosystem/swe/tests/` | End-to-end: submit SWE goal → decompose → dispatch 4 roles → execute → evaluate → integrate. Verify role assignments, tool access, gate triggers, quality evaluation. |
+
+**Depends on:** Phase 25 (CLI agent — the execution surface).
+**Exit criteria:** SWE vertical loads at boot. CLI agent with SWE profile decomposes a feature request into plan/implement/test/review. Multi-agent workflow runs to completion. Quality evaluation produces pass/fail.
+
+---
+
+## Phase 27 — API Server + Dashboard (A3, A5)
+
+Remote access surface. Extends runtime with REST/WS. Expands highway-ui.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 27.0a | `impl/api-server.md` | REST endpoint catalog, SSE event streams, WebSocket protocol, multi-tenant session isolation, auth integration, headless operation mode. |
+| 27.0b | `impl/dashboard-v2.md` | Session management, task graph visualization, resource monitoring, coordinator controls, multi-session view, audit log viewer. |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 27.1 | REST API | `crates/wacp-runtime/` | REST endpoints for all proto operations (Phase 23.4 provides the gateway — this wires it into runtime). API versioning (`/v1/`). OpenAPI spec generation. |
+| 27.2 | Headless mode | `crates/wacp-runtime/` | Config flag: headless operation (no interactive gates). Pre-configured trust policies. API key auth. Batch goal submission. |
+| 27.3 | Session management UI | `highway-ui/` | Create session, list sessions, close session. Session selector in sidebar. Multi-session view (tabs or split). |
+| 27.4 | Task graph UI | `highway-ui/` | DAG visualization (D3 or dagre). Task nodes with status colors. Dependency edges. Click-to-inspect. Real-time status updates. |
+| 27.5 | Resource monitoring UI | `highway-ui/` | Per-workspace budget meters (5 dimensions). Session-level cost aggregation. Warning thresholds. Historical usage chart. |
+| 27.6 | Coordinator controls UI | `highway-ui/` | Decompose (submit tasks), dispatch (assign workspace), integrate (trigger pipeline). Reads coordinator state via CoordinatorService RPCs. |
+
+**Depends on:** Phase 23 (transport extensions, security).
+**Exit criteria:** REST API serves all operations. Dashboard manages sessions, visualizes task graphs, monitors resources. Headless mode runs without human interaction.
+
+---
+
+## Phase 28 — IDE + Chat Bridge (A4, A6)
+
+Secondary application surfaces.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 28.0a | `impl/ide-integration.md` | VS Code extension architecture, webview panels, tree views, inline annotations, file-scoped workspaces, diff preview, inline gate approval. |
+| 28.0b | `impl/chat-bridge.md` | Platform adapter model, message → goal mapping, interactive message → gate, stateless per-message, Slack adapter (first). |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 28.1 | VS Code extension scaffold | `applications/vscode/` (new) | Extension manifest, activation, webview provider. Embeds LocalSession (M3). Config contribution points. |
+| 28.2 | VS Code panels | `applications/vscode/` | Trail panel, workspace tree panel, gate panel (inline approve/reject). File-scoped workspace view (current file → workspace). Diff preview for code changes. |
+| 28.3 | VS Code agent | `applications/vscode/` | Inline agent: select code → agent context. Same LLM + tools as CLI. Output in editor or panel. |
+| 28.4 | Chat bridge core | `applications/chat-bridge/` (new) | `PlatformAdapter` interface: `receiveMessage()`, `sendMessage()`, `sendInteractiveMessage()`, `handleInteraction()`. Maps platform messages → `goalSubmit`. Maps gate/escalation events → platform interactive messages. |
+| 28.5 | Slack adapter | `applications/chat-bridge/` | Slack Events API integration. Slash commands → goals. Block Kit interactive messages → gate responses. Thread replies → envelope injection. |
+
+**Depends on:** Phase 24 (local-sdk for IDE), Phase 23 (transport for bridge).
+**Exit criteria:** VS Code extension installs, connects to runtime, displays trail/workspaces/gates, runs agent tasks. Slack adapter receives message, submits goal, sends gate prompt, receives approval.
+
+---
+
+## Phase 29 — Remaining Verticals (E2–E5)
+
+Four ecosystem verticals. Each follows the template from Phase 26.
+
+### Specs
+
+| # | Spec | Scope |
+|---|------|-------|
+| 29.0a | `ecosystem/devops/DEVOPS.md` | 5 roles, 9 task types, blast radius model, environment-scaled gating, 20 tools. |
+| 29.0b | `ecosystem/mlops/MLOPS.md` | 5 roles, 9 task types, compute budget model, reproducibility, 20 tools. |
+| 29.0c | `ecosystem/finance/FINANCE.md` | 5 roles, 9 task types, fiduciary model, regulatory compliance, 16 tools. |
+| 29.0d | `ecosystem/healthcare/HEALTHCARE.md` | 5 roles, 8 task types, PHI/HIPAA compliance, clinical validation, 16 tools. |
+
+### Tasks
+
+| # | Task | Target | Deliverables |
+|---|------|--------|-------------|
+| 29.1 | DevOps vertical | `ecosystem/devops/` | Taxonomy, tools (terraform, kubectl, ansible, monitoring), profiles, workflows (provision, deploy, incident-response, audit, migrate), quality criteria, gate policies (environment-scaled). |
+| 29.2 | MLOps vertical | `ecosystem/mlops/` | Taxonomy, tools (experiment tracking, training, evaluation, model registry), profiles, workflows (experiment, train, evaluate, deploy, monitor), quality criteria (reproducibility). |
+| 29.3 | Finance vertical | `ecosystem/finance/` | Taxonomy, tools (market data, valuation, risk calc, compliance check), profiles, workflows (analysis, risk assessment, compliance, reporting), quality criteria (accuracy, auditability), fiduciary model. |
+| 29.4 | Healthcare vertical | `ecosystem/healthcare/` | Taxonomy, tools (clinical data, literature, diagnostic support), profiles, workflows (assessment, research, analysis, compliance), quality criteria, PHI/HIPAA enforcement. |
+| 29.5 | Cross-vertical tests | `ecosystem/tests/` | Each vertical: loads taxonomy, dispatches multi-agent workflow, evaluates quality, respects domain constraints. |
+
+**Depends on:** Phase 26 (SWE vertical proves the pattern).
+**Exit criteria:** Each vertical loads, registers roles/tools, runs a representative workflow end-to-end.
 
 ---
 
 ## Summary
 
-| Phase | Name | Tasks | Depends on | Status |
-|-------|------|-------|------------|--------|
-| 18a | Coverage: Core Crates | 7 | — | **Complete** |
-| 18b | Coverage: Boundary Crates | 4 | 18a | **Complete** |
-| 19 | Highway UI | 4 | Phase 13 | **Complete** |
-| T1 | Critical Gaps (P0) | 4 | — | **Complete** |
-| T2 | Runtime + Highway Transport (P1) | 3 | T1.4 | **Complete** |
-| T3 | Integration Tests (P2) | 3 | T1 | **Complete** |
-| T4 | End-to-End Tests (P2) | 5 | T3, T4.1 | **Complete** |
-| T5 | Hardening (P3) | 3 | T1–T2 | **Complete** |
-| | **Total** | **33** | | |
+| Phase | Name | Specs | Tasks | Depends on | Layer |
+|-------|------|-------|-------|------------|-------|
+| 20 | Tool Framework | 1 | 6 | runtime | Middleware |
+| 21 | LLM Adapters | 1 | 7 | runtime | Middleware |
+| 22 | Agent SDK v2 + Coordinator SDK | 2 | 6 | 20 | Middleware |
+| 23 | Security + Transport | 2 | 6 | 22 | Middleware |
+| 24 | Local SDK | 1 | 8 | 22 | Middleware |
+| 25 | CLI Agent | 1 | 6 | 24, 20, 21 | Application |
+| 26 | SWE Vertical | 1 | 7 | 25 | Ecosystem |
+| 27 | API Server + Dashboard | 2 | 6 | 23 | Application |
+| 28 | IDE + Chat Bridge | 2 | 5 | 24, 23 | Application |
+| 29 | Remaining Verticals | 4 | 5 | 26 | Ecosystem |
+| | **Total** | **17** | **62** | | |
+
+### Critical Path
+
+```
+20 (tools) ──┐
+             ├── 22 (SDKs) ──┬── 23 (security+transport) ── 27 (API+dashboard)
+21 (LLM) ───┘               │                              28 (IDE+bridge) ──┘
+                              └── 24 (local-sdk) ── 25 (CLI) ── 26 (SWE) ── 29 (verticals)
+```
+
+Phases 20 and 21 are independent — can be built in parallel. Phase 22 gates everything above it. The CLI agent (25) is the critical path to first usable product. SWE vertical (26) is the critical path to first shipped vertical.
 
 ---
 

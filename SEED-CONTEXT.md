@@ -48,7 +48,8 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Forward plan — all phases complete
+├── IMPLEMENTATION.md        # Forward plan — Phases 20–29 (middleware, applications, ecosystem)
+├── LAYER-MAPPING.md         # Architectural mapping: mada-os layers → WACP equivalents
 ├── TEST-STRATEGY.md         # Comprehensive test strategy — unit, integration, E2E across all 3 ecosystems
 ├── SPEC-STRATEGY.md         # Phased coding plan — 28 tasks (Phases 0–8, all complete)
 ├── SEED-CONTEXT.md          # This file
@@ -212,21 +213,65 @@ The coordinator crate grew from 28 to 245 tests across Phases 9–13, 16. It now
 - Incremental, atomic deliverables.
 - Spec first, then code. No code without an approved spec.
 
-## What's Next
+## What's Next — Layers Above the Runtime
 
-All implementation phases (0–19) and all testing phases (T1–T5) are complete. 1,192 tests across 3 ecosystems (947 Rust, 181 TypeScript, 64 Python).
+All runtime phases (0–19) and testing phases (T1–T5) are complete. 1,192 tests across 3 ecosystems (947 Rust, 181 TypeScript, 64 Python). The runtime is the foundation — what follows is middleware, applications, and ecosystem.
 
-`TEST-STRATEGY.md` defines the comprehensive testing plan. All 5 phases executed:
+See `LAYER-MAPPING.md` for the architectural mapping from mada-os. See `IMPLEMENTATION.md` for the phased strategy.
 
-| Phase | Work item | New tests | Cumulative |
-|-------|-----------|-----------|-----------|
-| T1 | Critical gaps: wacp-sdk (+47), wacp-transport (+45), Python agent (+34), CI pipeline | +126 | 932 |
-| T2 | Runtime config/health/TLS (+32), highway-ui transport (+22), highway-ui components (+32) | +86 | 1,018 |
-| T3 | Rust cross-crate integration (43), TS integration (13), Python integration (8) | +64 | 1,082 |
-| T4 | E2E test harness + 19 scenarios (agent lifecycle, gates, escalation, recovery, integration) | +22 | 1,104 |
-| T5 | Rust unit hardening across 9 crates (+71), highway-ui store/notifications (+9), Python round-trips (+8) | +88 | 1,192 |
+```
+Ecosystem    (domain verticals — parameterize the platform)
+─────────────────────────────────────────────────────── ecosystem boundary
+Applications (CLI, SDK, API, IDE, dashboard, bridge)
+─────────────────────────────────────────────────────── application boundary
+Middleware   (7 frameworks — contracts for building on the runtime)
+─────────────────────────────────────────────────────── middleware boundary
+WACP Runtime (12 Rust crates + proto + protocol specs)     ← DONE
+```
 
-Every public API, every cross-crate boundary, and every protocol flow is now tested. CI runs all three ecosystems on every push.
+### Middleware (7 frameworks)
+
+| # | Framework | Status | Description |
+|---|-----------|--------|-------------|
+| M1 | Agent SDK v2 | Phase 22 | Enrich existing wacp-sdk + sdk-python to full AgentContext (20+ methods) |
+| M2 | Coordinator SDK | Phase 22 | New client-facing CoordinatorContext + proto RPCs |
+| M3 | Local SDK | Phase 24 | Session = root workspace, autonomy spectrum, interaction stream, local resources |
+| M4 | Transport Extensions | Phase 23 | REST gateway, WebSocket binding, auth providers (API key, OAuth, session tokens) |
+| M5 | Tool Framework | Phase 20 | ToolDescriptor, execution contract, packaging, discovery, sandboxing, resilience |
+| M6 | LLM Adapters | Phase 21 | Provider-agnostic inference (Anthropic, OpenAI, generic), streaming, cost, circuit breakers |
+| M7 | Security | Phase 23 | Cross-cutting: content filter, secret management, audit events |
+
+### Applications (6 apps)
+
+| # | Application | Status | Composition |
+|---|-------------|--------|-------------|
+| A1 | CLI Agent | Phase 25 | local-sdk + tools + LLM — primary product |
+| A2 | Embeddable SDK | Phase 25 | local-sdk + tools — for host tool integration |
+| A3 | API Server | Phase 27 | REST/WS gateway over runtime — headless coordination |
+| A4 | IDE Integration | Phase 28 | VS Code extension via local-sdk |
+| A5 | Web Dashboard | Phase 27 | Expand highway-ui — sessions, task graph, resources |
+| A6 | Chat Bridge | Phase 28 | Slack/Discord/Teams adapter via transport |
+
+### Ecosystem (5 verticals)
+
+| # | Vertical | Status | Key constraint |
+|---|----------|--------|----------------|
+| E1 | SWE | Phase 26 | 4 roles, 7 task types, scope isolation, test coverage gates |
+| E2 | DevOps | Phase 29 | Blast radius model, environment-scaled gating |
+| E3 | MLOps | Phase 29 | Compute budget, reproducibility |
+| E4 | Finance | Phase 29 | Regulatory compliance, fiduciary model |
+| E5 | Healthcare | Phase 29 | PHI/HIPAA, clinical validation |
+
+### Build Order (critical path)
+
+```
+20 (tools) ──┐
+             ├── 22 (SDKs) ──┬── 23 (security+transport) ── 27 (API+dashboard)
+21 (LLM) ───┘               │                              28 (IDE+bridge) ──┘
+                              └── 24 (local-sdk) ── 25 (CLI) ── 26 (SWE) ── 29 (verticals)
+```
+
+10 phases, 17 specs, 62 tasks. Phases 20–21 are independent (parallel). Critical path to first product: 20 → 22 → 24 → 25 (CLI agent).
 
 ---
 

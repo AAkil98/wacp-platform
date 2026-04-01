@@ -4,6 +4,7 @@
 //! Tools are capabilities that agents use to interact with the outside world.
 
 pub mod descriptor;
+pub mod discovery;
 pub mod execution;
 pub mod handler;
 pub mod package;

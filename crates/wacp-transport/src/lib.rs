@@ -8,6 +8,7 @@ pub mod auth;
 pub mod auth_api_key;
 pub mod auth_session;
 pub mod error_mapping;
+pub mod rest_gateway;
 pub mod grpc_agent;
 pub mod grpc_highway;
 pub mod grpc_server;
@@ -23,6 +24,7 @@ pub use in_process::{InProcessAgentClient, InProcessAgentSession, InProcessTrans
 pub use messages::{AgentInbound, AgentOutbound, HighwayInbound, HighwayOutbound};
 pub use auth_api_key::ApiKeyAuthenticator;
 pub use auth_session::SessionTokenAuthenticator;
+pub use rest_gateway::{RestGateway, GatewayState};
 pub use proto::wacp_v1;
 
 /// Transport-level errors.

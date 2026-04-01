@@ -1,0 +1,208 @@
+syntax = "proto3";
+package wacp.v1;
+
+import "primitives.proto";
+
+// Coordinator-facing gRPC service. For custom coordinators and local-sdk.
+service CoordinatorService {
+    // --- Task graph ---
+
+    // Submit a top-level goal.
+    rpc SubmitGoal(SubmitGoalRequest) returns (SubmitGoalResponse);
+
+    // Create a task graph (DAG) from task definitions.
+    rpc Decompose(DecomposeRequest) returns (DecomposeResponse);
+
+    // Get tasks ready for dispatch (all dependencies satisfied).
+    rpc GetReadyTasks(GetReadyTasksRequest) returns (GetReadyTasksResponse);
+
+    // Cancel a task (cascades to dependents and assigned workspace).
+    rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+
+    // --- Workspace lifecycle ---
+
+    // Create a workspace for a task.
+    rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+
+    // Terminate a workspace.
+    rpc AbortWorkspace(AbortWorkspaceRequest) returns (AbortWorkspaceResponse);
+
+    // Pause a workspace.
+    rpc SuspendWorkspace(SuspendWorkspaceRequest) returns (SuspendWorkspaceResponse);
+
+    // Resume a paused workspace.
+    rpc ResumeWorkspace(ResumeWorkspaceRequest) returns (ResumeWorkspaceResponse);
+
+    // --- Communication ---
+
+    // Send a directive envelope to a workspace.
+    rpc SendDirective(SendDirectiveRequest) returns (SendDirectiveResponse);
+
+    // Send a feedback envelope to a workspace.
+    rpc SendFeedback(SendFeedbackRequest) returns (SendFeedbackResponse);
+
+    // --- Integration ---
+
+    // Trigger the integration pipeline for a completed workspace.
+    rpc TriggerIntegration(TriggerIntegrationRequest) returns (TriggerIntegrationResponse);
+
+    // --- Observation ---
+
+    // Get remaining allocatable budget.
+    rpc GetAllocatable(GetAllocatableRequest) returns (GetAllocatableResponse);
+
+    // Stream signals from child workspaces.
+    rpc StreamSignals(StreamSignalsRequest) returns (stream SignalEvent);
+}
+
+// ── Task graph messages ─────────────────────────────────
+
+message SubmitGoalRequest {
+    string description = 1;
+    bytes context = 2;
+    string client_request_id = 3;
+}
+
+message SubmitGoalResponse {
+    string goal_id = 1;
+    string root_workspace_id = 2;
+}
+
+message TaskDefinition {
+    string name = 1;
+    string description = 2;
+    repeated string depends_on = 3;  // task IDs
+    string role = 4;
+    bytes directive_payload = 5;
+    repeated string tools = 6;       // tool names to mount
+}
+
+message DecomposeRequest {
+    repeated TaskDefinition tasks = 1;
+    string client_request_id = 2;
+}
+
+message DecomposeResponse {
+    repeated string task_ids = 1;
+}
+
+message GetReadyTasksRequest {
+    string client_request_id = 1;
+}
+
+message GetReadyTasksResponse {
+    repeated TaskView tasks = 1;
+}
+
+message TaskView {
+    string task_id = 1;
+    string name = 2;
+    string description = 3;
+    TaskStatus status = 4;
+    string assigned_workspace = 5;
+    repeated string depends_on = 6;
+}
+
+message CancelTaskRequest {
+    string task_id = 1;
+    string reason = 2;
+    string client_request_id = 3;
+}
+
+message CancelTaskResponse {}
+
+// ── Workspace lifecycle messages ────────────────────────
+
+message DispatchRequest {
+    string task_id = 1;
+    string role = 2;
+    bytes directive_payload = 3;
+    repeated string tools = 4;
+    ResourceBudget budget = 5;
+    string client_request_id = 6;
+}
+
+message DispatchResponse {
+    string workspace_id = 1;
+    string task_id = 2;
+}
+
+message AbortWorkspaceRequest {
+    string workspace_id = 1;
+    string reason = 2;
+    string client_request_id = 3;
+}
+
+message AbortWorkspaceResponse {}
+
+message SuspendWorkspaceRequest {
+    string workspace_id = 1;
+    string client_request_id = 2;
+}
+
+message SuspendWorkspaceResponse {}
+
+message ResumeWorkspaceRequest {
+    string workspace_id = 1;
+    string client_request_id = 2;
+}
+
+message ResumeWorkspaceResponse {}
+
+// ── Communication messages ──────────────────────────────
+
+message SendDirectiveRequest {
+    string workspace_id = 1;
+    bytes payload = 2;
+    string client_request_id = 3;
+}
+
+message SendDirectiveResponse {
+    string envelope_id = 1;
+}
+
+message SendFeedbackRequest {
+    string workspace_id = 1;
+    bytes payload = 2;
+    string in_reply_to = 3;
+    string client_request_id = 4;
+}
+
+message SendFeedbackResponse {
+    string envelope_id = 1;
+}
+
+// ── Integration messages ────────────────────────────────
+
+message TriggerIntegrationRequest {
+    string workspace_id = 1;
+    string client_request_id = 2;
+}
+
+message TriggerIntegrationResponse {
+    string result = 1;  // "accepted", "revised", "rejected"
+    string detail = 2;
+}
+
+// ── Observation messages ────────────────────────────────
+
+message GetAllocatableRequest {
+    string client_request_id = 1;
+}
+
+message GetAllocatableResponse {
+    ResourceBudget remaining = 1;
+}
+
+message StreamSignalsRequest {
+    string workspace_filter = 1;  // empty = all workspaces
+    string signal_type_filter = 2;  // empty = all signal types
+}
+
+message SignalEvent {
+    string workspace_id = 1;
+    SignalType signal_type = 2;
+    string reason = 3;
+    bytes context = 4;
+    uint64 timestamp = 5;
+}

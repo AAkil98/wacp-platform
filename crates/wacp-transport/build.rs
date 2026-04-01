@@ -10,6 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 format!("{proto_dir}/agent.proto"),
                 format!("{proto_dir}/highway.proto"),
                 format!("{proto_dir}/taxonomy.proto"),
+                format!("{proto_dir}/coordinator.proto"),
             ],
             &[proto_dir],
         )?;

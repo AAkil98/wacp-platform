@@ -5,6 +5,8 @@
 //! - gRPC transport for production (`tonic` server with agent + highway services)
 
 pub mod auth;
+pub mod auth_api_key;
+pub mod auth_session;
 pub mod error_mapping;
 pub mod grpc_agent;
 pub mod grpc_highway;
@@ -19,6 +21,8 @@ pub use grpc_highway::{HighwayRequest, HighwayServiceImpl};
 pub use grpc_server::{start_grpc_server, GrpcServerConfig, GrpcServerHandles};
 pub use in_process::{InProcessAgentClient, InProcessAgentSession, InProcessTransport};
 pub use messages::{AgentInbound, AgentOutbound, HighwayInbound, HighwayOutbound};
+pub use auth_api_key::ApiKeyAuthenticator;
+pub use auth_session::SessionTokenAuthenticator;
 pub use proto::wacp_v1;
 
 /// Transport-level errors.

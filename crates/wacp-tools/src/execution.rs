@@ -1,6 +1,7 @@
 use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
+use futures::FutureExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::descriptor::Capability;
@@ -109,10 +110,12 @@ async fn invoke_with_timeout(
     let duration = Duration::from_millis(timeout_ms);
 
     let handler_future = async {
-        // Catch panics from the handler
-        let result = std::panic::catch_unwind(AssertUnwindSafe(|| handler.execute(ctx, args)));
+        // Catch panics from both future creation AND future execution.
+        // AssertUnwindSafe + FutureExt::catch_unwind catches panics during .await.
+        let future = handler.execute(ctx, args);
+        let result = AssertUnwindSafe(future).catch_unwind().await;
         match result {
-            Ok(future) => future.await,
+            Ok(inner) => inner,
             Err(panic_info) => {
                 let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
                     s.to_string()
@@ -442,6 +445,74 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.code, ToolErrorCode::ExecutionFailed);
         assert!(err.retryable);
+    }
+
+    // --- Handler panic ---
+
+    #[tokio::test]
+    async fn handler_panic_returns_internal_error() {
+        let cap = test_capability();
+        let panicking_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            panic!("something went terribly wrong");
+        };
+        let result = execute(
+            &panicking_handler,
+            &cap,
+            "test",
+            &json!({}),
+            &default_config(),
+            json!({"value": 1}),
+            default_opts(),
+        )
+        .await;
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ToolErrorCode::InternalError);
+        assert!(!err.retryable);
+        assert!(err.message.contains("something went terribly wrong"));
+    }
+
+    #[tokio::test]
+    async fn panic_message_truncated_at_4096() {
+        let cap = test_capability();
+        let long_panic_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            panic!("{}", "x".repeat(8000));
+        };
+        let result = execute(
+            &long_panic_handler,
+            &cap,
+            "test",
+            &json!({}),
+            &default_config(),
+            json!({"value": 1}),
+            default_opts(),
+        )
+        .await;
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ToolErrorCode::InternalError);
+        // 4093 chars + "..." = 4096
+        assert!(err.message.len() <= 4096);
+        assert!(err.message.ends_with("..."));
+    }
+
+    #[tokio::test]
+    async fn handler_panic_without_message() {
+        let cap = test_capability();
+        let panicking_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            std::panic::panic_any(42_i32); // non-string panic payload
+        };
+        let result = execute(
+            &panicking_handler,
+            &cap,
+            "test",
+            &json!({}),
+            &default_config(),
+            json!({"value": 1}),
+            default_opts(),
+        )
+        .await;
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ToolErrorCode::InternalError);
+        assert_eq!(err.message, "handler panicked");
     }
 
     // --- Context population ---

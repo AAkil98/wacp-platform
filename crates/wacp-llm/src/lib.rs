@@ -5,6 +5,7 @@
 pub mod adapter;
 pub mod cost;
 pub mod error;
+pub mod providers;
 pub mod rate_limit;
 pub mod result;
 pub mod retry;

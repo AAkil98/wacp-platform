@@ -6,7 +6,11 @@
 pub mod descriptor;
 pub mod handler;
 pub mod package;
+pub mod resilience;
 
 pub use descriptor::{Capability, DescriptorError, ToolDescriptor};
 pub use handler::{ToolContext, ToolError, ToolErrorCode, ToolHandler};
 pub use package::{PackageBuilder, PackageError, ToolPackage};
+pub use resilience::{
+    BreakerStatus, CircuitBreaker, CircuitBreakerConfig, ConcurrencyConfig, ConcurrencyLimiter,
+};

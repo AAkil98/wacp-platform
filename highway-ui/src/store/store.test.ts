@@ -358,3 +358,51 @@ describe("selectWorkspaceTree", () => {
     expect(tree[0]!.expanded).toBe(true);
   });
 });
+
+// ── Phase T5.2: store edge cases + notification slice ──
+
+describe("HighwayStore notification slice", () => {
+  beforeEach(resetStore);
+
+  it("setEscalationBanner and dismissEscalationBanner", () => {
+    useStore.getState().setEscalationBanner({ workspaceId: "ws-esc", escalationId: "e-1" });
+    expect(useStore.getState().notifications.escalationBanner).toEqual({
+      workspaceId: "ws-esc",
+      escalationId: "e-1",
+    });
+
+    useStore.getState().dismissEscalationBanner();
+    expect(useStore.getState().notifications.escalationBanner).toBeNull();
+  });
+
+  it("dismiss when already null is a no-op", () => {
+    expect(useStore.getState().notifications.escalationBanner).toBeNull();
+    useStore.getState().dismissEscalationBanner();
+    expect(useStore.getState().notifications.escalationBanner).toBeNull();
+  });
+});
+
+describe("HighwayStore edge cases", () => {
+  beforeEach(resetStore);
+
+  it("trail caps at 10,000 entries and trims oldest", () => {
+    for (let i = 0; i < 10_001; i++) {
+      useStore.getState().appendTrailEntry(makeEntry(i));
+    }
+    const entries = useStore.getState().trail.entries;
+    expect(entries.length).toBeLessThanOrEqual(10_000);
+    // Oldest entry (seq 0) should be gone; newest (seq 10000) present
+    expect(entries[entries.length - 1]!.sequenceNumber).toBe(10000n);
+  });
+
+  it("resolveGate for non-existent gate adds to resolved", () => {
+    useStore.getState().resolveGate("gate-phantom", true);
+    expect(useStore.getState().gates.resolved.get("gate-phantom")).toEqual({ applied: true });
+    expect(useStore.getState().gates.pending.has("gate-phantom")).toBe(false);
+  });
+
+  it("markGateInFlight for non-existent gate adds to inFlight set", () => {
+    useStore.getState().markGateInFlight("gate-ghost");
+    expect(useStore.getState().gates.inFlight.has("gate-ghost")).toBe(true);
+  });
+});

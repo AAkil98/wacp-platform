@@ -6,11 +6,13 @@
 
 mod builder;
 mod connection;
+pub mod context;
 mod error;
 mod streams;
 
-pub use builder::{CheckpointBuilder, EnvelopeBuilder};
+pub use builder::{CheckpointBuilder, CheckpointResult, EnvelopeBuilder, EnvelopeResult};
 pub use connection::Agent;
+pub use context::AgentContext;
 pub use error::Error;
 pub use streams::{CommandStream, InboxStream};
 

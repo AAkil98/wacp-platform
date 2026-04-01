@@ -21,4 +21,10 @@ pub enum Error {
 
     #[error("missing required field: {0}")]
     MissingField(String),
+
+    #[error("tool error: {0}")]
+    ToolError(#[from] wacp_tools::ToolError),
+
+    #[error("query timed out after {0}ms")]
+    QueryTimeout(u64),
 }

@@ -8,9 +8,12 @@ license.workspace = true
 [dependencies]
 wacp-types = { path = "../wacp-types" }
 wacp-transport = { path = "../wacp-transport" }
+wacp-tools = { path = "../wacp-tools" }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tonic = { workspace = true }
 thiserror = { workspace = true }
+serde_json = { workspace = true }
 futures = "0.3"
 
 [dev-dependencies]

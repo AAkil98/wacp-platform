@@ -433,6 +433,150 @@ mod tests {
         assert!(reg.is_empty()); // tool was not registered
     }
 
+    // --- Circuit breaker integration ---
+
+    #[tokio::test]
+    async fn circuit_breaker_trips_through_registry() {
+        let failing_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            Err(ToolError::execution("always fails", false))
+        };
+
+        let pkg = PackageBuilder::new(test_descriptor("flaky_tool", vec!["run"]))
+            .handler("run", failing_handler)
+            .build()
+            .unwrap();
+
+        let mut reg = ToolRegistry::new(RegistryConfig {
+            default_circuit_breaker: CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: 2,
+                cooldown: std::time::Duration::from_secs(60),
+                failure_window: std::time::Duration::from_secs(60),
+            },
+            ..RegistryConfig::default()
+        });
+        reg.register(pkg).await.unwrap();
+
+        // First two calls fail (ExecutionFailed) → CB records failures
+        let err1 = reg
+            .execute("flaky_tool", "run", json!({}), ExecutionOptions::default())
+            .await
+            .unwrap_err();
+        assert_eq!(err1.code, ToolErrorCode::ExecutionFailed);
+
+        let err2 = reg
+            .execute("flaky_tool", "run", json!({}), ExecutionOptions::default())
+            .await
+            .unwrap_err();
+        assert_eq!(err2.code, ToolErrorCode::ExecutionFailed);
+
+        // Third call → CB is open → Unavailable (handler never called)
+        let err3 = reg
+            .execute("flaky_tool", "run", json!({}), ExecutionOptions::default())
+            .await
+            .unwrap_err();
+        assert_eq!(err3.code, ToolErrorCode::Unavailable);
+        assert!(err3.retryable);
+    }
+
+    #[tokio::test]
+    async fn circuit_breaker_resets_on_success() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        let call_count = Arc::new(AtomicU32::new(0));
+        let call_count2 = call_count.clone();
+
+        // Fails first 2 calls, then succeeds
+        let sometimes_handler = move |_ctx: &ToolContext, _args: serde_json::Value| {
+            let count = call_count2.fetch_add(1, Ordering::Relaxed);
+            async move {
+                if count < 2 {
+                    Err(ToolError::execution("transient", true))
+                } else {
+                    Ok(json!({"ok": true}))
+                }
+            }
+        };
+
+        let pkg = PackageBuilder::new(test_descriptor("recovering_tool", vec!["run"]))
+            .handler("run", sometimes_handler)
+            .build()
+            .unwrap();
+
+        let mut reg = ToolRegistry::new(RegistryConfig {
+            default_circuit_breaker: CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: 2,
+                cooldown: std::time::Duration::from_millis(0), // instant cooldown
+                failure_window: std::time::Duration::from_secs(60),
+            },
+            ..RegistryConfig::default()
+        });
+        reg.register(pkg).await.unwrap();
+
+        // 2 failures → trips
+        reg.execute("recovering_tool", "run", json!({}), ExecutionOptions::default()).await.unwrap_err();
+        reg.execute("recovering_tool", "run", json!({}), ExecutionOptions::default()).await.unwrap_err();
+
+        // Cooldown is 0ms → half-open → probe succeeds → closed
+        let result = reg
+            .execute("recovering_tool", "run", json!({}), ExecutionOptions::default())
+            .await;
+        assert!(result.is_ok());
+
+        // Should be closed again → next call succeeds
+        let result2 = reg
+            .execute("recovering_tool", "run", json!({}), ExecutionOptions::default())
+            .await;
+        assert!(result2.is_ok());
+    }
+
+    // --- Concurrency integration ---
+
+    #[tokio::test]
+    async fn concurrency_limit_through_registry() {
+        let slow_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            Ok(json!({"ok": true}))
+        };
+
+        let pkg = PackageBuilder::new(test_descriptor("slow_tool", vec!["run"]))
+            .handler("run", slow_handler)
+            .build()
+            .unwrap();
+
+        let mut reg = ToolRegistry::new(RegistryConfig {
+            default_concurrency: ConcurrencyConfig {
+                max_concurrent: 1,
+                max_queued: 0, // no queue → reject immediately
+            },
+            ..RegistryConfig::default()
+        });
+        reg.register(pkg).await.unwrap();
+
+        // Use Arc to share registry across tasks
+        let reg = std::sync::Arc::new(reg);
+        let reg2 = reg.clone();
+
+        // First call takes the permit
+        let handle = tokio::spawn(async move {
+            reg2.execute("slow_tool", "run", json!({}), ExecutionOptions::default()).await
+        });
+
+        // Give first task time to acquire permit
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        // Second call → no permit, no queue → Overloaded
+        let err = reg
+            .execute("slow_tool", "run", json!({}), ExecutionOptions::default())
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ToolErrorCode::Overloaded);
+
+        handle.await.unwrap().unwrap(); // first call completes normally
+    }
+
     // --- Config validation ---
 
     #[tokio::test]

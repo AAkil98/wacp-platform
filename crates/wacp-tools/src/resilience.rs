@@ -416,6 +416,28 @@ mod tests {
     }
 
     #[test]
+    fn failures_outside_window_dont_trip_breaker() {
+        let cb = CircuitBreaker::new(CircuitBreakerConfig {
+            enabled: true,
+            failure_threshold: 3,
+            failure_window: Duration::from_millis(50), // very short window
+            cooldown: Duration::from_secs(30),
+        });
+
+        // Record 2 failures
+        cb.record_failure();
+        cb.record_failure();
+        assert_eq!(cb.status(), BreakerStatus::Closed);
+
+        // Wait for them to expire
+        std::thread::sleep(Duration::from_millis(60));
+
+        // This failure should NOT trip the breaker — previous 2 are expired
+        cb.record_failure();
+        assert_eq!(cb.status(), BreakerStatus::Closed); // still closed, only 1 recent failure
+    }
+
+    #[test]
     fn success_in_closed_clears_nothing() {
         let cb = CircuitBreaker::new(CircuitBreakerConfig {
             enabled: true,

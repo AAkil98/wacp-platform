@@ -204,23 +204,63 @@ mod tests {
 
     // --- Process execution ---
 
+    /// Helper: write a temp script that implements the process sandbox IPC protocol.
+    fn write_tool_script(dir: &std::path::Path, name: &str, body: &str) -> String {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/bash\n{body}")).unwrap();
+        std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        path.to_str().unwrap().to_string()
+    }
+
     #[tokio::test]
-    async fn process_success() {
-        // Use `echo` to simulate a successful tool process
+    async fn process_reads_stdin_writes_json_stdout() {
+        // Script: reads JSON from stdin, wraps it in {"echo": <input>}
+        let dir = tempfile::tempdir().unwrap();
+        let script = write_tool_script(
+            dir.path(),
+            "echo_tool.sh",
+            "INPUT=$(cat)\nprintf '{\"echo\": %s}' \"$INPUT\"",
+        );
+
         let result = execute_in_process(
-            "echo",
+            &script,
+            "test_tool",
+            "run",
+            &serde_json::json!({"x": 1}),
+            &serde_json::json!({}),
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+
+        // The script wraps the input in {"echo": ...}
+        assert!(result.get("echo").is_some());
+    }
+
+    #[tokio::test]
+    async fn process_success_returns_valid_json() {
+        // Script: ignores stdin, writes fixed JSON to stdout
+        let dir = tempfile::tempdir().unwrap();
+        let script = write_tool_script(
+            dir.path(),
+            "fixed_tool.sh",
+            r#"cat > /dev/null; echo '{"result": "ok", "value": 42}'"#,
+        );
+
+        let result = execute_in_process(
+            &script,
             "test_tool",
             "run",
             &serde_json::json!({}),
             &serde_json::json!({}),
             Duration::from_secs(5),
         )
-        .await;
-        // `echo` prints its arguments (the JSON input) to stdout, but won't produce valid JSON
-        // since it receives no stdin. This test verifies the spawn+wait mechanics.
-        // The actual result depends on what `echo` outputs — it won't be valid JSON.
-        // So we expect an InternalError (invalid JSON output).
-        assert!(result.is_err());
+        .await
+        .unwrap();
+
+        assert_eq!(result["result"], "ok");
+        assert_eq!(result["value"], 42);
     }
 
     #[tokio::test]
@@ -236,36 +276,40 @@ mod tests {
         .await;
         let err = result.unwrap_err();
         assert_eq!(err.code, crate::handler::ToolErrorCode::InternalError);
+        assert!(err.message.contains("spawn"));
     }
 
     #[tokio::test]
     async fn process_timeout_kills() {
-        // `sleep 60` with an argument will block for 60 seconds, exceeding the 200ms timeout.
-        // We need to pass the arg, so use a shell wrapper.
+        // Script: sleeps forever (ignores stdin)
+        let dir = tempfile::tempdir().unwrap();
+        let script = write_tool_script(dir.path(), "slow_tool.sh", "sleep 60");
+
         let result = execute_in_process(
-            "/bin/sh",
+            &script,
             "test_tool",
             "run",
             &serde_json::json!({}),
             &serde_json::json!({}),
-            Duration::from_millis(200),
+            Duration::from_millis(100),
         )
         .await;
-        // /bin/sh reads stdin (which is the JSON input), interprets it as a shell command,
-        // and likely errors quickly. Use a different approach: spawn a script that sleeps.
-        // The result may be timeout or internal error depending on how fast sh processes stdin.
         let err = result.unwrap_err();
-        assert!(
-            err.code == crate::handler::ToolErrorCode::Timeout
-                || err.code == crate::handler::ToolErrorCode::InternalError
-        );
+        assert_eq!(err.code, crate::handler::ToolErrorCode::Timeout);
     }
 
     #[tokio::test]
-    async fn process_nonzero_exit() {
-        // `false` exits with code 1
+    async fn process_nonzero_exit_returns_stderr() {
+        // Script: writes error to stderr, exits 1
+        let dir = tempfile::tempdir().unwrap();
+        let script = write_tool_script(
+            dir.path(),
+            "fail_tool.sh",
+            r#"cat > /dev/null; echo "something went wrong" >&2; exit 1"#,
+        );
+
         let result = execute_in_process(
-            "false",
+            &script,
             "test_tool",
             "run",
             &serde_json::json!({}),
@@ -275,6 +319,31 @@ mod tests {
         .await;
         let err = result.unwrap_err();
         assert_eq!(err.code, crate::handler::ToolErrorCode::InternalError);
+        assert!(err.message.contains("something went wrong"));
+    }
+
+    #[tokio::test]
+    async fn process_invalid_json_output() {
+        // Script: writes non-JSON to stdout, exits 0
+        let dir = tempfile::tempdir().unwrap();
+        let script = write_tool_script(
+            dir.path(),
+            "bad_json_tool.sh",
+            r#"cat > /dev/null; echo "not json at all""#,
+        );
+
+        let result = execute_in_process(
+            &script,
+            "test_tool",
+            "run",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+            Duration::from_secs(5),
+        )
+        .await;
+        let err = result.unwrap_err();
+        assert_eq!(err.code, crate::handler::ToolErrorCode::InternalError);
+        assert!(err.message.contains("not valid JSON"));
     }
 
     // --- Container config serde ---

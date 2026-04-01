@@ -577,6 +577,68 @@ mod tests {
         handle.await.unwrap().unwrap(); // first call completes normally
     }
 
+    // --- Concurrent execution ---
+
+    #[tokio::test]
+    async fn concurrent_execute_all_succeed() {
+        let pkg = PackageBuilder::new(test_descriptor("fast_tool", vec!["run"]))
+            .handler("run", echo_handler())
+            .build()
+            .unwrap();
+
+        let mut reg = ToolRegistry::new(RegistryConfig {
+            default_concurrency: ConcurrencyConfig {
+                max_concurrent: 10,
+                max_queued: 50,
+            },
+            ..RegistryConfig::default()
+        });
+        reg.register(pkg).await.unwrap();
+        let reg = std::sync::Arc::new(reg);
+
+        let mut handles = vec![];
+        for i in 0..10 {
+            let reg = reg.clone();
+            handles.push(tokio::spawn(async move {
+                reg.execute("fast_tool", "run", json!({"i": i}), ExecutionOptions::default()).await
+            }));
+        }
+
+        for handle in handles {
+            assert!(handle.await.unwrap().is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn validation_errors_dont_count_for_circuit_breaker() {
+        let pkg = PackageBuilder::new(test_descriptor("validated_tool", vec!["run"]))
+            .handler("run", echo_handler())
+            .build()
+            .unwrap();
+
+        let mut reg = ToolRegistry::new(RegistryConfig {
+            default_circuit_breaker: CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: 2,
+                cooldown: std::time::Duration::from_secs(60),
+                failure_window: std::time::Duration::from_secs(60),
+            },
+            ..RegistryConfig::default()
+        });
+        reg.register(pkg).await.unwrap();
+
+        // Unknown capability → ValidationFailed (should NOT count for CB)
+        for _ in 0..5 {
+            let _ = reg.execute("validated_tool", "nonexistent", json!({}), ExecutionOptions::default()).await;
+        }
+
+        // CB should still be closed → valid call succeeds
+        let result = reg
+            .execute("validated_tool", "run", json!({}), ExecutionOptions::default())
+            .await;
+        assert!(result.is_ok());
+    }
+
     // --- Config validation ---
 
     #[tokio::test]

@@ -515,6 +515,71 @@ mod tests {
         assert_eq!(err.message, "handler panicked");
     }
 
+    // --- Pre-cancelled token ---
+
+    #[tokio::test]
+    async fn pre_cancelled_token_returns_cancelled_immediately() {
+        let cap = test_capability();
+        let cancel = CancellationToken::new();
+        cancel.cancel(); // cancel BEFORE execute
+
+        let result = execute(
+            &echo_handler(),
+            &cap,
+            "test",
+            &json!({}),
+            &default_config(),
+            json!({"value": 1}),
+            ExecutionOptions {
+                cancellation_token: Some(cancel),
+                ..default_opts()
+            },
+        )
+        .await;
+        assert_eq!(result.unwrap_err().code, ToolErrorCode::Cancelled);
+    }
+
+    // --- Result size boundary ---
+
+    #[tokio::test]
+    async fn result_exactly_at_limit_passes() {
+        let cap = test_capability();
+        // Measure the exact serialized size
+        let test_value = json!({"v": 1});
+        let size = serde_json::to_vec(&test_value).unwrap().len();
+        let config = ExecutionConfig {
+            max_result_bytes: size, // exactly at limit
+            ..default_config()
+        };
+        let handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            Ok(json!({"v": 1}))
+        };
+        let result = execute(
+            &handler, &cap, "test", &json!({}), &config,
+            json!({"value": 1}), default_opts(),
+        ).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn result_one_byte_over_limit_fails() {
+        let cap = test_capability();
+        let test_value = json!({"v": 1});
+        let size = serde_json::to_vec(&test_value).unwrap().len();
+        let config = ExecutionConfig {
+            max_result_bytes: size - 1, // one byte under → fail
+            ..default_config()
+        };
+        let handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+            Ok(json!({"v": 1}))
+        };
+        let result = execute(
+            &handler, &cap, "test", &json!({}), &config,
+            json!({"value": 1}), default_opts(),
+        ).await;
+        assert_eq!(result.unwrap_err().code, ToolErrorCode::ExecutionFailed);
+    }
+
     // --- Context population ---
 
     #[tokio::test]

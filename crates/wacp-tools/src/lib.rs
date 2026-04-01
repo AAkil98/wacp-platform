@@ -4,6 +4,7 @@
 //! Tools are capabilities that agents use to interact with the outside world.
 
 pub mod descriptor;
+pub mod execution;
 pub mod handler;
 pub mod package;
 pub mod resilience;
@@ -11,6 +12,7 @@ pub mod resilience;
 pub use descriptor::{Capability, DescriptorError, ToolDescriptor};
 pub use handler::{ToolContext, ToolError, ToolErrorCode, ToolHandler};
 pub use package::{PackageBuilder, PackageError, ToolPackage};
+pub use execution::{ExecutionConfig, ExecutionOptions};
 pub use resilience::{
     BreakerStatus, CircuitBreaker, CircuitBreakerConfig, ConcurrencyConfig, ConcurrencyLimiter,
 };

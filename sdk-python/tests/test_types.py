@@ -116,3 +116,51 @@ class TestPriorityExtended:
     def test_to_proto_case_insensitive(self):
         assert Priority.to_proto("URGENT") == 2
         assert Priority.to_proto("Blocking") == 3
+
+
+# ── Phase T5.3: round-trips + remaining validation ──────
+
+
+class TestSignalRoundTrip:
+    """Proto enum → constant string → proto enum identity."""
+
+    _PROTO_TO_STRING = {v: k for k, v in Signal._TO_PROTO.items()}
+
+    def test_all_11_round_trip(self):
+        for name, proto_val in Signal._TO_PROTO.items():
+            back = self._PROTO_TO_STRING[proto_val]
+            assert Signal.to_proto(back) == proto_val
+
+    def test_proto_values_are_contiguous_1_to_11(self):
+        values = sorted(Signal._TO_PROTO.values())
+        assert values == list(range(1, 12))
+
+
+class TestCheckpointStatusRoundTrip:
+    def test_round_trip(self):
+        for name, proto_val in CheckpointStatus._TO_PROTO.items():
+            assert CheckpointStatus.to_proto(name) == proto_val
+
+    def test_case_insensitive(self):
+        assert CheckpointStatus.to_proto("PROVISIONAL") == 1
+        assert CheckpointStatus.to_proto("Final") == 2
+
+
+class TestConfidenceRoundTrip:
+    def test_round_trip(self):
+        for name, proto_val in Confidence._TO_PROTO.items():
+            assert Confidence.to_proto(name) == proto_val
+
+    def test_invalid_raises(self):
+        with pytest.raises(ValueError, match="unknown confidence"):
+            Confidence.to_proto("extreme")
+
+
+class TestPriorityRoundTrip:
+    def test_round_trip(self):
+        for name, proto_val in Priority._TO_PROTO.items():
+            assert Priority.to_proto(name) == proto_val
+
+    def test_invalid_raises(self):
+        with pytest.raises(ValueError, match="unknown priority"):
+            Priority.to_proto("critical")

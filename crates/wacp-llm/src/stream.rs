@@ -460,6 +460,43 @@ mod tests {
         assert_eq!(event, None);
     }
 
+    // --- SSE edge cases ---
+
+    #[test]
+    fn parse_sse_line_data_with_embedded_colon() {
+        assert_eq!(
+            parse_sse_line("data: {\"key\": \"value:with:colons\"}"),
+            Some(SseLine::Data("{\"key\": \"value:with:colons\"}".into()))
+        );
+    }
+
+    #[test]
+    fn parse_sse_line_unicode() {
+        assert_eq!(
+            parse_sse_line("data: {\"text\": \"Hello 🌍\"}"),
+            Some(SseLine::Data("{\"text\": \"Hello 🌍\"}".into()))
+        );
+    }
+
+    #[test]
+    fn anthropic_text_block_start_ignored() {
+        let event = parse_anthropic_event(
+            "content_block_start",
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+        );
+        assert_eq!(event, None);
+    }
+
+    #[test]
+    fn openai_empty_choices_returns_none() {
+        assert_eq!(parse_openai_event(r#"{"choices":[]}"#), None);
+    }
+
+    #[test]
+    fn openai_invalid_json_returns_none() {
+        assert_eq!(parse_openai_event("not json"), None);
+    }
+
     // --- StreamEvent serde ---
 
     #[test]

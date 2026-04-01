@@ -206,4 +206,32 @@ mod tests {
             assert!(pricing.output_price_micros_per_m > 0);
         }
     }
+
+    #[test]
+    fn lookup_pricing_empty_table() {
+        let pricing = lookup_pricing("any-model", &[]);
+        assert!(pricing.is_none());
+    }
+
+    #[test]
+    fn cost_tracker_many_workspaces() {
+        let mut tracker = CostTracker::new();
+        for i in 0..100 {
+            tracker.record(Some(&format!("ws-{i}")), &Cost::usd(100));
+        }
+        assert_eq!(tracker.total(), 10_000);
+        assert_eq!(tracker.workspace_count(), 100);
+    }
+
+    #[test]
+    fn calculate_cost_output_only() {
+        let usage = TokenUsage { input_tokens: 0, output_tokens: 1000 };
+        let pricing = ModelPricing {
+            input_price_micros_per_m: 3_000_000,
+            output_price_micros_per_m: 15_000_000,
+        };
+        let cost = calculate_cost(&usage, &pricing);
+        // output: 1000 * 15_000_000 / 1_000_000 = 15000
+        assert_eq!(cost.amount_micros, 15_000);
+    }
 }

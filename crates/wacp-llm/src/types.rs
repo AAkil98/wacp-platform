@@ -208,6 +208,40 @@ mod tests {
     }
 
     #[test]
+    fn message_with_empty_content() {
+        let msg = Message::user("");
+        assert_eq!(msg.content.as_text(), Some(""));
+    }
+
+    #[test]
+    fn message_with_unicode_content() {
+        let msg = Message::user("Hello 🌍! Ñoño café résumé");
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: Message = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.content.as_text().unwrap(), "Hello 🌍! Ñoño café résumé");
+    }
+
+    #[test]
+    fn content_blocks_multiple_text_as_text_returns_first() {
+        let c = Content::Blocks(vec![
+            ContentBlock::Text { text: "first".into() },
+            ContentBlock::Text { text: "second".into() },
+        ]);
+        assert_eq!(c.as_text(), Some("first"));
+    }
+
+    #[test]
+    fn tool_result_is_error_true() {
+        let block = ContentBlock::ToolResult {
+            tool_use_id: "call_1".into(),
+            content: "error message".into(),
+            is_error: true,
+        };
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["is_error"], true);
+    }
+
+    #[test]
     fn tool_definition_serde() {
         let def = ToolDefinition {
             name: "read_file".into(),

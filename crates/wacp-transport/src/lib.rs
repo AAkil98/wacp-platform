@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod auth_api_key;
+pub mod auth_oauth;
 pub mod auth_session;
 pub mod error_mapping;
 pub mod rest_gateway;
@@ -26,6 +27,7 @@ pub use grpc_server::{start_grpc_server, GrpcServerConfig, GrpcServerHandles};
 pub use in_process::{InProcessAgentClient, InProcessAgentSession, InProcessTransport};
 pub use messages::{AgentInbound, AgentOutbound, HighwayInbound, HighwayOutbound};
 pub use auth_api_key::ApiKeyAuthenticator;
+pub use auth_oauth::OAuthAuthenticator;
 pub use auth_session::SessionTokenAuthenticator;
 pub use rest_gateway::{RestGateway, GatewayBackend, GatewayError, GatewayState};
 pub use proto::wacp_v1;

@@ -26,7 +26,7 @@ pub use in_process::{InProcessAgentClient, InProcessAgentSession, InProcessTrans
 pub use messages::{AgentInbound, AgentOutbound, HighwayInbound, HighwayOutbound};
 pub use auth_api_key::ApiKeyAuthenticator;
 pub use auth_session::SessionTokenAuthenticator;
-pub use rest_gateway::{RestGateway, GatewayState};
+pub use rest_gateway::{RestGateway, GatewayBackend, GatewayError, GatewayState};
 pub use proto::wacp_v1;
 
 /// Transport-level errors.

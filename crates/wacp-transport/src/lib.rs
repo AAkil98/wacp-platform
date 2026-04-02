@@ -16,6 +16,7 @@ pub mod grpc_server;
 pub mod in_process;
 pub mod messages;
 pub mod proto;
+pub mod websocket;
 
 pub use error_mapping::{error_category_to_grpc_code, protocol_error_to_status};
 pub use grpc_agent::{AgentRequest, AgentServiceImpl};

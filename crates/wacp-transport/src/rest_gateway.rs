@@ -324,14 +324,14 @@ async fn get_allocatable_handler(
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
     use tower::ServiceExt;
 
     /// Mock backend that returns canned responses.
-    struct MockBackend;
+    pub(crate) struct MockBackend;
 
     #[tonic::async_trait]
     impl GatewayBackend for MockBackend {

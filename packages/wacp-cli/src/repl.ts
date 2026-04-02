@@ -7,25 +7,36 @@ import { InteractionStream } from "@wacp/local";
 import type { CliConfig } from "./config.js";
 import { handleCommand } from "./commands.js";
 import { agentLoop } from "./agent.js";
+import { detectTaskType, executeGoalWithWorkflow, type Workflow, type AgentProfile } from "./workflow.js";
+
+/** Loaded vertical — workflows + profiles available for execution. */
+export interface LoadedVertical {
+  workflows: Workflow[];
+  profiles: AgentProfile[];
+}
 
 /**
  * Run the interactive REPL loop.
  *
- * Reads input, classifies it, routes to the agent loop or command handlers.
- * Ctrl-C during agent work cancels the current operation.
- * Ctrl-C at the prompt re-prompts. Double Ctrl-C exits.
+ * Goals are routed through workflow detection:
+ * 1. Detect task type from goal text
+ * 2. Find matching workflow
+ * 3. Execute via WorkflowExecutor with profile switching
+ * 4. Fall back to raw agent loop if no workflow matches
  */
-export async function repl(session: LocalSession, config: CliConfig): Promise<void> {
+export async function repl(
+  session: LocalSession,
+  config: CliConfig,
+  vertical?: LoadedVertical,
+): Promise<void> {
   const rl = readline.createInterface({ input: stdin, output: stdout });
   const stream = new InteractionStream();
 
   let abortController: AbortController | null = null;
   let ctrlCCount = 0;
 
-  // Handle Ctrl-C
   rl.on("SIGINT", () => {
     if (abortController) {
-      // Cancel current agent work
       abortController.abort();
       abortController = null;
       stdout.write("\n");
@@ -37,7 +48,6 @@ export async function repl(session: LocalSession, config: CliConfig): Promise<vo
         return;
       }
       stdout.write("\n(Press Ctrl-C again to exit, or type /exit)\n");
-      // Reset after 1 second
       setTimeout(() => { ctrlCCount = 0; }, 1000);
     }
   });
@@ -49,11 +59,10 @@ export async function repl(session: LocalSession, config: CliConfig): Promise<vo
     try {
       input = await rl.question("wacp> ");
     } catch {
-      // EOF or readline error
       break;
     }
 
-    ctrlCCount = 0; // reset on any input
+    ctrlCCount = 0;
     const trimmed = input.trim();
     if (!trimmed) continue;
 
@@ -73,8 +82,47 @@ export async function repl(session: LocalSession, config: CliConfig): Promise<vo
 
     switch (classified.type) {
       case "goal":
-      case "amendment":
+      case "amendment": {
+        abortController = new AbortController();
+        const callbacks = {
+          promptGate: (prompt: string) => gatePrompt(rl, prompt),
+          print: (text: string) => stdout.write(text + "\n"),
+          write: (text: string) => stdout.write(text),
+        };
+
+        try {
+          if (vertical) {
+            // Protocol path: detect task type → select workflow → execute with profiles
+            const detected = detectTaskType(classified.content);
+            const workflow = vertical.workflows.find((w) => w.id === detected.workflowId);
+
+            if (workflow) {
+              stdout.write(`Task type: ${detected.id}\n`);
+              await executeGoalWithWorkflow(
+                session, config, classified.content,
+                workflow, vertical.profiles,
+                callbacks, abortController.signal,
+              );
+            } else {
+              // Workflow not found (e.g., review-only, document-only not defined)
+              // Fall back to direct execution
+              stdout.write(`[no workflow for ${detected.workflowId}, using direct mode]\n`);
+              await agentLoop(session, config, classified.content, callbacks, abortController.signal);
+            }
+          } else {
+            // No vertical loaded — direct execution
+            await agentLoop(session, config, classified.content, callbacks, abortController.signal);
+          }
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") {
+            stdout.write(`\nError: ${(err as Error).message}\n`);
+          }
+        }
+        abortController = null;
+        break;
+      }
       case "query": {
+        // Queries go through direct agent loop (no workflow)
         abortController = new AbortController();
         try {
           await agentLoop(session, config, classified.content, {
@@ -102,13 +150,12 @@ export async function repl(session: LocalSession, config: CliConfig): Promise<vo
   rl.close();
 }
 
-/** Prompt for gate approval. Returns the user's response. */
 async function gatePrompt(rl: readline.Interface, prompt: string): Promise<string> {
   stdout.write(prompt);
   try {
     const answer = await rl.question("");
     return answer.trim() || "n";
   } catch {
-    return "n"; // default to deny on error
+    return "n";
   }
 }

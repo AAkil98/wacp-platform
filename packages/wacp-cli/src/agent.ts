@@ -1,8 +1,8 @@
-import type { LocalSession } from "@wacp/local";
+import type { LocalSession, AgentProfile } from "@wacp/local";
 import type { CliConfig } from "./config.js";
 import type { Message, ToolCall, LlmResponse } from "./llm.js";
 import { streamCompletion, LlmCallError } from "./llm.js";
-import { buildToolDefinitions, executeTool, type ToolResult } from "./tools.js";
+import { buildToolDefinitions, executeTool, type ToolDefinition, type ToolResult } from "./tools.js";
 import { formatToolCall, formatToolResult, formatGatePrompt } from "./display.js";
 
 export interface AgentCallbacks {
@@ -15,9 +15,38 @@ export interface AgentCallbacks {
 }
 
 /**
- * Run the agent loop: call LLM → execute tools → repeat until done.
+ * Run the agent loop for a single workflow stage.
  *
- * Returns the final assistant content (for session history).
+ * Uses the stage's profile (system prompt + tool whitelist) and receives
+ * accumulated context from prior stages.
+ */
+export async function stageAgentLoop(
+  session: LocalSession,
+  config: CliConfig,
+  goal: string,
+  priorContext: string,
+  profile: AgentProfile,
+  callbacks: AgentCallbacks,
+  signal?: AbortSignal,
+): Promise<string> {
+  // Build messages with the stage's system prompt + prior context
+  const messages: Message[] = [
+    { role: "system", content: profile.systemPrompt },
+    { role: "user", content: `${priorContext}\n\nCurrent task: ${goal}` },
+  ];
+
+  // Filter tools to only those whitelisted for this role
+  const allTools = buildToolDefinitions();
+  const tools = filterToolsByProfile(allTools, profile);
+
+  return runLoop(session, config, messages, tools, callbacks, signal);
+}
+
+/**
+ * Run the agent loop without a workflow (direct execution).
+ *
+ * Uses the CLI's default system prompt and all available tools.
+ * This is the fallback for goals that don't match a workflow.
  */
 export async function agentLoop(
   session: LocalSession,
@@ -32,14 +61,27 @@ export async function agentLoop(
   ];
   const tools = buildToolDefinitions();
 
+  return runLoop(session, config, messages, tools, callbacks, signal);
+}
+
+/**
+ * Core LLM + tool execution loop. Shared by stageAgentLoop and agentLoop.
+ */
+async function runLoop(
+  session: LocalSession,
+  config: CliConfig,
+  messages: Message[],
+  tools: ToolDefinition[],
+  callbacks: AgentCallbacks,
+  signal?: AbortSignal,
+): Promise<string> {
   let lastContent = "";
   let iterations = 0;
-  const maxIterations = 25; // safety limit
+  const maxIterations = 25;
 
   while (iterations < maxIterations) {
     iterations++;
 
-    // 1. Call LLM with streaming
     let response: LlmResponse;
     try {
       response = await streamCompletion(config, messages, tools, {
@@ -63,33 +105,23 @@ export async function agentLoop(
       throw err;
     }
 
-    // Newline after streamed content
     if (response.content) {
       callbacks.write("\n");
       lastContent = response.content;
     }
 
-    // 2. No tool calls → done
     if (response.toolCalls.length === 0) break;
 
-    // 3. Execute each tool call
     const toolMessages: Message[] = [];
-
-    // Build the assistant message with tool calls for conversation history
     const assistantContent = buildAssistantContent(response);
     messages.push({ role: "assistant", content: assistantContent });
 
     for (const call of response.toolCalls) {
-      // Display the tool call
       callbacks.print(formatToolCall(call.name, call.arguments));
 
-      // Gate check
       const result = await executeWithGate(session, call, callbacks);
-
-      // Display result
       callbacks.print(formatToolResult(result));
 
-      // Build tool result message
       if (config.provider === "anthropic") {
         toolMessages.push({
           role: "tool",
@@ -104,39 +136,41 @@ export async function agentLoop(
       }
     }
 
-    // 4. Append tool results to conversation
     messages.push(...toolMessages);
-
-    // 5. Loop — LLM sees tool results and decides next action
   }
 
   if (iterations >= maxIterations) {
     callbacks.print(`\n[stopped after ${maxIterations} iterations]`);
   }
 
-  // Record in session context
-  session.context.addHistory(`user: ${goal}`);
-  if (lastContent) {
-    session.context.addHistory(`assistant: ${lastContent.slice(0, 200)}`);
-  }
-
+  session.context.addHistory(`assistant: ${lastContent.slice(0, 200)}`);
   return lastContent;
 }
 
-/**
- * Execute a tool call with autonomy gate checking.
- * If the operation is not trusted, prompts the user.
- */
+// ---------------------------------------------------------------------------
+// Tool filtering by profile
+// ---------------------------------------------------------------------------
+
+/** Filter tool definitions to only those in the profile's whitelist. */
+export function filterToolsByProfile(
+  allTools: ToolDefinition[],
+  profile: AgentProfile,
+): ToolDefinition[] {
+  return allTools.filter((t) => profile.tools.includes(t.name));
+}
+
+// ---------------------------------------------------------------------------
+// Gate checking (unchanged)
+// ---------------------------------------------------------------------------
+
 async function executeWithGate(
   session: LocalSession,
   call: ToolCall,
   callbacks: AgentCallbacks,
 ): Promise<ToolResult> {
-  // Map tool name to operation type for autonomy check
   const opType = toolToOperation(call.name);
 
   if (opType && !session.autonomy.check(opType)) {
-    // Show gate prompt
     const prompt = formatGatePrompt(
       call.name,
       opType,
@@ -146,14 +180,13 @@ async function executeWithGate(
 
     switch (answer.toLowerCase().trim()) {
       case "y":
-      case "yes":
-        // Allow this once — temporarily grant, execute, revoke
+      case "yes": {
         session.autonomy.grant(opType);
         const result = await executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments);
         session.autonomy.revoke(opType);
         session.context.recordTrust(opType, true);
         return result;
-
+      }
       case "a":
       case "always":
         session.autonomy.grantAlways(opType);
@@ -170,7 +203,6 @@ async function executeWithGate(
     }
   }
 
-  // Already trusted — execute directly
   return executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments);
 }
 
@@ -180,28 +212,27 @@ function toolToOperation(toolName: string): string | null {
     write_file: "file_write",
     list_dir: "file_read",
     search_files: "file_read",
+    code_search: "file_read",
+    code_edit: "file_write",
     run_command: "shell_exec",
+    test_run: "shell_exec",
+    lint_check: "shell_exec",
+    type_check: "shell_exec",
     git_status: "git_read",
     git_diff: "git_read",
+    git_branch: "git_write",
+    git_commit: "git_write",
+    dependency_check: "shell_exec",
   };
   return mapping[toolName] ?? null;
 }
 
 function buildAssistantContent(response: LlmResponse): string | ContentBlock[] {
   if (response.toolCalls.length === 0) return response.content;
-
-  // For Anthropic, reconstruct the content blocks
   const blocks: ContentBlock[] = [];
-  if (response.content) {
-    blocks.push({ type: "text", text: response.content });
-  }
+  if (response.content) blocks.push({ type: "text", text: response.content });
   for (const tc of response.toolCalls) {
-    blocks.push({
-      type: "tool_use",
-      id: tc.id,
-      name: tc.name,
-      input: tc.arguments,
-    });
+    blocks.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.arguments });
   }
   return blocks;
 }

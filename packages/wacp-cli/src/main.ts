@@ -3,17 +3,15 @@
 import { LocalSession } from "@wacp/local";
 import { loadConfigFile, mergeConfig, validateConfig, type CliFlags } from "./config.js";
 import { formatBanner } from "./display.js";
-import { repl } from "./repl.js";
+import { repl, type LoadedVertical } from "./repl.js";
+import { loadSweVertical } from "./vertical.js";
 
 async function main(): Promise<void> {
-  // Parse CLI flags
   const flags = parseFlags(process.argv.slice(2));
 
-  // Load and merge config
   const fileConfig = loadConfigFile(flags.config);
   const config = mergeConfig(flags, fileConfig);
 
-  // Validate
   const errors = validateConfig(config);
   if (errors.length > 0) {
     for (const err of errors) {
@@ -22,19 +20,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Print banner
-  process.stdout.write(formatBanner(config.workingDir, config.provider, config.model, config.autonomy));
+  // Load SWE vertical (workflows + profiles)
+  const vertical = loadSweVertical();
 
-  // Create session
+  process.stdout.write(formatBanner(config.workingDir, config.provider, config.model, config.autonomy));
+  process.stdout.write(`  Vertical: SWE (${vertical.workflows.length} workflows, ${vertical.profiles.length} profiles)\n\n`);
+
   const session = await LocalSession.create({
     workingDir: config.workingDir,
     autonomyPreset: config.autonomy,
   });
 
-  // Enter REPL
-  await repl(session, config);
+  await repl(session, config, vertical);
 
-  // Ensure clean exit
   if (session.state !== "closed") {
     await session.close();
   }

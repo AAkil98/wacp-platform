@@ -9,9 +9,9 @@ import { buildToolDefinitions, executeTool } from "../src/tools.js";
 describe("Tools", () => {
   // --- Tool definitions ---
 
-  it("all 7 tools have valid definitions", () => {
+  it("all 14 tools have valid definitions", () => {
     const tools = buildToolDefinitions();
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(14);
     for (const tool of tools) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();

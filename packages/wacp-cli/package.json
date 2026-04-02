@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@wacp/local": "file:../wacp-local",
+    "@grpc/grpc-js": "^1.12.0",
+    "@grpc/proto-loader": "^0.7.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {

@@ -7,7 +7,7 @@ import { InteractionStream } from "@wacp/local";
 import type { CliConfig } from "./config.js";
 import { handleCommand } from "./commands.js";
 import { agentLoop } from "./agent.js";
-import { detectTaskType, executeGoalWithWorkflow, type Workflow, type AgentProfile } from "./workflow.js";
+import { detectTaskType, executeGoalWithWorkflow, type Workflow, type AgentProfile, type ProtocolClients } from "./workflow.js";
 
 /** Loaded vertical — workflows + profiles available for execution. */
 export interface LoadedVertical {
@@ -28,6 +28,7 @@ export async function repl(
   session: LocalSession,
   config: CliConfig,
   vertical?: LoadedVertical,
+  clients?: ProtocolClients,
 ): Promise<void> {
   const rl = readline.createInterface({ input: stdin, output: stdout });
   const stream = new InteractionStream();
@@ -101,7 +102,9 @@ export async function repl(
               await executeGoalWithWorkflow(
                 session, config, classified.content,
                 workflow, vertical.profiles,
-                callbacks, abortController.signal,
+                callbacks,
+                clients ?? { coordinator: null, agent: null },
+                abortController.signal,
               );
             } else {
               // Workflow not found (e.g., review-only, document-only not defined)

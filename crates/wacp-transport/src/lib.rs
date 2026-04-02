@@ -10,6 +10,7 @@ pub mod auth_session;
 pub mod error_mapping;
 pub mod rest_gateway;
 pub mod grpc_agent;
+pub mod grpc_coordinator;
 pub mod grpc_highway;
 pub mod grpc_server;
 pub mod in_process;
@@ -18,6 +19,7 @@ pub mod proto;
 
 pub use error_mapping::{error_category_to_grpc_code, protocol_error_to_status};
 pub use grpc_agent::{AgentRequest, AgentServiceImpl};
+pub use grpc_coordinator::{CoordinatorRequest, CoordinatorServiceImpl};
 pub use grpc_highway::{HighwayRequest, HighwayServiceImpl};
 pub use grpc_server::{start_grpc_server, GrpcServerConfig, GrpcServerHandles};
 pub use in_process::{InProcessAgentClient, InProcessAgentSession, InProcessTransport};

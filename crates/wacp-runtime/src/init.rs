@@ -38,6 +38,7 @@ pub struct Runtime {
     pub event_rx: mpsc::Receiver<WorkspaceEvent>,
     pub agent_request_rx: Option<mpsc::Receiver<wacp_transport::AgentRequest>>,
     pub highway_request_rx: Option<mpsc::Receiver<wacp_transport::HighwayRequest>>,
+    pub coordinator_request_rx: Option<mpsc::Receiver<wacp_transport::CoordinatorRequest>>,
 }
 
 impl Runtime {
@@ -103,9 +104,16 @@ impl Runtime {
             .parse()
             .map_err(|e| RuntimeError::Transport(format!("invalid highway address: {e}")))?;
 
+        let coordinator_addr: SocketAddr = config
+            .server
+            .coordinator_listen
+            .parse()
+            .map_err(|e| RuntimeError::Transport(format!("invalid coordinator address: {e}")))?;
+
         let grpc_handles = start_grpc_server(GrpcServerConfig {
             agent_addr,
             highway_addr,
+            coordinator_addr,
             tls: tls_config,
         })
         .await
@@ -114,6 +122,7 @@ impl Runtime {
         tracing::info!(
             agent = %config.server.agent_listen,
             highway = %config.server.highway_listen,
+            coordinator = %config.server.coordinator_listen,
             "gRPC endpoints listening"
         );
 
@@ -125,6 +134,7 @@ impl Runtime {
             event_rx,
             agent_request_rx: Some(grpc_handles.agent_request_rx),
             highway_request_rx: Some(grpc_handles.highway_request_rx),
+            coordinator_request_rx: Some(grpc_handles.coordinator_request_rx),
         })
     }
 
@@ -151,6 +161,7 @@ impl Runtime {
             event_rx,
             agent_request_rx: None,
             highway_request_rx: None,
+            coordinator_request_rx: None,
         })
     }
 

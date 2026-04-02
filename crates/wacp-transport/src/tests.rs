@@ -166,6 +166,7 @@ async fn grpc_server_starts() {
     let handles = start_grpc_server(GrpcServerConfig {
         agent_addr: ([127, 0, 0, 1], 19400).into(),
         highway_addr: ([127, 0, 0, 1], 19401).into(),
+        coordinator_addr: ([127, 0, 0, 1], 19402).into(),
         tls: None,
     })
     .await
@@ -174,6 +175,7 @@ async fn grpc_server_starts() {
     // Channels exist and are open.
     assert!(!handles.agent_request_rx.is_closed());
     assert!(!handles.highway_request_rx.is_closed());
+    assert!(!handles.coordinator_request_rx.is_closed());
 
     // Give the server tasks a moment to bind, then let them be dropped.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;

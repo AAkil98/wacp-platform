@@ -26,9 +26,9 @@ use crate::dispatch;
 /// Port counter for unique port allocation across parallel tests.
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(41000);
 
-fn next_port_pair() -> (u16, u16) {
-    let a = PORT_COUNTER.fetch_add(2, Ordering::Relaxed);
-    (a, a + 1)
+fn next_port_triple() -> (u16, u16, u16) {
+    let a = PORT_COUNTER.fetch_add(3, Ordering::Relaxed);
+    (a, a + 1, a + 2)
 }
 
 /// A running E2E test environment with gRPC server and coordinator.
@@ -58,13 +58,15 @@ impl E2eHarness {
             event_tx,
         );
 
-        let (agent_port, highway_port) = next_port_pair();
+        let (agent_port, highway_port, coordinator_port) = next_port_triple();
         let agent_addr: SocketAddr = ([127, 0, 0, 1], agent_port).into();
         let highway_addr: SocketAddr = ([127, 0, 0, 1], highway_port).into();
+        let coordinator_addr: SocketAddr = ([127, 0, 0, 1], coordinator_port).into();
 
         let handles = start_grpc_server(GrpcServerConfig {
             agent_addr,
             highway_addr,
+            coordinator_addr,
             tls: None,
         })
         .await
@@ -74,6 +76,9 @@ impl E2eHarness {
         let highway_url = format!("http://127.0.0.1:{highway_port}");
 
         // Spawn event loop to process agent/highway requests.
+        // Coordinator requests are dropped for now — E2E coordinator tests
+        // will be added when self-orchestration is wired (26R.2).
+        drop(handles.coordinator_request_rx);
         let loop_handle = tokio::spawn(Self::event_loop(
             handles.agent_request_rx,
             handles.highway_request_rx,

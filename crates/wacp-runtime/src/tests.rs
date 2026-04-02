@@ -268,6 +268,7 @@ async fn e2e_grpc_bind_and_authenticate() {
     config.storage.data_dir = tmp.path().to_string_lossy().to_string();
     config.server.agent_listen = "127.0.0.1:29400".into();
     config.server.highway_listen = "127.0.0.1:29401".into();
+    config.server.coordinator_listen = "127.0.0.1:29402".into();
 
     let mut rt = Runtime::init(config).await.unwrap();
 
@@ -366,6 +367,7 @@ async fn init_creates_data_dirs() {
     config.storage.data_dir = dir.path().to_string_lossy().to_string();
     config.server.agent_listen = "127.0.0.1:39400".into();
     config.server.highway_listen = "127.0.0.1:39401".into();
+    config.server.coordinator_listen = "127.0.0.1:39402".into();
 
     let _rt = Runtime::init(config).await.unwrap();
 

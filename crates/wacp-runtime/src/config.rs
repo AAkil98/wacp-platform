@@ -51,6 +51,8 @@ pub struct ServerConfig {
     pub agent_listen: String,
     #[serde(default = "default_highway_listen")]
     pub highway_listen: String,
+    #[serde(default = "default_coordinator_listen")]
+    pub coordinator_listen: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -246,6 +248,7 @@ impl Default for ServerConfig {
         Self {
             agent_listen: default_agent_listen(),
             highway_listen: default_highway_listen(),
+            coordinator_listen: default_coordinator_listen(),
         }
     }
 }
@@ -390,6 +393,7 @@ impl Default for HealthConfig {
 
 fn default_agent_listen() -> String { "[::1]:9090".into() }
 fn default_highway_listen() -> String { "[::1]:9091".into() }
+fn default_coordinator_listen() -> String { "[::1]:9402".into() }
 fn default_tls_min_version() -> String { "1.2".into() }
 fn default_auth_provider() -> String { "psk".into() }
 fn default_auth_timeout() -> u64 { 5000 }
@@ -547,6 +551,7 @@ impl RuntimeConfig {
         let mut addresses: Vec<(&str, &str)> = vec![
             ("server.agent_listen", &self.server.agent_listen),
             ("server.highway_listen", &self.server.highway_listen),
+            ("server.coordinator_listen", &self.server.coordinator_listen),
         ];
         if self.observability.metrics.enabled {
             addresses.push((
@@ -796,6 +801,7 @@ fn apply_single_override(
         // server
         "server.agent_listen" => config.server.agent_listen = value.into(),
         "server.highway_listen" => config.server.highway_listen = value.into(),
+        "server.coordinator_listen" => config.server.coordinator_listen = value.into(),
         // tls
         "tls.enabled" => config.tls.enabled = parse_bool_env(var, value)?,
         "tls.cert_file" => config.tls.cert_file = value.into(),
@@ -1550,6 +1556,7 @@ observability:
             server: ServerConfig {
                 agent_listen: "127.0.0.1:9090".into(),
                 highway_listen: "127.0.0.1:9091".into(),
+                coordinator_listen: "127.0.0.1:9402".into(),
             },
             tls: TlsConfig {
                 enabled: true,
@@ -1594,6 +1601,7 @@ observability:
             },
             ..Default::default()
         };
-        assert!(config.validate().is_ok());
+        let result = config.validate();
+        assert!(result.is_ok(), "validation failed: {:?}", result.err());
     }
 }

@@ -3,4 +3,5 @@ export { AutonomyManager, type AutonomyPreset, type OperationType } from "./auto
 export { InteractionStream, type InputType, type ClassifiedInput, type Gate } from "./interaction.js";
 export { LocalResources, type ExecOptions, type ExecResult } from "./resources.js";
 export { SessionContext, type TrustDecision, type SessionSnapshot } from "./context.js";
+export { WorkflowExecutor, type Workflow, type WorkflowStage, type AgentProfile, type ExecutorCallbacks, type WorkflowResult, type StageResult, type WorkflowSignal } from "./orchestrator.js";
 export { AutonomyError, SessionError, type SessionErrorCode } from "./errors.js";

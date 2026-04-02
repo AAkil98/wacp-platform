@@ -1,6 +1,7 @@
 import { AutonomyManager, type AutonomyPreset } from "./autonomy.js";
 import { SessionContext } from "./context.js";
 import { SessionError } from "./errors.js";
+import { WorkflowExecutor, type Workflow, type AgentProfile, type ExecutorCallbacks, type WorkflowResult } from "./orchestrator.js";
 import { LocalResources } from "./resources.js";
 
 export type SessionState = "open" | "active" | "suspended" | "closed";
@@ -82,6 +83,27 @@ export class LocalSession {
   /** Close the session. */
   async close(): Promise<void> {
     this.transition("closed");
+  }
+
+  /**
+   * Execute a multi-stage workflow with profile switching.
+   *
+   * Each stage runs with its role's profile (system prompt + tool whitelist).
+   * Gated stages pause for human approval. Output flows between stages.
+   * Signals are emitted at stage boundaries.
+   */
+  async executeWorkflow(
+    workflow: Workflow,
+    profiles: AgentProfile[],
+    goal: string,
+    callbacks: ExecutorCallbacks,
+  ): Promise<WorkflowResult> {
+    if (this._state !== "active") {
+      throw new SessionError("not_active", "Session must be active to execute workflows");
+    }
+
+    const executor = new WorkflowExecutor(profiles, this.context);
+    return executor.execute(workflow, goal, callbacks);
   }
 
   private transition(to: SessionState): void {

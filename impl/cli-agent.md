@@ -3,18 +3,21 @@
 ```yaml
 id: wacp-impl-cli-agent
 type: implementation-spec
-status: draft
+status: complete
 created: 2026-04-02
+revised: 2026-04-02
 lineage: LAYER-MAPPING.md (A1)
 depends_on:
   - wacp-impl-local-sdk
   - wacp-impl-tool-framework
   - wacp-impl-llm-adapters
   - wacp-impl-security
+  - wacp-impl-coordinator-sdk
+  - wacp-impl-runtime
 authors:
   - Akil Abderrahim (Lead)
   - Claude Opus 4.6 (co-author)
-tags: [wacp, implementation, application, cli, agent, repl]
+tags: [wacp, implementation, application, cli, agent, repl, grpc, protocol]
 ```
 
 ---
@@ -26,49 +29,71 @@ tags: [wacp, implementation, application, cli, agent, repl]
 3. [Configuration](#3-configuration)
 4. [Boot Sequence](#4-boot-sequence)
 5. [REPL Loop](#5-repl-loop)
-6. [Agent Loop](#6-agent-loop)
-7. [Tool Integration](#7-tool-integration)
-8. [Streaming Output](#8-streaming-output)
-9. [Gate Prompts](#9-gate-prompts)
-10. [Commands](#10-commands)
-11. [Package Structure](#11-package-structure)
-12. [Test Requirements](#12-test-requirements)
-13. [References](#13-references)
+6. [Workflow Execution](#6-workflow-execution)
+7. [Stage Agent Loop](#7-stage-agent-loop)
+8. [Tool Integration](#8-tool-integration)
+9. [Streaming Output](#9-streaming-output)
+10. [Gate Prompts](#10-gate-prompts)
+11. [Commands](#11-commands)
+12. [Package Structure](#12-package-structure)
+13. [Test Requirements](#13-test-requirements)
+14. [References](#14-references)
 
 ---
 
 ## 1. Purpose
 
-This spec defines the CLI agent — a terminal-based AI assistant that composes the local SDK, tool framework, and LLM adapters into an interactive REPL. It answers "how does a user interact with a WACP agent from the terminal" — not "how does the session manage state" (that's the local-sdk) or "how does the LLM think" (that's the adapter).
+This spec defines the CLI agent — a terminal-based AI assistant that spawns the WACP runtime, connects via gRPC, and drives multi-stage workflows through the protocol. Every operation — workspace creation, signal emission, checkpoint recording, task decomposition — goes through the Rust runtime. The CLI is a protocol participant, not a standalone chatbot.
 
-**Scope.** TypeScript package `@wacp/cli`. Configuration loading (YAML). Boot sequence. REPL loop with input classification. Agent loop (LLM call → tool execution → repeat). Streaming token output. Gate prompts for autonomy. Slash commands (`/trust`, `/revoke`, `/preset`, `/help`, `/exit`). Signal handling (Ctrl-C).
+**Scope.** TypeScript package `@wacp/cli`. Runtime process management. gRPC clients for CoordinatorService and AgentService. Workflow-driven execution with SWE vertical profiles. REPL with input classification. Streaming LLM output. Gate prompts. Slash commands.
 
-**Not in scope.** Multi-agent coordination (Phase 27 — API server). IDE integration (Phase 28). Ecosystem verticals (Phase 26). The CLI is a single-agent system — one LLM, one set of tools, one human.
+**Not in scope.** The Rust runtime internals (runtime spec). LLM provider APIs (llm-adapters spec). Tool framework mechanics (tool-framework spec). The CLI composes these — it does not implement them.
+
+**Architectural constraint.** The CLI spawns `wacp-runtime serve` as a child process and communicates exclusively via gRPC. LLM calls use raw HTTP (the LLM is external to the protocol), but every result is checkpointed through the runtime. No local-only bypass.
 
 ---
 
 ## 2. Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│  Human (terminal)                           │
-│  types goals, approves gates, reads output  │
-└─────────────┬───────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Human (terminal)                                       │
+│  types goals, approves gates, reads output              │
+└─────────────┬───────────────────────────────────────────┘
               │ stdin/stdout
-┌─────────────▼───────────────────────────────┐
-│  REPL (readline, input classification)      │
-├─────────────────────────────────────────────┤
-│  Agent Loop                                 │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐ │
-│  │ LLM call │→ │ tool exec│→ │ gate check│ │
-│  │ (fetch)  │  │ (local)  │  │ (autonomy)│ │
-│  └──────────┘  └──────────┘  └───────────┘ │
-├─────────────────────────────────────────────┤
-│  LocalSession (autonomy, resources, context)│
-└─────────────────────────────────────────────┘
+┌─────────────▼───────────────────────────────────────────┐
+│  REPL (readline, input classification, Ctrl-C)          │
+├─────────────────────────────────────────────────────────┤
+│  Workflow Engine                                        │
+│  ┌─────────────────┐  ┌────────────────────────────┐    │
+│  │ Task Type       │  │ WorkflowExecutor           │    │
+│  │ Detection       │→ │ (stages, profiles, gates)  │    │
+│  └─────────────────┘  └────────────┬───────────────┘    │
+│                                     │ per stage          │
+│  ┌──────────────────────────────────▼───────────────┐   │
+│  │  Stage Agent Loop                                │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌────────────────┐ │   │
+│  │  │ LLM call │→ │ tool exec│→ │ checkpoint via │ │   │
+│  │  │ (fetch)  │  │ (local)  │  │ AgentService   │ │   │
+│  │  └──────────┘  └──────────┘  └────────────────┘ │   │
+│  └──────────────────────────────────────────────────┘   │
+├──────────────────────────┬──────────────────────────────┤
+│  gRPC Clients            │  LocalSession               │
+│  ┌───────────────────┐   │  (autonomy, resources,      │
+│  │ CoordinatorClient │   │   context, interaction)      │
+│  │ AgentClient       │   │                              │
+│  └────────┬──────────┘   │                              │
+├───────────┼──────────────┴──────────────────────────────┤
+│           │ gRPC (ports 9400, 9402)                      │
+│           ▼                                              │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  WACP Runtime (Rust child process)               │   │
+│  │  Coordinator · Trail · Workspaces · Task Graph   │   │
+│  └──────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-The CLI is a thin composition layer. `LocalSession` manages state. The agent loop calls the LLM and executes tools. The REPL handles I/O.
+**Key distinction from previous architecture:** The runtime is a real process. Workspaces are real. Signals flow. Trail records. Checkpoints persist. The CLI does not simulate the protocol — it uses it.
 
 ---
 
@@ -76,247 +101,180 @@ The CLI is a thin composition layer. `LocalSession` manages state. The agent loo
 
 ```yaml
 # ~/.wacp/config.yaml
-provider: anthropic          # anthropic | openai | generic
+provider: anthropic
 model: claude-sonnet-4-20250514
-api_key: ${ANTHROPIC_API_KEY}  # env var substitution
-working_dir: .               # default: current directory
-autonomy: assisted           # supervised | assisted | autonomous
-
-# Optional
-base_url: https://api.anthropic.com  # for generic provider
+api_key: ${ANTHROPIC_API_KEY}
+working_dir: .
+autonomy: assisted
 max_tokens: 16384
 temperature: 0.0
 system_prompt: |
-  You are a helpful coding assistant. You have access to filesystem,
-  shell, and git tools. Use them to accomplish the user's goals.
+  You are a helpful coding assistant.
 ```
 
 **Loading order:** CLI flags → env vars → config file → defaults.
 
-**Config resolution:**
-```typescript
-interface CliConfig {
-  provider: "anthropic" | "openai" | "generic";
-  model: string;
-  apiKey: string;
-  workingDir: string;
-  autonomy: AutonomyPreset;
-  baseUrl?: string;
-  maxTokens: number;
-  temperature: number;
-  systemPrompt: string;
-}
-```
-
-**Env var substitution:** Values starting with `${` are resolved from environment variables. `${ANTHROPIC_API_KEY}` → `process.env.ANTHROPIC_API_KEY`. Missing env var → error at boot.
+**Env var substitution:** `${VAR_NAME}` resolved from `process.env`. Missing → error at boot.
 
 ---
 
 ## 4. Boot Sequence
 
 ```
-1. Parse CLI flags (--config, --provider, --model, --working-dir)
+1. Parse CLI flags (--config, --provider, --model, --working-dir, --autonomy)
 2. Load config file (~/.wacp/config.yaml or --config path)
 3. Merge: flags > env > file > defaults
 4. Validate config (provider set, API key present)
-5. Create LocalSession(config)
-6. Register built-in tools
-7. Print welcome banner
-8. Enter REPL loop
+5. Load SWE vertical (4 workflows, 4 profiles)
+6. Spawn WACP runtime (wacp-runtime serve) as child process
+7. Wait for runtime ready (TCP probe on agent port, up to 15s)
+8. Connect gRPC clients (CoordinatorClient → port 9402, AgentClient → port 9400)
+9. Create LocalSession (autonomy, resources, context)
+10. Print banner (provider, model, autonomy, vertical)
+11. Enter REPL loop
+12. On exit: close gRPC clients, SIGTERM runtime, close session
 ```
 
-Target: prompt visible in <200ms. LLM connects lazily on first goal.
+**Runtime failure:** If the runtime binary is not available or fails to start within 15s, the CLI prints a warning and falls back to local-only mode (no protocol). This is a degraded mode, not the target architecture.
 
 ---
 
 ## 5. REPL Loop
 
-```typescript
-async function repl(session: LocalSession, config: CliConfig): Promise<void> {
-  const rl = createInterface({ input: stdin, output: stdout });
-  const stream = new InteractionStream();
+Goals are routed through the SWE vertical's workflow engine:
 
-  while (session.state !== "closed") {
-    const input = await prompt(rl, "wacp> ");
-    if (input === null) { await session.close(); break; } // EOF
+1. Classify input (goal / amendment / query / approval / injection)
+2. For goals: detect task type → select workflow → execute via WorkflowExecutor
+3. For queries: direct agent loop (no workflow)
+4. For slash commands: route to command handler
 
-    // Classify
-    const classified = stream.classify(input.trim(), pendingGates);
-
-    switch (classified.type) {
-      case "goal":
-      case "amendment":
-        await agentLoop(session, config, classified.content);
-        break;
-      case "approval":
-        resolveGate(classified);
-        break;
-      case "query":
-        await handleQuery(session, classified.content);
-        break;
-      case "injection":
-        // Not implemented in single-agent CLI
-        print("Injection not supported in single-agent mode.");
-        break;
-    }
-  }
-}
-```
-
-**Slash commands** are intercepted before classification: input starting with `/` is routed to the command handler (§10).
-
-**Ctrl-C handling:** During agent loop, Ctrl-C cancels the current LLM call (via cancellation token). During prompt, Ctrl-C prints a blank line and re-prompts. Double Ctrl-C exits.
+**Ctrl-C:** During agent work → cancels via AbortController. At prompt → re-prompt. Double Ctrl-C → exit.
 
 ---
 
-## 6. Agent Loop
+## 6. Workflow Execution
 
-The core execution cycle: call LLM → process response → execute tools → repeat.
+When a goal is submitted:
 
-```typescript
-async function agentLoop(
-  session: LocalSession,
-  config: CliConfig,
-  goal: string,
-): Promise<void> {
-  const messages: Message[] = [
-    { role: "system", content: config.systemPrompt },
-    { role: "user", content: goal },
-  ];
-
-  const tools = buildToolDefinitions(session);
-
-  while (true) {
-    // 1. Call LLM
-    const response = await callLlm(config, messages, tools);
-
-    // 2. Print text content
-    if (response.content) {
-      printStreaming(response.content);
-    }
-
-    // 3. If no tool calls → done
-    if (response.toolCalls.length === 0) break;
-
-    // 4. Execute each tool call
-    const toolResults = [];
-    for (const call of response.toolCalls) {
-      const result = await executeTool(session, call);
-      toolResults.push(result);
-    }
-
-    // 5. Append assistant message + tool results to conversation
-    messages.push({ role: "assistant", content: response.raw });
-    for (const result of toolResults) {
-      messages.push(result.message);
-    }
-
-    // 6. Loop — LLM sees tool results and continues
-  }
-
-  // Record in session context
-  session.context.addHistory(`user: ${goal}`);
-  session.context.addHistory(`assistant: [completed]`);
-}
+```
+1. detectTaskType(goal) → { id: "swe:implement", workflowId: "swe:implement-feature" }
+2. CoordinatorClient.submitGoal(goal) → { goalId, rootWorkspaceId }
+3. CoordinatorClient.decompose(workflow.stages as tasks) → [taskIds]
+4. For each stage in topological order:
+   a. If gated → prompt human for approval
+   b. CoordinatorClient.dispatch(taskId, role, tools) → { workspaceId }
+   c. Execute stage agent loop in that workspace
+   d. Stage output flows as context to next stage
+5. Workflow complete → print quality report
 ```
 
-**Tool execution with autonomy gating:** Each tool call checks the autonomy manager. If the operation is not trusted, a gate prompt is shown to the user (§9). If approved, execution proceeds. If rejected, a tool error is returned to the LLM.
+**Task type detection:** Keyword heuristics. "fix bug" → `swe:debug` → `swe:fix-bug` (3 stages). "add feature" → `swe:implement` → `swe:implement-feature` (4 stages). Default → implement.
+
+**Profile switching:** Each stage uses the SWE profile for its role. Planner gets read-only tools + planning system prompt. Implementer gets read-write tools + implementation prompt. The LLM sees different tools and instructions per stage.
 
 ---
 
-## 7. Tool Integration
+## 7. Stage Agent Loop
 
-Built-in tools registered at boot, backed by `LocalResources`:
+Each workflow stage is a real WACP workspace:
 
-| Tool name | Maps to | Operation type |
-|-----------|---------|----------------|
-| `read_file` | `resources.readFile(path)` | `file_read` |
-| `write_file` | `resources.writeFile(path, content)` | `file_write` |
-| `list_dir` | `resources.readDir(path)` | `file_read` |
-| `search_files` | `resources.glob(pattern)` | `file_read` |
-| `run_command` | `resources.exec(command)` | `shell_exec` |
-| `git_status` | `resources.gitStatus()` | `git_read` |
-| `git_diff` | `resources.gitDiff(ref?)` | `git_read` |
-
-Each tool has a JSON Schema `input_schema` for LLM function-calling and an executor function that calls the corresponding `LocalResources` method.
-
-```typescript
-function buildToolDefinitions(session: LocalSession): ToolDefinition[] {
-  return [
-    {
-      name: "read_file",
-      description: "Read the contents of a file",
-      input_schema: {
-        type: "object",
-        properties: { path: { type: "string", description: "File path relative to working dir" } },
-        required: ["path"],
-      },
-    },
-    // ... other tools
-  ];
-}
 ```
+1. CoordinatorClient.dispatch(taskId, role) → workspaceId
+2. AgentClient.bind(workspaceId, authToken) → bind response
+3. AgentClient.emitSignal(STARTED)
+4. LLM loop:
+   a. Build messages (profile system prompt + prior context + goal)
+   b. Filter tools to profile whitelist
+   c. Call LLM (raw fetch + SSE streaming — LLM is external)
+   d. Stream tokens to terminal
+   e. For each tool call:
+      - Autonomy gate check (prompt human if not trusted)
+      - Execute tool via LocalResources
+      - AgentClient.createCheckpoint(observation, tool result)
+   f. Append tool results to messages
+   g. Repeat until no tool calls
+5. AgentClient.createCheckpoint(artifact, FINAL, stage output)
+6. AgentClient.emitSignal(COMPLETE)
+```
+
+**On failure:** `AgentClient.emitSignal(FAILED, reason)`. Workflow stops.
+
+**LLM is external:** The LLM call uses raw HTTP fetch to the provider API (Anthropic, OpenAI). This is correct — the LLM is not a WACP participant. But every LLM result is recorded in the protocol via checkpoints. The trail captures what happened; the LLM is the external compute resource.
 
 ---
 
-## 8. Streaming Output
+## 8. Tool Integration
 
-LLM responses are streamed token-by-token to the terminal for responsiveness.
+14 tools (7 built-in + 7 SWE-specific), each with JSON Schema for LLM function-calling:
 
-```typescript
-async function callLlm(
-  config: CliConfig,
-  messages: Message[],
-  tools: ToolDefinition[],
-): Promise<LlmResponse> {
-  // Raw fetch to provider API with streaming
-  const response = await fetch(providerUrl(config), {
-    method: "POST",
-    headers: providerHeaders(config),
-    body: JSON.stringify(providerBody(config, messages, tools)),
-  });
+| Tool | Operation | Description |
+|------|-----------|-------------|
+| `read_file` | `file_read` | Read file contents |
+| `write_file` | `file_write` | Write file |
+| `list_dir` | `file_read` | List directory |
+| `search_files` | `file_read` | Glob pattern search |
+| `run_command` | `shell_exec` | Shell command execution |
+| `git_status` | `git_read` | Git status |
+| `git_diff` | `git_read` | Git diff |
+| `code_search` | `file_read` | Regex search in codebase |
+| `code_edit` | `file_write` | Find-and-replace in file |
+| `test_run` | `shell_exec` | Run test suite |
+| `type_check` | `shell_exec` | Run type checker |
+| `lint_check` | `shell_exec` | Run linter |
+| `git_branch` | `git_write` | Create/switch branch |
+| `git_commit` | `git_write` | Stage + commit |
 
-  // Stream SSE response, print tokens as they arrive
-  for await (const chunk of parseSSE(response.body)) {
-    if (chunk.type === "content_delta") {
-      process.stdout.write(chunk.delta);
-    }
-  }
-  process.stdout.write("\n");
-  // ... assemble full response
-}
-```
+Tools are filtered per stage by the profile's whitelist. Planner sees only read tools. Implementer sees read + write + exec.
 
-**Tool call display:** When the LLM makes a tool call, print a formatted summary:
+---
+
+## 9. Streaming Output
+
+LLM responses stream token-by-token via SSE parsing. Tool calls display formatted summaries:
 
 ```
 ⟡ read_file(path: "src/auth.ts")
   → [742 bytes read]
 ```
 
----
-
-## 9. Gate Prompts
-
-When a tool operation is not trusted by the autonomy manager:
+Stage boundaries display transitions:
 
 ```
-⚠ read_file wants to read src/auth.ts
-  Operation: file_read
-  [y]es / [n]o / [a]lways allow file_read: _
+━━━ Workflow: Implement Feature (4 stages) ━━━
+  [protocol] goal goal-1 submitted, root workspace ws-root
+  [protocol] decomposed into 4 tasks
+
+── Stage: plan (swe:planner) ──
+  [protocol] workspace ws-plan dispatched
+  [protocol] bound to workspace ws-plan
+▶ plan started (swe:planner)
+  [LLM output streams here]
+✓ plan completed
 ```
-
-- `y` → allow this one invocation, continue.
-- `n` → return error to LLM ("operation denied by user").
-- `a` → `autonomy.grantAlways("file_read")`, allow this and all future.
-
-The gate prompt blocks the agent loop until the user responds.
 
 ---
 
-## 10. Commands
+## 10. Gate Prompts
 
-Slash commands intercepted by the REPL:
+Two levels of gating:
+
+**Autonomy gates** (tool-level): When a tool operation is not in the trust surface.
+```
+⚠ write_file wants to write src/auth.ts
+  Operation: file_write
+  [y]es / [n]o / [a]lways allow file_write: _
+```
+
+**Workflow gates** (stage-level): When a workflow stage is marked `gated: true`.
+```
+⚠ Implement wants to perform: Proceed to Implement (swe:implementer)?
+  Operation: stage:implement
+  [y]es / [n]o / [a]lways allow stage:implement: _
+```
+
+---
+
+## 11. Commands
 
 | Command | Action |
 |---------|--------|
@@ -325,61 +283,79 @@ Slash commands intercepted by the REPL:
 | `/revoke <op>` | Revoke trust for an operation type |
 | `/preset <name>` | Switch autonomy preset |
 | `/surface` | Display current trust surface |
-| `/exit` | Close session and exit |
+| `/exit` | Close session, kill runtime, exit |
 | `/clear` | Clear terminal |
 
 ---
 
-## 11. Package Structure
+## 12. Package Structure
 
 ```
 packages/wacp-cli/
-├── package.json        # @wacp/cli, TypeScript, bin entry
+├── package.json          # @wacp/cli, bin entry, @grpc/grpc-js
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts        # Entry point: parse args, load config, boot, repl
-│   ├── config.ts       # Config loading (YAML, env vars, defaults, merge)
-│   ├── repl.ts         # REPL loop, readline, input routing
-│   ├── agent.ts        # Agent loop: LLM call → tool exec → repeat
-│   ├── llm.ts          # Raw fetch to Anthropic/OpenAI, SSE parsing
-│   ├── tools.ts        # Built-in tool definitions + executors
-│   ├── display.ts      # Streaming output, tool call display, gate prompts
-│   └── commands.ts     # Slash command handlers
+│   ├── main.ts           # Entry: parse args, spawn runtime, connect gRPC, REPL
+│   ├── index.ts          # Public exports
+│   ├── config.ts         # YAML config loading, env vars, merge, validation
+│   ├── runtime-manager.ts # Spawn/manage wacp-runtime child process
+│   ├── protocol-client.ts # gRPC clients (CoordinatorClient, AgentClient)
+│   ├── repl.ts           # REPL loop, input classification, slash commands
+│   ├── workflow.ts       # Task type detection, workflow execution via gRPC
+│   ├── agent.ts          # Stage agent loop (bind, signal, checkpoint, LLM)
+│   ├── llm.ts            # Raw fetch to providers, SSE streaming
+│   ├── tools.ts          # 14 tool definitions + executors
+│   ├── vertical.ts       # SWE vertical loader (workflows + profiles)
+│   ├── display.ts        # Terminal formatting (tools, gates, banner)
+│   └── commands.ts       # Slash command handlers
 └── tests/
     ├── config.test.ts
     ├── tools.test.ts
     ├── commands.test.ts
-    └── display.test.ts
+    ├── display.test.ts
+    ├── llm.test.ts
+    ├── streaming.test.ts
+    ├── agent.test.ts
+    ├── workflow.test.ts
+    ├── runtime-manager.test.ts
+    └── protocol-client.test.ts
 ```
 
-**Dependencies:** `@wacp/local`, `yaml` (YAML parsing).
-
-**Bin entry:** `"bin": { "wacp": "./dist/index.js" }` — installed globally via `npm install -g @wacp/cli`.
+**Dependencies:** `@wacp/local`, `@grpc/grpc-js`, `@grpc/proto-loader`, `yaml`.
 
 ---
 
-## 12. Test Requirements
+## 13. Test Requirements
 
 | Module | Tests |
 |--------|-------|
-| `config.ts` | Load from YAML string. Env var substitution. Missing env var → error. Defaults applied. Merge order (flags > env > file). Invalid provider → error. |
-| `tools.ts` | All 7 tool definitions have valid schemas. Tool executor maps to correct resource method. Tool result formatted as message. |
-| `commands.ts` | /help prints list. /trust grants. /revoke revokes. /preset switches. /surface shows set. Unknown command → error message. |
-| `display.ts` | Tool call formatted. Gate prompt formatted. |
+| `config.ts` | YAML loading, env vars, merge order, validation |
+| `tools.ts` | 14 tool definitions valid, executors map correctly |
+| `commands.ts` | All slash commands, invalid operation, missing args |
+| `display.ts` | Tool call format, gate prompt, banner, trust surface |
+| `llm.ts` | Provider URLs, headers, body construction, response parsing |
+| `streaming.ts` | SSE body construction, tool result messages |
+| `agent.ts` | LlmCallError retryable classification |
+| `workflow.ts` | Task type detection (10 cases), vertical loading (5), tool filtering (4) |
+| `runtime-manager.ts` | Config defaults, URL generation, start failure, safe stop |
+| `protocol-client.ts` | Signal/checkpoint constants match proto |
 
-**Total target: ~25 tests.** Agent loop and LLM integration tested via E2E with mock LLM responses.
+**Total: 97 tests.**
 
 ---
 
-## 13. References
+## 14. References
 
 | Spec | Section | Referenced in | Topic |
 |------|---------|--------------|-------|
-| Local SDK spec | §3–9 | §2, §5, §6 | LocalSession, AutonomyManager, resources |
-| LLM adapters spec | §3–8 | §6, §8 | Message types, streaming, provider APIs |
-| Tool framework spec | §3 | §7 | ToolDefinition schema |
-| Security spec | §3 | §6 | Content filter before LLM calls |
-| LAYER-MAPPING.md | A1 | §1 | CLI agent design |
+| Runtime spec | §3 (process model) | §2, §4 | Runtime as child process |
+| Coordinator SDK spec | §3, §4 | §6 | CoordinatorService RPCs |
+| Agent SDK v2 spec | §3 | §7 | AgentContext, bind, signal, checkpoint |
+| Local SDK spec | §3–7 | §2, §7, §10 | Session, autonomy, resources, orchestrator |
+| LLM adapters spec | §4, §6 | §7, §9 | Message types, streaming |
+| Tool framework spec | §3 | §8 | ToolDefinition schema |
+| SWE vertical spec | §2–8 | §6, §8 | Roles, workflows, profiles, quality |
+| Security spec | §3 | §7 | Content filter at LLM boundary |
 
 ---
 

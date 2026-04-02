@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "wacp": "./dist/index.js"
+    "wacp": "./dist/main.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

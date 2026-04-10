@@ -331,8 +331,8 @@ Depends on: 27 (all verticals), 26R.
 | 26R | Remediation | **Complete** | 20–26 |
 | **27A** | **DevOps Vertical** | **Complete** | 26R |
 | **27B** | **MLOps Vertical** | **Complete** | 26R |
-| **27C** | **Finance Vertical** | **Pending** | 26R |
-| **27D** | **Healthcare Vertical** | **Pending** | 26R |
+| **27C** | **Finance Vertical** | **Complete** | 26R |
+| **27D** | **Healthcare Vertical** | **Complete** | 26R |
 | **27F** | **Data Analytics Vertical** | **Complete** | 26R |
 | **27G** | **Data Science Vertical** | **Complete** | 26R |
 | 28 | IDE + Chat Bridge | Pending | 26R |

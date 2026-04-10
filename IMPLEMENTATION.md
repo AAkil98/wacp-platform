@@ -248,13 +248,49 @@ Wire all 25 REST gateway handlers to their gRPC counterparts.
 | 27D.6 | Quality | Dimensions: clinical accuracy, PHI compliance, evidence basis, completeness, readability, regulatory adherence |
 | 27D.7 | Tests | Target: ~55 tests |
 
+### 27F — Data Analytics Vertical
+
+**Roles (5):** analyst, modeler, validator, reporter, insights.
+
+**Task types (8):** query, report, dashboard, model, analyze, validate, monitor, investigate.
+
+**Key constraint:** Query reproducibility and data integrity. Every query result must be reproducible with the same query text and source data snapshot. Destructive SQL operations (DROP, TRUNCATE, DELETE without WHERE) are hard-gated. All reports cite their source queries and data freshness timestamps.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27F.1 | Spec | `ecosystem/analytics/ANALYTICS.md` |
+| 27F.2 | Taxonomy | `taxonomy.ts` — 5 roles + 8 task types |
+| 27F.3 | Tools | Domain tools: `sql_query`, `dashboard_build`, `data_profile`, `kpi_calculate`, `report_generate`, `viz_create`, `data_reconcile`, `schema_explore`, `query_optimize`, `metric_define` |
+| 27F.4 | Profiles | 5 profiles: analyst (query + profile, gated), modeler (schema + metric, gated), validator (reconcile + profile, autonomous), reporter (generate + viz, gated), insights (synthesis, autonomous) |
+| 27F.5 | Workflows | `analytics:query-and-report` (3 stages: query → validate → report), `analytics:build-dashboard` (3 stages: model → build → validate), `analytics:investigate` (3 stages: explore → reconcile → report), `analytics:model-data` (3 stages: explore → model → validate) |
+| 27F.6 | Quality | Dimensions: accuracy, data_freshness, reproducibility, completeness, clarity, performance |
+| 27F.7 | Tests | Target: ~60 tests |
+
+### 27G — Data Science Vertical
+
+**Roles (5):** explorer, statistician, feature_engineer, modeler, reviewer.
+
+**Task types (9):** explore, hypothesize, test, model, feature, validate, interpret, report, review.
+
+**Key constraint:** Statistical rigor. Every hypothesis test must declare alternative hypothesis, significance level, and multiple-testing correction strategy before execution. All point estimates must be accompanied by confidence intervals. Assumption checks (normality, independence, homoscedasticity) are required before parametric tests.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27G.1 | Spec | `ecosystem/datasci/DATASCI.md` |
+| 27G.2 | Taxonomy | `taxonomy.ts` — 5 roles + 9 task types |
+| 27G.3 | Tools | Domain tools: `stat_summary`, `correlation_analysis`, `hypothesis_test`, `feature_extract`, `feature_transform`, `model_fit`, `diagnostic_plots`, `bootstrap_sample`, `causal_inference`, `interpretation` |
+| 27G.4 | Profiles | 5 profiles: explorer (EDA tools, gated), statistician (tests + inference, gated), feature_engineer (extract + transform, gated), modeler (fit + diagnostics, gated), reviewer (read-only, autonomous) |
+| 27G.5 | Workflows | `datasci:full-analysis` (5 stages: explore → hypothesize → test → interpret → review), `datasci:hypothesis-test` (3 stages: declare → test → interpret), `datasci:model-build` (4 stages: explore → feature → fit → validate), `datasci:exploration` (2 stages: profile → visualize) |
+| 27G.6 | Quality | Dimensions: statistical_rigor, reproducibility, interpretation_validity, assumptions_checked, effect_size, documentation |
+| 27G.7 | Tests | Target: ~60 tests |
+
 ### Phase 27 Exit Criteria
 
-- [ ] 4 vertical specs written and reviewed
-- [ ] 4 verticals implemented following the SWE template
+- [ ] 6 vertical specs written and reviewed (DevOps, MLOps, Finance, Healthcare, Data Analytics, Data Science)
+- [ ] 6 verticals implemented following the SWE template
 - [ ] Each vertical: taxonomy, tools, profiles, workflows, quality — all tested
 - [ ] Each vertical's workflows execute through the protocol (SubmitGoal → Decompose → Dispatch → Bind → Signal → Checkpoint)
-- [ ] ~220 new tests across 4 verticals
+- [ ] ~350 new tests across 6 verticals
 - [ ] CLI can load any vertical at boot and route goals to its workflows
 - [ ] Protocol generalizes: no SWE-specific assumptions in runtime or middleware
 
@@ -293,10 +329,12 @@ Depends on: 27 (all verticals), 26R.
 | 25 | CLI Agent | **Complete** | Middleware |
 | 26 | SWE Vertical | **Complete** | CLI |
 | 26R | Remediation | **Complete** | 20–26 |
-| **27A** | **DevOps Vertical** | **Pending** | 26R |
-| **27B** | **MLOps Vertical** | **Pending** | 26R |
+| **27A** | **DevOps Vertical** | **Complete** | 26R |
+| **27B** | **MLOps Vertical** | **Complete** | 26R |
 | **27C** | **Finance Vertical** | **Pending** | 26R |
 | **27D** | **Healthcare Vertical** | **Pending** | 26R |
+| **27F** | **Data Analytics Vertical** | **Pending** | 26R |
+| **27G** | **Data Science Vertical** | **Pending** | 26R |
 | 28 | IDE + Chat Bridge | Pending | 26R |
 | **29** | **API Server + Dashboard** | **Pending** | 27 |
 

@@ -15,6 +15,8 @@ export interface CliConfig {
   maxTokens: number;
   temperature: number;
   systemPrompt: string;
+  /** Verticals to load. Defaults to all 7 (DEFAULT_LOAD_ORDER) when undefined or empty. */
+  verticals?: string[];
 }
 
 export interface CliFlags {
@@ -63,6 +65,9 @@ export function parseConfig(yamlContent: string): Partial<CliConfig> {
   if (typeof raw.max_tokens === "number") config.maxTokens = raw.max_tokens;
   if (typeof raw.temperature === "number") config.temperature = raw.temperature;
   if (typeof raw.system_prompt === "string") config.systemPrompt = raw.system_prompt;
+  if (Array.isArray(raw.verticals) && raw.verticals.every((v) => typeof v === "string")) {
+    config.verticals = raw.verticals as string[];
+  }
 
   return config;
 }

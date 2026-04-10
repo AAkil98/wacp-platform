@@ -5,11 +5,15 @@ import type { LocalSession } from "@wacp/local";
 import { InteractionStream } from "@wacp/local";
 
 import type { CliConfig } from "./config.js";
+import type { LoadedEcosystem } from "./ecosystem.js";
 import { handleCommand } from "./commands.js";
 import { agentLoop } from "./agent.js";
-import { detectTaskType, executeGoalWithWorkflow, type Workflow, type AgentProfile, type ProtocolClients } from "./workflow.js";
+import { routeGoal, executeGoalWithWorkflow, type Workflow, type AgentProfile, type ProtocolClients } from "./workflow.js";
 
-/** Loaded vertical — workflows + profiles available for execution. */
+/**
+ * Loaded vertical — kept for backward compatibility with pre-27R callers.
+ * New code should use {@link LoadedEcosystem} from ./ecosystem.js.
+ */
 export interface LoadedVertical {
   workflows: Workflow[];
   profiles: AgentProfile[];
@@ -18,16 +22,17 @@ export interface LoadedVertical {
 /**
  * Run the interactive REPL loop.
  *
- * Goals are routed through workflow detection:
- * 1. Detect task type from goal text
- * 2. Find matching workflow
- * 3. Execute via WorkflowExecutor with profile switching
- * 4. Fall back to raw agent loop if no workflow matches
+ * Goals are routed through the ecosystem:
+ * 1. Try each loaded vertical's detector in load order
+ * 2. First non-null match wins (domain verticals before SWE catchall)
+ * 3. Execute via WorkflowExecutor with profile switching, dispatching tools
+ *    to the owning vertical's executor
+ * 4. Fall back to raw agent loop if no workflow matches the routed workflow ID
  */
 export async function repl(
   session: LocalSession,
   config: CliConfig,
-  vertical?: LoadedVertical,
+  ecosystem?: LoadedEcosystem,
   clients?: ProtocolClients,
 ): Promise<void> {
   const rl = readline.createInterface({ input: stdin, output: stdout });
@@ -92,28 +97,29 @@ export async function repl(
         };
 
         try {
-          if (vertical) {
-            // Protocol path: detect task type → select workflow → execute with profiles
-            const detected = detectTaskType(classified.content);
-            const workflow = vertical.workflows.find((w) => w.id === detected.workflowId);
+          if (ecosystem) {
+            // Multi-vertical path: route goal across all loaded verticals → select workflow → execute
+            const routed = routeGoal(classified.content, ecosystem);
+            stdout.write(`Vertical: ${routed.verticalId} | Task type: ${routed.taskType}\n`);
 
-            if (workflow) {
-              stdout.write(`Task type: ${detected.id}\n`);
+            if (routed.workflow) {
               await executeGoalWithWorkflow(
                 session, config, classified.content,
-                workflow, vertical.profiles,
+                routed.workflow, [...routed.profiles],
                 callbacks,
                 clients ?? { coordinator: null, agent: null },
                 abortController.signal,
+                ecosystem,
               );
             } else {
-              // Workflow not found (e.g., review-only, document-only not defined)
-              // Fall back to direct execution
-              stdout.write(`[no workflow for ${detected.workflowId}, using direct mode]\n`);
-              await agentLoop(session, config, classified.content, callbacks, abortController.signal);
+              // Workflow ID returned by detector has no actual workflow object
+              // (e.g., *-only sentinels for direct-execution task types)
+              // Fall back to direct execution with ecosystem-composed tools
+              stdout.write(`[no workflow for ${routed.workflowId}, using direct mode]\n`);
+              await agentLoop(session, config, classified.content, callbacks, abortController.signal, ecosystem);
             }
           } else {
-            // No vertical loaded — direct execution
+            // No ecosystem loaded — direct execution with legacy tool list
             await agentLoop(session, config, classified.content, callbacks, abortController.signal);
           }
         } catch (err) {
@@ -132,7 +138,7 @@ export async function repl(
             promptGate: (prompt) => gatePrompt(rl, prompt),
             print: (text) => stdout.write(text + "\n"),
             write: (text) => stdout.write(text),
-          }, abortController.signal);
+          }, abortController.signal, ecosystem);
         } catch (err) {
           if ((err as Error).name !== "AbortError") {
             stdout.write(`\nError: ${(err as Error).message}\n`);

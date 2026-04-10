@@ -125,7 +125,7 @@ describe("Tool Filtering by Profile", () => {
     expect(filterToolsByProfile(allTools, empty)).toHaveLength(0);
   });
 
-  it("all 14 tools are defined", () => {
-    expect(allTools.length).toBe(14);
+  it("legacy buildToolDefinitions returns 15 tools (7 built-in + 8 SWE)", () => {
+    expect(allTools.length).toBe(15);
   });
 });

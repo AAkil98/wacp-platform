@@ -3,8 +3,8 @@
 import { LocalSession } from "@wacp/local";
 import { loadConfigFile, mergeConfig, validateConfig, type CliFlags } from "./config.js";
 import { formatBanner } from "./display.js";
-import { repl, type LoadedVertical } from "./repl.js";
-import { loadSweVertical } from "./vertical.js";
+import { repl } from "./repl.js";
+import { loadEcosystem, knownVerticalIds } from "./ecosystem.js";
 import { RuntimeManager } from "./runtime-manager.js";
 import { CoordinatorClient, AgentClient } from "./protocol-client.js";
 import type { ProtocolClients } from "./workflow.js";
@@ -20,10 +20,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const vertical = loadSweVertical();
+  // Load all 7 verticals (SWE + 6 domain verticals).
+  const ecosystem = loadEcosystem(config.verticals);
 
   process.stdout.write(formatBanner(config.workingDir, config.provider, config.model, config.autonomy));
-  process.stdout.write(`  Vertical: SWE (${vertical.workflows.length} workflows, ${vertical.profiles.length} profiles)\n`);
+  const verticalSummary = ecosystem.verticals
+    .map((v) => `${v.id}(${v.workflows.length}w/${v.toolDefinitions.length}t)`)
+    .join(", ");
+  process.stdout.write(`  Ecosystem: ${ecosystem.verticals.length} verticals — ${verticalSummary}\n`);
+  process.stdout.write(`  Tools: ${ecosystem.toolByName.size} vertical + 7 built-in\n`);
 
   // Spawn WACP runtime
   const runtime = new RuntimeManager({
@@ -63,7 +68,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   try {
-    await repl(session, config, vertical, clients);
+    await repl(session, config, ecosystem, clients);
   } finally {
     await shutdown();
   }

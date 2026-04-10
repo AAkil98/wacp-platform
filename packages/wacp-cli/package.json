@@ -15,6 +15,13 @@
   },
   "dependencies": {
     "@wacp/local": "file:../wacp-local",
+    "@wacp/swe": "file:../../ecosystem/swe",
+    "@wacp/devops": "file:../../ecosystem/devops",
+    "@wacp/mlops": "file:../../ecosystem/mlops",
+    "@wacp/finance": "file:../../ecosystem/finance",
+    "@wacp/healthcare": "file:../../ecosystem/healthcare",
+    "@wacp/analytics": "file:../../ecosystem/analytics",
+    "@wacp/datasci": "file:../../ecosystem/datasci",
     "@grpc/grpc-js": "^1.12.0",
     "@grpc/proto-loader": "^0.7.0",
     "yaml": "^2.7.0"

@@ -9,9 +9,11 @@ import { buildToolDefinitions, executeTool } from "../src/tools.js";
 describe("Tools", () => {
   // --- Tool definitions ---
 
-  it("all 14 tools have valid definitions", () => {
+  it("all 15 legacy tools (built-in + SWE) have valid definitions", () => {
+    // Legacy buildToolDefinitions = 7 universal built-in + 8 SWE-specific (incl. dependency_check).
+    // For multi-vertical composition, callers should use buildToolDefinitionsForEcosystem.
     const tools = buildToolDefinitions();
-    expect(tools).toHaveLength(14);
+    expect(tools).toHaveLength(15);
     for (const tool of tools) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();

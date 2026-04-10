@@ -2,9 +2,10 @@ import type { LocalSession, AgentProfile } from "@wacp/local";
 import type { CliConfig } from "./config.js";
 import type { Message, ToolCall, LlmResponse } from "./llm.js";
 import type { AgentClient } from "./protocol-client.js";
+import type { LoadedEcosystem } from "./ecosystem.js";
 import { SignalType, CheckpointStatus } from "./protocol-client.js";
 import { streamCompletion, LlmCallError } from "./llm.js";
-import { buildToolDefinitions, executeTool, type ToolDefinition, type ToolResult } from "./tools.js";
+import { buildToolDefinitions, buildToolDefinitionsForEcosystem, executeTool, type ToolDefinition, type ToolResult } from "./tools.js";
 import { formatToolCall, formatToolResult, formatGatePrompt } from "./display.js";
 
 export interface AgentCallbacks {
@@ -31,6 +32,7 @@ export async function stageAgentLoop(
   workspaceId: string | null,
   authToken: string | null,
   signal?: AbortSignal,
+  ecosystem?: LoadedEcosystem,
 ): Promise<string> {
   // Bind to workspace if we have protocol clients
   if (agentClient && workspaceId && authToken) {
@@ -48,12 +50,12 @@ export async function stageAgentLoop(
     { role: "user", content: `${priorContext}\n\nCurrent task: ${goal}` },
   ];
 
-  const allTools = buildToolDefinitions();
+  const allTools = ecosystem ? buildToolDefinitionsForEcosystem(ecosystem) : buildToolDefinitions();
   const tools = filterToolsByProfile(allTools, profile);
 
   let lastContent = "";
   try {
-    lastContent = await runLoop(session, config, messages, tools, callbacks, agentClient, signal);
+    lastContent = await runLoop(session, config, messages, tools, callbacks, agentClient, signal, ecosystem);
 
     // Checkpoint the stage output
     if (agentClient && lastContent) {
@@ -90,12 +92,14 @@ export async function agentLoop(
   goal: string,
   callbacks: AgentCallbacks,
   signal?: AbortSignal,
+  ecosystem?: LoadedEcosystem,
 ): Promise<string> {
   const messages: Message[] = [
     { role: "system", content: config.systemPrompt },
     { role: "user", content: goal },
   ];
-  return runLoop(session, config, messages, buildToolDefinitions(), callbacks, null, signal);
+  const tools = ecosystem ? buildToolDefinitionsForEcosystem(ecosystem) : buildToolDefinitions();
+  return runLoop(session, config, messages, tools, callbacks, null, signal, ecosystem);
 }
 
 async function runLoop(
@@ -106,6 +110,7 @@ async function runLoop(
   callbacks: AgentCallbacks,
   agentClient: AgentClient | null,
   signal?: AbortSignal,
+  ecosystem?: LoadedEcosystem,
 ): Promise<string> {
   let lastContent = "";
   let iterations = 0;
@@ -138,7 +143,7 @@ async function runLoop(
 
     for (const call of response.toolCalls) {
       callbacks.print(formatToolCall(call.name, call.arguments));
-      const result = await executeWithGate(session, call, callbacks);
+      const result = await executeWithGate(session, call, callbacks, ecosystem);
       callbacks.print(formatToolResult(result));
 
       // Checkpoint tool results through the protocol
@@ -172,15 +177,20 @@ export function filterToolsByProfile(allTools: ToolDefinition[], profile: AgentP
   return allTools.filter((t) => profile.tools.includes(t.name));
 }
 
-async function executeWithGate(session: LocalSession, call: ToolCall, callbacks: AgentCallbacks): Promise<ToolResult> {
-  const opType = toolToOperation(call.name);
+async function executeWithGate(
+  session: LocalSession,
+  call: ToolCall,
+  callbacks: AgentCallbacks,
+  ecosystem?: LoadedEcosystem,
+): Promise<ToolResult> {
+  const opType = toolToOperation(call.name, ecosystem);
   if (opType && !session.autonomy.check(opType)) {
     const prompt = formatGatePrompt(call.name, opType, `${call.name}(${JSON.stringify(call.arguments).slice(0, 100)})`);
     const answer = await callbacks.promptGate(prompt);
     switch (answer.toLowerCase().trim()) {
       case "y": case "yes": {
         session.autonomy.grant(opType);
-        const r = await executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments);
+        const r = await executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments, ecosystem);
         session.autonomy.revoke(opType);
         session.context.recordTrust(opType, true);
         return r;
@@ -188,24 +198,50 @@ async function executeWithGate(session: LocalSession, call: ToolCall, callbacks:
       case "a": case "always":
         session.autonomy.grantAlways(opType);
         session.context.recordTrust(opType, true);
-        return executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments);
+        return executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments, ecosystem);
       default:
         session.context.recordTrust(opType, false);
         return { toolCallId: call.id, content: `Operation '${opType}' denied by user.`, isError: true };
     }
   }
-  return executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments);
+  return executeTool(session.resources, session.autonomy, call.name, call.id, call.arguments, ecosystem);
 }
 
-function toolToOperation(name: string): string | null {
-  const m: Record<string, string> = {
-    read_file: "file_read", write_file: "file_write", list_dir: "file_read",
-    search_files: "file_read", code_search: "file_read", code_edit: "file_write",
-    run_command: "shell_exec", test_run: "shell_exec", lint_check: "shell_exec",
-    type_check: "shell_exec", git_status: "git_read", git_diff: "git_read",
-    git_branch: "git_write", git_commit: "git_write", dependency_check: "shell_exec",
+const BUILTIN_TOOL_OPERATIONS: Record<string, string> = {
+  read_file: "file_read",
+  write_file: "file_write",
+  list_dir: "file_read",
+  search_files: "file_read",
+  run_command: "shell_exec",
+  git_status: "git_read",
+  git_diff: "git_read",
+};
+
+function toolToOperation(name: string, ecosystem?: LoadedEcosystem): string | null {
+  // Built-in tools first.
+  const builtin = BUILTIN_TOOL_OPERATIONS[name];
+  if (builtin) return builtin;
+
+  // Ecosystem-aware: ask the owning vertical.
+  if (ecosystem) {
+    const owner = ecosystem.toolByName.get(name);
+    if (owner) {
+      return owner.toolOperation(name);
+    }
+  }
+
+  // Legacy SWE-only fallback (for callers that don't pass an ecosystem).
+  const sweLegacy: Record<string, string> = {
+    code_search: "file_read",
+    code_edit: "file_write",
+    test_run: "shell_exec",
+    type_check: "shell_exec",
+    lint_check: "shell_exec",
+    git_branch: "git_write",
+    git_commit: "git_write",
+    dependency_check: "shell_exec",
   };
-  return m[name] ?? null;
+  return sweLegacy[name] ?? null;
 }
 
 function buildAssistantContent(response: LlmResponse): string | ContentBlock[] {

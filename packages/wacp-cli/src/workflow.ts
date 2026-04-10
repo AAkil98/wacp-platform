@@ -1,11 +1,15 @@
 import type { LocalSession, AgentProfile, Workflow, WorkflowResult, WorkflowSignal, WorkflowStage } from "@wacp/local";
+import { detectTaskType as detectSweTaskType } from "@wacp/swe";
 import type { CliConfig } from "./config.js";
 import type { AgentCallbacks } from "./agent.js";
 import type { CoordinatorClient, AgentClient } from "./protocol-client.js";
+import type { LoadedEcosystem, RoutedGoal } from "./ecosystem.js";
+import { routeGoal as routeGoalEcosystem } from "./ecosystem.js";
 import { stageAgentLoop } from "./agent.js";
 import { formatGatePrompt } from "./display.js";
 
 export type { Workflow, AgentProfile, WorkflowResult };
+export type { RoutedGoal } from "./ecosystem.js";
 
 export interface DetectedTaskType {
   id: string;
@@ -19,23 +23,29 @@ export interface ProtocolClients {
 }
 
 /**
- * Detect the SWE task type from a user goal using keyword heuristics.
+ * Backward-compat shim: detect the SWE task type from a user goal.
+ *
+ * Pre-27R callers expect a SWE-only detector that always returns a value.
+ * This shim delegates to @wacp/swe's detector (which is the canonical source
+ * since 27R.1) so existing tests continue to pass without modification.
+ *
+ * New code should use {@link routeGoal} which dispatches across all loaded
+ * verticals before falling back to SWE.
  */
 export function detectTaskType(goal: string): DetectedTaskType {
-  const lower = goal.toLowerCase();
-  if (lower.match(/\b(fix|bug|error|crash|broken|issue|debug)\b/))
-    return { id: "swe:debug", workflowId: "swe:fix-bug" };
-  if (lower.match(/\b(refactor|restructure|reorganize|simplify|clean\s*up)\b/))
-    return { id: "swe:refactor", workflowId: "swe:refactor" };
-  if (lower.match(/\b(test|tests|coverage|spec|specs)\b/) && !lower.match(/\b(implement|add|build|create)\b/))
-    return { id: "swe:test", workflowId: "swe:write-tests" };
-  if (lower.match(/\b(review|evaluate|assess|check\s+quality)\b/))
-    return { id: "swe:review", workflowId: "swe:review-only" };
-  if (lower.match(/\b(document|docs|readme|comments)\b/))
-    return { id: "swe:document", workflowId: "swe:document-only" };
-  if (lower.match(/\b(investigate|research|explore|understand|how\s+does)\b/))
-    return { id: "swe:investigate", workflowId: "swe:investigate-only" };
-  return { id: "swe:implement", workflowId: "swe:implement-feature" };
+  const detected = detectSweTaskType(goal);
+  return detected ?? { id: "swe:implement", workflowId: "swe:implement-feature" };
+}
+
+/**
+ * Route a goal across an ecosystem of loaded verticals. Each vertical's
+ * detector is tried in load order; the first non-null result wins. If no
+ * detector matches, falls back to the SWE catchall.
+ *
+ * This is the multi-vertical entry point introduced by Phase 27R.
+ */
+export function routeGoal(goal: string, ecosystem: LoadedEcosystem): RoutedGoal {
+  return routeGoalEcosystem(goal, ecosystem);
 }
 
 /**
@@ -58,6 +68,7 @@ export async function executeGoalWithWorkflow(
   callbacks: AgentCallbacks,
   clients: ProtocolClients,
   signal?: AbortSignal,
+  ecosystem?: LoadedEcosystem,
 ): Promise<WorkflowResult> {
   callbacks.print(`\n━━━ Workflow: ${workflow.name} (${workflow.stages.length} stages) ━━━`);
 
@@ -112,7 +123,7 @@ export async function executeGoalWithWorkflow(
 
       return stageAgentLoop(
         session, config, stageGoal, priorContext, profile, callbacks,
-        clients.agent, workspaceId, authToken, signal,
+        clients.agent, workspaceId, authToken, signal, ecosystem,
       );
     },
 

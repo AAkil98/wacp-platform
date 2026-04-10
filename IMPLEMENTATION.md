@@ -333,8 +333,8 @@ Depends on: 27 (all verticals), 26R.
 | **27B** | **MLOps Vertical** | **Complete** | 26R |
 | **27C** | **Finance Vertical** | **Pending** | 26R |
 | **27D** | **Healthcare Vertical** | **Pending** | 26R |
-| **27F** | **Data Analytics Vertical** | **Pending** | 26R |
-| **27G** | **Data Science Vertical** | **Pending** | 26R |
+| **27F** | **Data Analytics Vertical** | **Complete** | 26R |
+| **27G** | **Data Science Vertical** | **Complete** | 26R |
 | 28 | IDE + Chat Bridge | Pending | 26R |
 | **29** | **API Server + Dashboard** | **Pending** | 27 |
 

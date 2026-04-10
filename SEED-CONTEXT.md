@@ -24,6 +24,8 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 27 (Remaining Verticals): complete.** Phase order swapped — verticals before API server so API design is informed by the full domain spectrum. All 6 verticals complete: DevOps (27A), MLOps (27B), Finance (27C), Healthcare (27D), Data Analytics (27F), Data Science (27G). Each vertical has a distinct enforceable constraint baked into its tool layer: blast radius / env-scaled gating (DevOps), compute budget + reproducibility (MLOps), regulatory compliance pre-check + forbidden-pattern screen (Finance), PHI access grant (consent or de-identification basis) gating clinical tools (Healthcare), SQL safety classification + query reproducibility (Analytics), hypothesis-declaration contract (Data Science). **459 new tests** added across the six verticals.
 
+**Phase 27R (Vertical Wiring Remediation): complete.** Discovered after 27D that the 6 new verticals were well-tested in isolation but architecturally orphaned: the CLI only loaded SWE, `detectTaskType()` only matched SWE keywords, the tool registry didn't include vertical tools, and constraint enforcement was unreachable. 27R closed all 7 wiring gaps: each vertical now exports `detectTaskType` + a `<UPPER>_VERTICAL` descriptor; the CLI's new `ecosystem.ts` loader composes all 7 via `loadEcosystem()`; `routeGoal()` dispatches across all loaded detectors; `buildToolDefinitionsForEcosystem` composes 7 built-in + 68 vertical tools; `executeTool()` dispatches to the owning vertical's executor; constraint enforcement reaches the CLI path end-to-end (Finance `trade_execute` blocked without compliance, Healthcare `clinical_report_generate` blocked without PHI grant, Data Science `hypothesis_test` blocked without declaration — all verified). The SWE inlining in `vertical.ts` is deleted — `@wacp/swe` is now the canonical source. **35 new cross-vertical integration tests** in `packages/wacp-cli/tests/ecosystem.test.ts`.
+
 ## Repository Map
 
 ```
@@ -93,7 +95,7 @@ wacp/
 │
 ├── packages/                # TypeScript packages
 │   ├── wacp-local/          # Local SDK: session, autonomy, orchestrator — 86 tests
-│   └── wacp-cli/            # CLI agent: REPL, gRPC, workflows — 97 tests
+│   └── wacp-cli/            # CLI agent: REPL, gRPC, ecosystem loader, multi-vertical router — 132 tests
 │
 ├── ecosystem/
 │   ├── swe/                 # SWE vertical — 57 tests
@@ -111,7 +113,7 @@ wacp/
 
 **Runtime (Rust):** Event-driven actor system on `tokio`. Three actor types: coordinator (singleton), workspace (per active workspace), transport (routes messages). No shared mutable state. Three gRPC services: AgentService (port 9400), HighwayService (port 9401), CoordinatorService (port 9402). REST gateway + WebSocket binding on the transport layer.
 
-**CLI Agent (TypeScript):** Spawns `wacp-runtime serve` as child process. Connects via gRPC using `@grpc/grpc-js`. Loads SWE vertical (4 workflows, 4 profiles). Detects task type from goal → selects workflow → drives execution through CoordinatorService (SubmitGoal → Decompose → Dispatch) and AgentService (Bind → Signal → Checkpoint) per stage. LLM calls are raw HTTP (external to protocol); everything else goes through the runtime.
+**CLI Agent (TypeScript):** Spawns `wacp-runtime serve` as child process. Connects via gRPC using `@grpc/grpc-js`. Loads the **full ecosystem** at boot via `loadEcosystem()` — all 7 verticals (SWE + 6 domain) with their workflows, profiles, tool definitions, executors, and detectors. When a goal arrives, `routeGoal(goal, ecosystem)` tries each vertical's `detectTaskType` in load order (domain verticals before SWE catchall), selects a workflow, and drives execution through CoordinatorService (SubmitGoal → Decompose → Dispatch) and AgentService (Bind → Signal → Checkpoint) per stage. Tool execution dispatches via `ecosystem.toolByName` to the owning vertical's `executeTool` — so `compliance_check`/`trade_execute`/`clinical_report_generate`/`hypothesis_test` and the other 64 vertical tools all run their constraint enforcement on the CLI path. LLM calls are raw HTTP (external to protocol); everything else goes through the runtime.
 
 **Middleware:** 7 frameworks. Tool framework (Rust: descriptors, JSON Schema validation, execution engine, circuit breakers, sandboxing). LLM adapters (Rust: Anthropic + OpenAI providers, SSE streaming, microdollar cost tracking, retry with backoff). Agent SDK v2 (Rust: AgentContext wrapping Agent + ToolRegistry). Coordinator SDK (Rust: CoordinatorContext + 15 proto RPCs, client + server). Local SDK (TypeScript: session lifecycle, autonomy manager, WorkflowExecutor, local resources). Security (Rust: content filter with 7 PII rules, secret store, audit events). Transport (Rust: REST gateway with GatewayBackend trait, WebSocket JSON-RPC 2.0, API key + session token + OAuth authenticators).
 
@@ -162,7 +164,7 @@ All 6 verticals share the same package structure as SWE and depend only on `@wac
 
 ## What's Next
 
-See `IMPLEMENTATION.md` for the full plan. Phase 27 is **complete** — all 6 verticals built. Next up: Phase 28 (IDE + Chat Bridge) and Phase 29 (API Server + Dashboard).
+See `IMPLEMENTATION.md` for the full plan. Phase 27 (verticals) and Phase 27R (wiring) are both **complete**. Next up: Phase 28 (IDE + Chat Bridge) and Phase 29 (API Server + Dashboard).
 
 | Phase | Name | Status |
 |-------|------|--------|
@@ -172,14 +174,17 @@ See `IMPLEMENTATION.md` for the full plan. Phase 27 is **complete** — all 6 ve
 | 27D | Healthcare Vertical | **Complete** |
 | 27F | Data Analytics Vertical | **Complete** (`0ac589d`) |
 | 27G | Data Science Vertical | **Complete** (`03c922a`) |
+| **27R** | **Vertical Wiring Remediation** | **Complete** |
 | 28 | IDE + Chat Bridge | Pending — **resume here** |
 | 29 | API Server + Dashboard | Pending |
 
 **Resumption notes for the next session:**
-- Phase 27 is done. Six verticals exist under `ecosystem/`, each with its own enforceable constraint baked into the tool layer (not deferred to a downstream review).
+- All 7 verticals are now wired into the CLI through `packages/wacp-cli/src/ecosystem.ts`. `loadEcosystem()` returns a `LoadedEcosystem` with workflows, profiles, tool definitions, executors, and detectors from every vertical. `routeGoal()` dispatches across them. `executeTool()` routes tool calls to the owning vertical's executor. Constraint enforcement (compliance_check, phi_access_grant, hypothesis declaration, SQL safety, env tier, compute budget) is reachable end-to-end from the CLI path.
+- The CLI's `vertical.ts` is now a thin backward-compat wrapper around `loadEcosystem(["swe"])`. The pre-27R inlined SWE definitions and "circular dependency" comment are gone — `@wacp/swe` is the canonical source.
+- Per-vertical detectors live in `ecosystem/<id>/src/detect.ts`. They return `null` for non-matches (so the router can try the next vertical), except for SWE which always returns at least the catchall `swe:implement-feature`.
+- Adding a new vertical (8th, etc.) requires: the standard package layout, exporting `<UPPER>_VERTICAL` from `index.ts`, and adding it to the `REGISTRY` map + `DEFAULT_LOAD_ORDER` array in `packages/wacp-cli/src/ecosystem.ts` plus `packages/wacp-cli/package.json` deps.
 - Phase 28 (IDE + Chat Bridge) — see `IMPLEMENTATION.md`. Likely focus: VS Code / JetBrains extension that connects to a running runtime via the existing Highway gRPC service, plus a chat bridge (Slack/Discord/Teams) that maps incoming messages to `SubmitGoal` and streams signals back. Both reuse existing transport — no new protocol surface needed.
 - Phase 29 (API Server + Dashboard) — REST + WebSocket gateway is already wired in `wacp-transport`; this phase is the dashboard frontend (web UI for trail browsing, workspace tree, signal stream) plus a stable public API surface contract.
-- Vertical pattern (for reference if a 7th vertical is ever added): `package.json` + `tsconfig.json` + `.gitignore` (node_modules) + `src/{index.ts, taxonomy.ts, tools/, profiles/, workflows/, quality/}` + `tests/{5 files}`. Shared interfaces (`ToolDefinition`, `AgentProfile`, `Workflow`, `WorkflowStage`, `QualityLevel`, `QualityReport`) are re-declared locally — no cross-vertical imports. Target tests per vertical: ~55–90.
 
 ---
 

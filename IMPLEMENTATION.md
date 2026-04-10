@@ -286,13 +286,105 @@ Wire all 25 REST gateway handlers to their gRPC counterparts.
 
 ### Phase 27 Exit Criteria
 
-- [ ] 6 vertical specs written and reviewed (DevOps, MLOps, Finance, Healthcare, Data Analytics, Data Science)
-- [ ] 6 verticals implemented following the SWE template
-- [ ] Each vertical: taxonomy, tools, profiles, workflows, quality — all tested
-- [ ] Each vertical's workflows execute through the protocol (SubmitGoal → Decompose → Dispatch → Bind → Signal → Checkpoint)
-- [ ] ~350 new tests across 6 verticals
-- [ ] CLI can load any vertical at boot and route goals to its workflows
-- [ ] Protocol generalizes: no SWE-specific assumptions in runtime or middleware
+- [x] 6 vertical specs written and reviewed (DevOps, MLOps, Finance, Healthcare, Data Analytics, Data Science)
+- [x] 6 verticals implemented following the SWE template
+- [x] Each vertical: taxonomy, tools, profiles, workflows, quality — all tested
+- [x] Each vertical's workflows execute through the protocol (SubmitGoal → Decompose → Dispatch → Bind → Signal → Checkpoint) — wired by 27R
+- [x] ~350 new tests across 6 verticals (actual: 459)
+- [x] CLI can load any vertical at boot and route goals to its workflows — wired by 27R
+- [x] Protocol generalizes: no SWE-specific assumptions in runtime or middleware
+
+---
+
+## Phase 27R — Vertical Wiring Remediation
+
+**Discovered after 27D:** The 6 new verticals (DevOps, MLOps, Finance, Healthcare, Analytics, Data Science) are well-typed, well-tested in isolation, and **completely orphaned at runtime**. The CLI's `vertical.ts` only loads SWE (and inlines its definitions instead of importing from `@wacp/swe`). `detectTaskType()` only matches SWE keywords. `buildToolDefinitions()` only registers built-in + SWE-specific tools. `executeTool()`'s switch statement has no path for vertical tools — calling `compliance_check`, `clinical_report_generate`, `trade_execute`, etc. hits the `default:` branch and returns "Unknown tool". The constraint enforcement that lives inside `executeFinanceTools` / `executeHealthcareTools` etc. is dead code.
+
+**No Phase 28 until every gap is closed.** This phase makes the verticals architecturally correct: the CLI loads all verticals at boot, routes goals across all loaded verticals' detectors, composes the tool registry from built-in + every vertical's tool definitions, and dispatches tool execution to the owning vertical's executor — so the per-vertical constraint enforcement actually fires when the LLM calls the tool.
+
+### 27R.1 — Per-Vertical Detector + Descriptor
+
+Each of the 7 verticals (`swe`, `devops`, `mlops`, `finance`, `healthcare`, `analytics`, `datasci`) gets a `detectTaskType` function and a vertical descriptor exported from its `index.ts`.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.1.1 | `src/detect.ts` per vertical | Implements `detectTaskType(goal: string): { id: string; workflowId: string } \| null` using the keyword heuristics described in each vertical's spec §3 (Detection). Returns null if no keyword matches the vertical's domain. |
+| 27R.1.2 | Vertical descriptor const | Each `index.ts` exports `<UPPER>_VERTICAL: VerticalDescriptor` bundling: `id`, `name`, `workflows`, `profiles`, `toolDefinitions`, `toolNames`, `detectTaskType`, `executeTool` (delegates to the vertical's `execute*Tools`), and `toolOperation(name)` mapping each tool to an autonomy operation type. |
+| 27R.1.3 | Type compatibility | The descriptor uses local types (each vertical declares its own `Workflow`, `AgentProfile`, `ToolDefinition`); structural compatibility with `@wacp/local` lets the CLI consume them uniformly. |
+
+**Exit criteria:** Each vertical's `index.ts` exports `detectTaskType` + `<UPPER>_VERTICAL`. The descriptor is consumable by the CLI's ecosystem loader without further wrapping.
+
+### 27R.2 — CLI Ecosystem Loader
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.2.1 | Add 7 vertical deps to `packages/wacp-cli/package.json` | `@wacp/swe`, `@wacp/devops`, `@wacp/mlops`, `@wacp/finance`, `@wacp/healthcare`, `@wacp/analytics`, `@wacp/datasci` — all `file:../../ecosystem/<id>` |
+| 27R.2.2 | `packages/wacp-cli/src/ecosystem.ts` | New file. Defines `LoadedVertical`, `LoadedEcosystem`, `loadEcosystem(enabledIds?)`. Imports all 7 vertical descriptors. Builds a `Map<toolName, LoadedVertical>` for O(1) tool dispatch. Detects and rejects tool name collisions across verticals. |
+| 27R.2.3 | Resolve SWE inlining | Delete the inlined SWE workflows/profiles from `packages/wacp-cli/src/vertical.ts`. The "circular dependency" comment is misleading — verticals depend on `@wacp/local`, `@wacp/local` depends on no vertical, no cycle exists. `loadSweVertical()` becomes a thin wrapper around `loadEcosystem(["swe"])` for backward-compat with existing tests. |
+
+**Exit criteria:** `loadEcosystem()` returns a fully populated `LoadedEcosystem` containing all 7 verticals with no name collisions. The SWE inlining is gone.
+
+### 27R.3 — Multi-Vertical Task Router
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.3.1 | `routeGoal(goal, ecosystem)` in `workflow.ts` | Iterates each loaded vertical's `detectTaskType`. Returns `{ verticalId, taskType, workflow, profiles }` for the first match, or falls back to SWE (the universal default) if no vertical claims the goal. Handles cross-vertical disambiguation by detector specificity (longer/more-specific keywords win). |
+| 27R.3.2 | `executeGoalWithWorkflow` ecosystem-aware | Accepts `LoadedEcosystem` so it can pull profiles from the owning vertical, not from a single passed-in `profiles[]`. |
+| 27R.3.3 | Backward-compat shim | Keep `detectTaskType()` exported as a SWE-only wrapper so existing CLI tests pass without rewrite (it now calls into the SWE vertical's detector). |
+
+**Exit criteria:** Submitting *"buy 10,000 shares of MSFT for the growth fund"* routes to `finance:trade` → `finance:trade-execution`. Submitting *"do an admission H&P for bed 4"* routes to `health:assess` → `health:patient-assessment`. SWE goals continue routing to SWE workflows.
+
+### 27R.4 — Tool Registry Composition + Dispatch
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.4.1 | Built-in vs vertical split in `tools.ts` | Keep the universal 7 (`read_file`, `write_file`, `list_dir`, `search_files`, `run_command`, `git_status`, `git_diff`) defined in CLI. Delete the inlined SWE-specific tool definitions (`code_search`, `code_edit`, `test_run`, `type_check`, `lint_check`, `git_branch`, `git_commit`) — they live in `@wacp/swe` and are loaded via the ecosystem. |
+| 27R.4.2 | `buildToolDefinitionsForEcosystem(ecosystem)` | Returns built-in 7 ∪ ⋃(every loaded vertical's `toolDefinitions`). Asserts uniqueness. |
+| 27R.4.3 | `executeTool` ecosystem-aware | When the tool name is built-in, run the existing switch. Otherwise, look up the owning vertical via `ecosystem.toolByName.get(name)` and delegate to that vertical's `executeTool(resources, name, args)`. Unknown tool names still return the structured error. |
+| 27R.4.4 | `toolToOperation` ecosystem-aware | First check the built-in map. Then ask the owning vertical via `vertical.toolOperation(name)`. Unknown → null (no autonomy gate, runs unconditionally — consistent with current behavior for unmapped tools). |
+
+**Exit criteria:** Calling `compliance_check` from any agent dispatches to `executeFinanceTools()`. Calling `clinical_report_generate` without a `phi_access_grant` returns the `PHI_ACCESS_NOT_GRANTED` error from `executeHealthcareTools()`. Calling `trade_execute` without an approved `compliance_check` returns the `COMPLIANCE_NOT_APPROVED` error. The constraint enforcement is reachable through the CLI dispatch path.
+
+### 27R.5 — Wire Main.ts and Pass Ecosystem Through
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.5.1 | `main.ts` calls `loadEcosystem()` | Replaces `loadSweVertical()`. Banner reports all loaded verticals with workflow + tool counts. |
+| 27R.5.2 | `repl()` accepts ecosystem | Passes it to `executeGoalWithWorkflow` and `agentLoop`. |
+| 27R.5.3 | `agent.ts` accepts ecosystem | `runLoop` and `agentLoop` accept ecosystem so they can compose tools and look up operations across verticals. |
+| 27R.5.4 | Optional: vertical config | Add `verticals: [...]` field to `CliConfig` so users can selectively load. Default: all 7. |
+
+**Exit criteria:** `wacp` CLI starts, banner shows all 7 verticals, REPL routes goals across verticals, tool dispatch reaches the right executor, gates fire when constraints would be violated.
+
+### 27R.6 — Cross-Vertical Integration Tests
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.6.1 | `tests/ecosystem.test.ts` | New cross-vertical tests: (a) `loadEcosystem` returns all 7 verticals with no collisions; (b) `routeGoal` classifies finance/healthcare/devops/mlops/analytics/datasci/swe goals into the correct vertical; (c) `executeTool` dispatches `compliance_check` → finance executor, `clinical_report_generate` → healthcare executor, `hypothesis_test` → datasci executor; (d) constraint enforcement fires end-to-end (`trade_execute` without compliance returns the expected error from the CLI dispatch path). |
+| 27R.6.2 | Update `tests/tools.test.ts` | The "all 14 tools" assertion becomes either "all 7 built-in tools" (no-arg) or "all N tools when ecosystem-loaded". Preserves all built-in executor tests unchanged. |
+| 27R.6.3 | Update `tests/workflow.test.ts` | The `detectTaskType` SWE tests still work via the backward-compat shim. The "all 14 tools are defined" assertion updates to use `buildToolDefinitionsForEcosystem`. The `loadSweVertical` tests still work via the wrapper. |
+
+**Exit criteria:** All existing CLI tests pass (after the documented updates) plus the new ecosystem integration tests pass. Total CLI test count grows by ~10–15.
+
+### 27R.7 — Documentation
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27R.7.1 | Update `SEED-CONTEXT.md` | Architecture summary reflects multi-vertical loading. Status of verticals updated to "Wired". Resumption notes drop the "verticals are isolated" caveat. |
+| 27R.7.2 | Update `IMPLEMENTATION.md` | Phase 27 exit criteria checked off. Phase summary table marks 27R complete. |
+
+### Phase 27R Exit Criteria
+
+- [x] Each vertical exports `detectTaskType` + a `<UPPER>_VERTICAL` descriptor
+- [x] CLI `loadEcosystem()` returns all 7 verticals with no collisions (78 vertical tools indexed)
+- [x] SWE inlining in `vertical.ts` deleted; SWE loaded via the ecosystem path (`@wacp/swe` is the canonical source)
+- [x] `routeGoal` correctly classifies cross-vertical goals (12 routing tests passing)
+- [x] `buildToolDefinitionsForEcosystem` composes 7 built-in + 68 vertical tools = 75 total
+- [x] `executeTool` dispatches vertical tools to their owning executor
+- [x] Constraint enforcement reaches the CLI path: Finance `trade_execute` (compliance check), Finance `compliance_check` (forbidden pattern), Healthcare `clinical_report_generate`/`lab_interpret` (PHI grant), Data Science `hypothesis_test` (declaration) all verified end-to-end
+- [x] Existing CLI tests still pass (97 → 97)
+- [x] New cross-vertical integration tests pass (35 new tests)
+- [x] Phase 27 exit criteria fully checked off
 
 ---
 
@@ -335,8 +427,9 @@ Depends on: 27 (all verticals), 26R.
 | **27D** | **Healthcare Vertical** | **Complete** | 26R |
 | **27F** | **Data Analytics Vertical** | **Complete** | 26R |
 | **27G** | **Data Science Vertical** | **Complete** | 26R |
-| 28 | IDE + Chat Bridge | Pending | 26R |
-| **29** | **API Server + Dashboard** | **Pending** | 27 |
+| **27R** | **Vertical Wiring Remediation** | **Complete** | 27A–G |
+| 28 | IDE + Chat Bridge | Pending | 27R |
+| **29** | **API Server + Dashboard** | **Pending** | 27R |
 
 ---
 

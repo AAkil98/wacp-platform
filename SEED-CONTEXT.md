@@ -22,6 +22,8 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 26R (Remediation): complete.** Closed 8 architectural gaps — CoordinatorService server, self-orchestration, protocol-aware CLI, REST gateway wiring (no stubs), WebSocket binding, Python bindings, OAuth authenticator. No shortcuts remain.
 
+**Phase 27 (Remaining Verticals): in progress.** Phase order swapped — verticals before API server so API design is informed by the full domain spectrum. 4 of 6 verticals complete: DevOps (27A), MLOps (27B), Data Analytics (27F), Data Science (27G). Each vertical has a distinct enforceable constraint baked into its tool layer: blast radius / env-scaled gating (DevOps), compute budget + reproducibility (MLOps), SQL safety classification + query reproducibility (Analytics), hypothesis-declaration contract (Data Science). **286 new tests** added across the four verticals. 27C (Finance) and 27D (Healthcare) remain.
+
 ## Repository Map
 
 ```
@@ -94,7 +96,11 @@ wacp/
 │   └── wacp-cli/            # CLI agent: REPL, gRPC, workflows — 97 tests
 │
 ├── ecosystem/
-│   └── swe/                 # SWE vertical: roles, tools, profiles, workflows — 57 tests
+│   ├── swe/                 # SWE vertical — 57 tests
+│   ├── devops/              # DevOps vertical: blast radius / env gating — 73 tests
+│   ├── mlops/               # MLOps vertical: compute budget / reproducibility — 67 tests
+│   ├── analytics/           # Data Analytics vertical: SQL safety / query reproducibility — 73 tests
+│   └── datasci/             # Data Science vertical: hypothesis declaration / statistical rigor — 73 tests
 │
 └── sdk-python/              # Python SDK: agent, tools, llm, coordinator, local — 104 tests
 ```
@@ -108,6 +114,17 @@ wacp/
 **Middleware:** 7 frameworks. Tool framework (Rust: descriptors, JSON Schema validation, execution engine, circuit breakers, sandboxing). LLM adapters (Rust: Anthropic + OpenAI providers, SSE streaming, microdollar cost tracking, retry with backoff). Agent SDK v2 (Rust: AgentContext wrapping Agent + ToolRegistry). Coordinator SDK (Rust: CoordinatorContext + 15 proto RPCs, client + server). Local SDK (TypeScript: session lifecycle, autonomy manager, WorkflowExecutor, local resources). Security (Rust: content filter with 7 PII rules, secret store, audit events). Transport (Rust: REST gateway with GatewayBackend trait, WebSocket JSON-RPC 2.0, API key + session token + OAuth authenticators).
 
 **SWE Vertical:** 4 roles (planner, implementer, tester, reviewer). 7 task types. 14 tools (7 built-in + 7 SWE-specific). 4 workflow DAGs. 6 quality dimensions. Executes through the protocol — each stage is a real workspace with signals, checkpoints, and trail entries.
+
+**Additional Verticals (4):** Each follows the SWE template (taxonomy → tools → profiles → workflows → quality) but carries its own hard constraint enforced at the tool layer:
+
+| Vertical | Roles | Task types | Tools | Workflows | Key constraint |
+|---|---|---|---|---|---|
+| DevOps (27A) | 5 | 9 | 10 | 5 | Environment-scaled gating — production mutations require human approval; `deploy_execute`/`rollback`/`secret_rotate` are env-aware |
+| MLOps (27B) | 5 | 9 | 10 | 4 | Compute-budget gating + reproducibility checkpoints (data hash, code version, random seed, hyperparameters) |
+| Data Analytics (27F) | 5 | 8 | 10 | 4 | `classifySql()` hard-blocks DROP/TRUNCATE/unscoped UPDATE/DELETE; every report must cite source queries |
+| Data Science (27G) | 5 | 9 | 10 | 4 | `hypothesis_test` refuses execution without prior declaration checkpoint; CIs required on all point estimates |
+
+All 4 verticals share the same package structure as SWE and depend only on `@wacp/local`. Tests: 73 + 67 + 73 + 73 = 286 added.
 
 ## Protocol Constants (must be exact)
 
@@ -141,13 +158,27 @@ wacp/
 
 ## What's Next
 
-See `IMPLEMENTATION.md` for the full plan. Phase 26R remediation is complete. Remaining phases:
+See `IMPLEMENTATION.md` for the full plan. Phase order has been swapped: all verticals before API server. 4 of 6 verticals complete.
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 27A–D | Remaining Verticals (DevOps, MLOps, Finance, Healthcare) | Pending |
+| 27A | DevOps Vertical | **Complete** (`c529f3e`) |
+| 27B | MLOps Vertical | **Complete** (`4c40f7b`) |
+| 27C | Finance Vertical | Pending — **resume here** |
+| 27D | Healthcare Vertical | Pending |
+| 27F | Data Analytics Vertical | **Complete** (`0ac589d`) |
+| 27G | Data Science Vertical | **Complete** (`03c922a`) |
 | 28 | IDE + Chat Bridge | Pending |
 | 29 | API Server + Dashboard | Pending |
+
+**Resumption notes for the next session:**
+- Pattern is established. Each new vertical follows the SWE template exactly: `package.json` + `tsconfig.json` + `.gitignore` (node_modules) + `src/{index.ts, taxonomy.ts, tools/, profiles/, workflows/, quality/}` + `tests/{5 files}`.
+- Workflow: write `<VERTICAL>.md` spec first → implement 6 source files → implement 5 test files → `npm install && npx vitest run` → commit.
+- Shared interfaces (`ToolDefinition`, `AgentProfile`, `Workflow`, `WorkflowStage`, `QualityLevel`, `QualityReport`) are re-declared locally in each vertical — no cross-vertical imports. This is intentional (no speculative abstraction).
+- Types are parallel but role enums differ per vertical (e.g., `toolAccess` values are domain-specific strings).
+- Finance (27C) key constraint: regulatory compliance as first-class gate, fiduciary model, legally-required audit trail.
+- Healthcare (27D) key constraint: PHI/HIPAA via security content filter, clinical validation gates, de-identification at tool level.
+- Target tests per vertical: ~55–75. Each dimension in `quality.ts` gets 1–2 tests plus the baseline "all-pass" and "all-dimensions-present" cases.
 
 ---
 

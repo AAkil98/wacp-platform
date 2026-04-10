@@ -170,15 +170,135 @@ Wire all 25 REST gateway handlers to their gRPC counterparts.
 
 ---
 
-## Phase 27+ (unchanged, blocked by 26R)
+## Phase 27 — Remaining Verticals (E2–E5)
 
-| Phase | Name | Depends on |
-|-------|------|------------|
-| 27 | API Server + Dashboard | 26R |
-| 28 | IDE + Chat Bridge | 26R |
-| 29 | Remaining Verticals | 26R |
+**Rationale for reorder:** Build all verticals before the API server. Four verticals stress-test protocol generality across domains. The API + dashboard design benefits from knowing the full vertical surface — roles, task types, tools, workflows, quality dimensions — rather than being shaped by SWE alone.
 
-See `LAYER-MAPPING.md` for full architectural detail.
+**Pattern:** Each vertical follows the SWE template (`ecosystem/swe/`). Each sub-phase produces: spec, taxonomy, tools, profiles, workflows, quality criteria, tests. Verticals are independent — sub-phases can overlap.
+
+### 27A — DevOps Vertical (E2)
+
+**Roles (5):** architect, deployer, monitor, responder, auditor.
+
+**Task types (9):** provision, deploy, monitor, respond, audit, migrate, configure, secure, optimize.
+
+**Key constraint:** Blast radius model. Environment-scaled gating — staging is auto-gated, production requires human approval. Rollback-aware workflows.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27A.1 | Spec | `ecosystem/devops/DEVOPS.md` — roles, task types, tools, profiles, workflows, quality, gates |
+| 27A.2 | Taxonomy | `taxonomy.ts` — 5 roles + 9 task types + lookup functions |
+| 27A.3 | Tools | Domain tools: `infra_plan`, `deploy_execute`, `rollback`, `health_check`, `log_query`, `metric_query`, `alert_manage`, `config_validate`, `secret_rotate`, `compliance_scan` |
+| 27A.4 | Profiles | 5 profiles: architect (read + plan), deployer (execute + rollback), monitor (read + alert), responder (execute, gated), auditor (read-only, autonomous) |
+| 27A.5 | Workflows | `devops:provision` (3 stages), `devops:deploy` (4 stages: plan → validate → deploy → verify), `devops:respond` (3 stages: triage → mitigate → postmortem), `devops:audit` (2 stages) |
+| 27A.6 | Quality | Dimensions: availability, security posture, compliance, blast radius, rollback readiness, documentation |
+| 27A.7 | Tests | Target: ~55 tests matching SWE coverage pattern |
+
+### 27B — MLOps Vertical (E3)
+
+**Roles (5):** researcher, trainer, evaluator, deployer, monitor.
+
+**Task types (9):** experiment, train, evaluate, deploy, monitor, optimize, data-prep, reproduce, audit.
+
+**Key constraint:** Compute budget enforcement. Reproducibility — every experiment must be checkpointed with hyperparameters, data hash, model hash. Model lineage tracked through trail.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27B.1 | Spec | `ecosystem/mlops/MLOPS.md` |
+| 27B.2 | Taxonomy | `taxonomy.ts` — 5 roles + 9 task types |
+| 27B.3 | Tools | Domain tools: `dataset_validate`, `experiment_track`, `train_launch`, `eval_benchmark`, `model_register`, `model_deploy`, `drift_detect`, `compute_budget`, `reproduce_check`, `data_lineage` |
+| 27B.4 | Profiles | 5 profiles: researcher (explore + experiment), trainer (compute-gated), evaluator (read + benchmark), deployer (model registry, gated), monitor (read + alert) |
+| 27B.5 | Workflows | `mlops:experiment` (4 stages: design → data-prep → train → evaluate), `mlops:deploy` (3 stages: validate → deploy → monitor), `mlops:reproduce` (2 stages), `mlops:optimize` (3 stages) |
+| 27B.6 | Quality | Dimensions: metric performance, reproducibility, data quality, compute efficiency, model freshness, documentation |
+| 27B.7 | Tests | Target: ~55 tests |
+
+### 27C — Finance Vertical (E4)
+
+**Roles (5):** analyst, risk-analyst, compliance-officer, reporter, portfolio-analyst.
+
+**Task types (9):** analyze, valuate, assess-risk, check-compliance, report, review-portfolio, rebalance, stress-test, investigate.
+
+**Key constraint:** Regulatory compliance as a first-class gate. Fiduciary model — all recommendations must include risk disclosure. Audit trail is legally required, not optional.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27C.1 | Spec | `ecosystem/finance/FINANCE.md` |
+| 27C.2 | Taxonomy | `taxonomy.ts` — 5 roles + 9 task types |
+| 27C.3 | Tools | Domain tools: `market_data`, `valuation_model`, `risk_calculator`, `compliance_check`, `report_generate`, `portfolio_analyze`, `stress_test`, `regulatory_lookup`, `audit_export`, `disclosure_attach` |
+| 27C.4 | Profiles | 5 profiles: analyst (data access + models), risk-analyst (risk tools, autonomous), compliance-officer (regulatory lookup, gated), reporter (read + generate), portfolio-analyst (full analysis, gated) |
+| 27C.5 | Workflows | `finance:analyze` (3 stages: data → model → report), `finance:risk-assess` (4 stages: identify → quantify → mitigate → report), `finance:compliance` (3 stages: check → remediate → certify), `finance:rebalance` (4 stages: analyze → propose → compliance-check → execute) |
+| 27C.6 | Quality | Dimensions: accuracy, regulatory compliance, risk disclosure, timeliness, auditability, reproducibility |
+| 27C.7 | Tests | Target: ~55 tests |
+
+### 27D — Healthcare Vertical (E5)
+
+**Roles (5):** clinician, researcher, analyst, compliance, coordinator.
+
+**Task types (8):** assess, diagnose-support, research, analyze, monitor, report, audit, educate.
+
+**Key constraint:** PHI/HIPAA compliance. All data handling must go through the security framework's content filter. Clinical validation gates — no output reaches patients without human sign-off. De-identification enforced at the tool level.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27D.1 | Spec | `ecosystem/healthcare/HEALTHCARE.md` |
+| 27D.2 | Taxonomy | `taxonomy.ts` — 5 roles + 8 task types |
+| 27D.3 | Tools | Domain tools: `clinical_search`, `protocol_lookup`, `lab_interpret`, `risk_score`, `phi_filter`, `consent_verify`, `report_generate`, `audit_export`, `education_material`, `de_identify` |
+| 27D.4 | Profiles | 5 profiles: clinician (clinical tools, always gated), researcher (search + analyze, gated), analyst (data + models, de-identified only), compliance (audit + verify, autonomous), coordinator (orchestration, gated) |
+| 27D.5 | Workflows | `health:assess` (3 stages: gather → analyze → report), `health:research` (4 stages: question → search → synthesize → review), `health:audit` (2 stages: scan → report), `health:educate` (2 stages: assess-level → generate) |
+| 27D.6 | Quality | Dimensions: clinical accuracy, PHI compliance, evidence basis, completeness, readability, regulatory adherence |
+| 27D.7 | Tests | Target: ~55 tests |
+
+### Phase 27 Exit Criteria
+
+- [ ] 4 vertical specs written and reviewed
+- [ ] 4 verticals implemented following the SWE template
+- [ ] Each vertical: taxonomy, tools, profiles, workflows, quality — all tested
+- [ ] Each vertical's workflows execute through the protocol (SubmitGoal → Decompose → Dispatch → Bind → Signal → Checkpoint)
+- [ ] ~220 new tests across 4 verticals
+- [ ] CLI can load any vertical at boot and route goals to its workflows
+- [ ] Protocol generalizes: no SWE-specific assumptions in runtime or middleware
+
+---
+
+## Phase 28 — IDE + Chat Bridge
+
+| # | Component | Scope |
+|---|-----------|-------|
+| 28.1 | IDE extension | VS Code + JetBrains — workspace panel, signal stream, inline checkpoints |
+| 28.2 | Chat bridge | Slack/Discord integration — goal submission, status, approvals via chat |
+
+Depends on: 26R (runtime + middleware). Independent of verticals.
+
+---
+
+## Phase 29 — API Server + Dashboard
+
+**Rationale for deferral:** With 5 verticals complete, the API surface is designed against the full domain spectrum — not just SWE.
+
+| # | Component | Scope |
+|---|-----------|-------|
+| 29.1 | API server | HTTP API wrapping the 3 gRPC services. Auth (OAuth + API key). Rate limiting. OpenAPI spec. Serves all verticals uniformly. |
+| 29.2 | Dashboard | Real-time workspace visualization, trail explorer, quality reports, cross-vertical workflow monitor. Consumes API server. |
+
+Depends on: 27 (all verticals), 26R.
+
+---
+
+## Phase Summary
+
+| Phase | Name | Status | Depends on |
+|-------|------|--------|------------|
+| 0–19, T1–T5 | Runtime | **Complete** | — |
+| 20–24 | Middleware | **Complete** | Runtime |
+| 25 | CLI Agent | **Complete** | Middleware |
+| 26 | SWE Vertical | **Complete** | CLI |
+| 26R | Remediation | **Complete** | 20–26 |
+| **27A** | **DevOps Vertical** | **Pending** | 26R |
+| **27B** | **MLOps Vertical** | **Pending** | 26R |
+| **27C** | **Finance Vertical** | **Pending** | 26R |
+| **27D** | **Healthcare Vertical** | **Pending** | 26R |
+| 28 | IDE + Chat Bridge | Pending | 26R |
+| **29** | **API Server + Dashboard** | **Pending** | 27 |
 
 ---
 

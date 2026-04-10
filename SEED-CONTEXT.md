@@ -145,9 +145,9 @@ See `IMPLEMENTATION.md` for the full plan. Phase 26R remediation is complete. Re
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 27 | API Server + Dashboard | Pending |
+| 27A–D | Remaining Verticals (DevOps, MLOps, Finance, Healthcare) | Pending |
 | 28 | IDE + Chat Bridge | Pending |
-| 29 | Remaining Verticals (DevOps, MLOps, Finance, Healthcare) | Pending |
+| 29 | API Server + Dashboard | Pending |
 
 ---
 

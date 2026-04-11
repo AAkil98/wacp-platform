@@ -607,4 +607,4 @@ wacp-runtime/
 ---
 
 *WACP implementation specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../protocol/PROTOCOL.md) | Implementation Journal: [IMPLEMENTATION.md](../IMPLEMENTATION.md)*
+*Protocol: [PROTOCOL.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/PROTOCOL.md) | Implementation Journal: [IMPLEMENTATION.md](../IMPLEMENTATION.md)*

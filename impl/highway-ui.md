@@ -758,9 +758,9 @@ This spec depends on four WACP specs and two implementation specs. Cross-referen
 
 | Spec | Sections referenced | Relationship |
 |------|-------------------|--------------|
-| [PROTOCOL.md](../protocol/PROTOCOL.md) | §8 (human highway), §11.3 (authentication) | Defines the highway's capabilities and security requirements |
-| [Human Highway](../protocol/mechanisms/human-highway.md) | §2 (four capabilities), §3 (gate schema), §4 (task approval), §5 (autonomy spectrum), §6 (edge cases), §7 (interface boundary), §8 (trail events) | The normative spec for everything the UI renders and captures |
-| [User](../protocol/primitives/user.md) | §2 (user_id), §3.1 (user states), §4.1 (ownership, escalation routing), §5.1 (originator) | User identity, state-gated actions, escalation routing |
+| [PROTOCOL.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/PROTOCOL.md) | §8 (human highway), §11.3 (authentication) | Defines the highway's capabilities and security requirements |
+| [Human Highway](https://github.com/Madahub-dev/wacp-protocol/blob/main/mechanisms/human-highway.md) | §2 (four capabilities), §3 (gate schema), §4 (task approval), §5 (autonomy spectrum), §6 (edge cases), §7 (interface boundary), §8 (trail events) | The normative spec for everything the UI renders and captures |
+| [User](https://github.com/Madahub-dev/wacp-protocol/blob/main/primitives/user.md) | §2 (user_id), §3.1 (user states), §4.1 (ownership, escalation routing), §5.1 (originator) | User identity, state-gated actions, escalation routing |
 | [Runtime Architecture](runtime.md) | §14 (concurrency model) | Runtime is the trust root; UI defers all enforcement |
 | [Protocol Interface](protocol-interface.md) | §5 (highway service contract), §6 (serialization rules), §7 (authentication at boundary), §9 (gRPC implementation) | Defines the wire contract — RPCs, messages, and codegen pipeline |
 | [Agent SDK Design](sdk-agent.md) | §1 (scope boundary) | Agent SDK is a peer client; the highway UI is the human-facing peer |
@@ -768,4 +768,4 @@ This spec depends on four WACP specs and two implementation specs. Cross-referen
 ---
 
 *WACP implementation specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../protocol/PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../protocol/TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/PROTOCOL.md) | Taxonomy: [TAXONOMY.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/TAXONOMY.md)*

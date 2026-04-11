@@ -1,172 +1,91 @@
-# WACP — Workspace Agent Coordination Protocol
+# WACP — Reference Implementation
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-**A formal protocol specification for coordinating autonomous agents in distributed, fault-tolerant systems.**
+**Reference implementation of the Workspace Agent Coordination Protocol (WACP).**
 
-WACP defines the rules by which autonomous agents — particularly AI agents — coordinate work. It specifies what agents say, how they communicate, and the structures they operate within. It does not specify how the underlying system schedules, allocates, or manages resources; that is the domain of the operating system layer.
+WACP is a formal protocol for coordinating autonomous agents — particularly AI agents — across isolated workspaces with explicit messaging, immutable progress records, capability-based security, and first-class human oversight. This repository contains the Rust reference implementation, TypeScript CLI agent, Python SDK, and seven ecosystem verticals that demonstrate domain-specific extension.
+
+The **protocol specification itself** is maintained in a separate repository:
+
+**[github.com/Madahub-dev/wacp-protocol](https://github.com/Madahub-dev/wacp-protocol)** — licensed under CC BY-SA 4.0
+
+The specification is the authoritative definition of WACP. This repository implements it; it does not define it. Other implementations are welcome and should conform to the specs in `wacp-protocol`.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [The Five Questions](#the-five-questions)
-- [Design Principles](#design-principles)
-- [Core Primitives](#core-primitives)
-- [Roles and Permissions](#roles-and-permissions)
-- [Mechanisms](#mechanisms)
-- [Topology](#topology)
-- [Taxonomy (Extension Registry)](#taxonomy-extension-registry)
+- [What's in This Repository](#whats-in-this-repository)
+- [Quick Start](#quick-start)
 - [Repository Structure](#repository-structure)
-- [Reading Guide](#reading-guide)
 - [Status](#status)
+- [Related Repositories](#related-repositories)
+- [Contributing](#contributing)
 - [Authors](#authors)
 - [License](#license)
 
 ---
 
-## Overview
+## What's in This Repository
 
-Modern AI systems increasingly require multiple agents working together — decomposing problems, producing artifacts in parallel, reviewing each other's output, and integrating results. WACP provides the coordination surface for this: the contracts between agents, between agents and the coordinator, and between all parties and the audit record.
+This is the reference implementation across three language ecosystems:
 
-WACP is a **protocol specification**, not an implementation. It is deliberately transport-agnostic — implementable over files, HTTP, pipes, message queues, or anything else. The coordination model is independent of how messages physically move.
+**Rust runtime and middleware** (`crates/`, 16 crates):
+- Core protocol types, clock, FSMs, taxonomy loader, permissions
+- Trail storage with hash chaining, tiered retention, snapshots
+- Workspace and coordinator actors
+- Three gRPC services (Agent, Highway, Coordinator) + REST gateway + WebSocket binding
+- Transport authentication: API key, session token, OAuth (OIDC/JWT)
+- Tool framework, LLM adapters (Anthropic + OpenAI), security framework (content filter, secret store, audit events)
+- Agent SDK v2, Coordinator SDK
 
-Key properties:
+**TypeScript applications and middleware** (`packages/`, `highway-ui/`, `ecosystem/`):
+- `@wacp/local` — local session SDK with autonomy spectrum and workflow executor
+- `@wacp/cli` — protocol-aware CLI agent that spawns the runtime, loads the full ecosystem, and dispatches goals across verticals
+- `highway-ui` — human oversight SPA (trail, gates, escalations, directives)
 
-- **Isolation through structure.** Workspaces are hard boundaries; communication is explicit.
-- **Immutability by default.** Checkpoints, trails, and closed workspaces cannot be modified.
-- **Capability-based security.** The runtime enforces permissions; agents cannot grant themselves rights.
-- **Human oversight is architectural.** Humans can observe, approve, inject, and escalate — without stopping the protocol.
-- **Full auditability.** Every event produces exactly one trail entry. No gaps. No inference required.
+**Python agent SDK** (`sdk-python/`):
+- Agent, tools, LLM, coordinator, local-session modules mirroring the Rust surface
 
----
+**Ecosystem verticals** (`ecosystem/`, 7 verticals):
+- **SWE** — planner, implementer, tester, reviewer roles with code-focused tools
+- **DevOps** — environment-scaled blast-radius gating
+- **MLOps** — compute-budget + reproducibility checkpoints
+- **Finance** — regulatory pre-check + forbidden-pattern screen on trade execution
+- **Healthcare** — HIPAA PHI access grant gating clinical tools
+- **Data Analytics** — SQL safety classification + query reproducibility
+- **Data Science** — pre-declared hypothesis contract for statistical testing
 
-## The Five Questions
-
-WACP is organized around five fundamental coordination questions:
-
-| Question | Answer | Primitive |
-|---|---|---|
-| **Where** does an agent work? | Workspaces — isolated, bounded execution contexts | `workspace` |
-| **How** do agents communicate? | Envelopes and signals — structured messages and typed notifications | `envelope`, `signal` |
-| **How** is progress recorded? | Checkpoints — immutable snapshots of work | `checkpoint` |
-| **How** is work organized? | Tasks — units of work forming dependency graphs | `task` |
-| **What** happened? | The trail — append-only audit log | `trail` |
-
----
-
-## Design Principles
-
-Every design decision in WACP traces back to at least one of these principles:
-
-1. **Messages over mutations.** Agents never modify shared state directly. All coordination happens through explicit, typed messages.
-2. **Roles are structural, not suggested.** Permissions are walls, not guidelines. Enforced by the runtime.
-3. **Explicit lifecycle, no inference.** Every state transition is declared. If the runtime does not know an agent's state, the agent has not declared it.
-4. **Context is scoped, not shared.** Each workspace has a defined boundary of visibility. Least privilege, applied to attention.
-5. **History is first-class.** The trail is not a log to be parsed — it is a structured record with typed entries.
-6. **Protocol over tooling.** WACP defines a protocol, not an application. Transport-agnostic by design.
-7. **Human access is architectural.** Autonomy is a spectrum configured per workflow, not a binary switch.
-8. **Ordering requires a clock.** Trail integrity, signal ordering, timeouts, and replay all depend on a well-defined logical clock.
+Each vertical ships its own roles, task types, tools, profiles, workflows, and quality dimensions, plus a committed `vertical.yaml` manifest consumable by the runtime's REST gateway.
 
 ---
 
-## Core Primitives
+## Quick Start
 
-### Workspace
+Prerequisites: Rust (stable), Node.js ≥22, Python ≥3.11, `protoc`, `pnpm`.
 
-The unit of isolation. A bounded context assigned to exactly one agent, containing everything that agent can see and act on. Workspaces form a tree rooted at the coordinator. Each workspace has a linear lifecycle with 9 states (`idle` through `closed`), resource budgets, a visibility set (what it can read), and an authority set (what it can do). Once closed, a workspace is immutable — revision requires creating a new one.
+```bash
+# Build the runtime binary
+cargo build --release --bin wacp-runtime
 
-### Envelope
+# Run the runtime on default ports (see IMPLEMENTATION.md §4.1 for the canonical port map)
+./target/release/wacp-runtime serve
 
-The unit of communication. A structured message addressed to a specific workspace. Three base types: `directive` (coordinator to worker), `feedback` (coordinator to worker), and `query` (worker to coordinator). Envelopes carry priority levels, payload flexibility, and reply-to threading. Extensible through the taxonomy.
+# Run the full test suite across all three language ecosystems
+cargo test --workspace
+cd packages/wacp-cli && pnpm install && pnpm test
+cd ../../sdk-python && pip install -e ".[dev]" && pytest tests/
+```
 
-### Signal
+For the TypeScript CLI agent:
 
-The unit of notification. A lightweight, typed event that an agent emits to declare a state change. There are exactly 11 signal types (`ready`, `started`, `blocked`, `checkpoint`, `complete`, `failed`, `escalation`, `migrated`, `suspended`, `resumed`, `cancelled`). The signal set is **closed** — it drives the state machine and cannot be extended.
-
-### Checkpoint
-
-The unit of progress. An immutable snapshot of work product. Two base types: `artifact` (produced output) and `observation` (noticed information). Checkpoints carry intent, confidence level, and status. They form a linear chain within each workspace — revisions create new checkpoints referencing the previous one.
-
-### Task
-
-The unit of work. A structured assignment with explicit dependencies, forming a directed acyclic graph (DAG). Tasks support decomposition of goals into executable units with priority and resource estimates. One-to-many relationship with workspaces (a task can be retried in multiple workspaces).
-
-### Trail
-
-The unit of history. An append-only, immutable, timestamped record of every protocol event. Hash-chained for tamper evidence. Two scopes: local (per workspace) and global (system-wide). The trail is the single source of truth — recovery, observability, and security all derive from it.
-
-### Identity
-
-The unit of uniqueness. Defines how identifiers are generated, scoped, and validated across the protocol. Identifiers are opaque, globally unique, and never reused.
-
-### User
-
-The unit of human identity. Defines how humans are represented in the protocol — their identity, hierarchy, and relationship to workspaces. Every workspace has an owner (the human on whose behalf it exists) and an originator (the human or system that caused its creation).
-
----
-
-## Roles and Permissions
-
-WACP defines three base roles:
-
-| Role | Purpose | Key capabilities |
-|---|---|---|
-| **Coordinator** | Orchestrates work | Creates workspaces, dispatches directives, evaluates results, integrates output |
-| **Worker** | Produces output | Receives directives, creates checkpoints, emits signals, sends queries |
-| **Observer** | Monitors activity | Reads trails and checkpoints, cannot send envelopes or create checkpoints |
-
-Roles are extensible through **single-level inheritance**. A derived role (e.g., `reviewer`) extends exactly one base role, inheriting its permissions and applying overrides. Derived roles are registered in the taxonomy before use.
-
-Permissions are enforced across five dimensions: **send**, **receive**, **emit**, **create**, and **access**. The permission matrix is enforced at runtime — it is capability-based, not advisory.
-
----
-
-## Mechanisms
-
-### Integration
-
-The coordinator's deliberate operation to merge completed workspace output into the parent. Three strategies: `direct` (copy as-is), `layered` (overlap detection), and `evaluated` (full coordination with conflict resolution). Supports salvage integration for recovering partial work from failed workspaces.
-
-### Recovery
-
-Fault tolerance through replay. The trail's immutability and completeness enable deterministic recovery — replay trail entries to restore any workspace to its last known good state. Handles workspace failures, message loss, coordinator failures, and cascade failures.
-
-### Human Highway
-
-The explicit protocol path for human oversight. Humans can inject directives, resolve conflicts, approve task transitions, and make decisions at gates. Every human action is recorded in the trail. Gates — checkpoints requiring human decision — are first-class protocol elements.
-
-### Security
-
-Cryptographic guarantees for protocol integrity. Hash-chained trails provide tamper evidence. Capability-based access control prevents privilege escalation. The security model assumes workers are potentially untrusted and enforces boundaries that survive compromised agents.
-
----
-
-## Topology
-
-The topology layer defines the structural relationships between protocol objects:
-
-| Structure | Spec | Description |
-|---|---|---|
-| **Workspace tree** | `tree.md` | Parent-child hierarchy of workspaces |
-| **Task graph** | `graph.md` | DAG of task dependencies |
-| **Causal ordering** | `causation.md` | Happens-before relationships between events |
-| **Channels** | `channels.md` | Message-passing pathways between workspaces |
-| **Ownership** | `ownership.md` | Which humans own which workspaces |
-| **Visibility** | `visibility.md` | What each workspace can read |
-
----
-
-## Taxonomy (Extension Registry)
-
-The taxonomy (`TAXONOMY.md`) is the protocol's extension mechanism. It registers:
-
-- **Derived roles** — application-specific roles that inherit from base roles (e.g., `reviewer` extends `worker`)
-- **Custom envelope types** — domain-specific message types beyond the three base types (e.g., `report`, `review`)
-- **Custom checkpoint types** — domain-specific output types beyond `artifact` and `observation` (e.g., `decision`, `analysis`)
-
-The taxonomy follows three rules: **open where safe, closed where critical** (envelopes and checkpoints are extensible; signals are not); **registration before use** (unregistered types are rejected at runtime); and **registry, not schema** (it registers names and permissions, not payload formats).
+```bash
+cd packages/wacp-cli
+pnpm install
+pnpm build
+node dist/main.js   # loads all 7 verticals at boot, starts the REPL
+```
 
 ---
 
@@ -174,88 +93,114 @@ The taxonomy follows three rules: **open where safe, closed where critical** (en
 
 ```
 wacp/
-├── PROTOCOL.md                  # Authoritative protocol specification
-├── TAXONOMY.md                  # Extension registry for derived types
-├── README.md                    # This file
-├── LICENSE                      # CC BY-SA 4.0
+├── IMPLEMENTATION.md        # Forward strategy — runtime productionization + Phase 28/29
+├── SEED-CONTEXT.md          # Current state primer for new sessions
+├── LAYER-MAPPING.md         # Historical architectural map (referenced by impl specs)
+├── LICENSE                  # Apache-2.0
+├── NOTICE                   # Attribution + pointer to wacp-protocol
 │
-├── primitives/                  # Core data structures
-│   ├── workspace.md             #   Execution containers and isolation
-│   ├── envelope.md              #   Structured messages
-│   ├── signal.md                #   Lightweight state notifications
-│   ├── checkpoint.md            #   Immutable work products
-│   ├── task.md                  #   Work units and DAG structure
-│   ├── trail.md                 #   Audit log and recovery log
-│   ├── identity.md              #   Identifier uniqueness and opaqueness
-│   └── user.md                  #   Human identity and user hierarchy
+├── Cargo.toml               # Workspace manifest — 16 crates
+├── Cargo.lock
+├── rust-toolchain.toml      # Pinned Rust version (where present)
 │
-├── foundations/                  # Baseline concepts
-│   ├── clock.md                 #   Monotonic logical time
-│   └── roles.md                 #   Authorization and permission matrix
+├── proto/                   # Protobuf definitions (5 files)
+│   ├── primitives.proto
+│   ├── agent.proto
+│   ├── highway.proto
+│   ├── coordinator.proto
+│   └── taxonomy.proto
 │
-├── mechanisms/                  # Operations
-│   ├── integration.md           #   Assembly and merge operations
-│   ├── recovery.md              #   Fault tolerance and repair
-│   ├── human-highway.md         #   Human oversight integration
-│   └── security.md              #   Cryptographic guarantees
+├── crates/                  # Rust implementation (16 crates)
+│   ├── wacp-types/          # Protocol enums, newtypes, structs
+│   ├── wacp-clock/          # HLC timestamps
+│   ├── wacp-fsm/            # Workspace / envelope / task state machines
+│   ├── wacp-taxonomy/       # YAML/JSON loader + VerticalManifest
+│   ├── wacp-permissions/    # Permission matrix, port rights
+│   ├── wacp-trail/          # Storage, hash chain, snapshots, tiered retention
+│   ├── wacp-workspace/      # Workspace actor (9 components)
+│   ├── wacp-coordinator/    # Decision engine, migration, task graph
+│   ├── wacp-transport/      # gRPC services, REST gateway, WebSocket, 4 auth providers
+│   ├── wacp-recovery/       # Trail replay, snapshot recovery
+│   ├── wacp-runtime/        # Binary: config, CLI, TLS, metrics, health
+│   ├── wacp-sdk/            # Rust agent SDK (Agent, AgentContext)
+│   ├── wacp-coordinator-sdk/# Coordinator client SDK
+│   ├── wacp-tools/          # Tool framework (registry, execution, resilience)
+│   ├── wacp-llm/            # LLM adapters (Anthropic, OpenAI, streaming)
+│   └── wacp-security/       # Content filter, secrets, audit events
 │
-├── topology/                    # Structural relationships
-│   ├── tree.md                  #   Workspace hierarchy
-│   ├── graph.md                 #   Task graph structure
-│   ├── causation.md             #   Causal ordering
-│   ├── channels.md              #   Message passing
-│   ├── ownership.md             #   Workspace ownership
-│   └── visibility.md            #   Data visibility model
+├── tests/                   # Cross-crate integration + E2E tests
 │
-├── impl/                        # Implementation specs (pre-code)
-│   ├── runtime.md               #   Runtime architecture (Rust)
-│   ├── storage.md               #   Storage architecture
-│   ├── protocol-interface.md    #   Protobuf + gRPC contracts
-│   └── sdk-agent.md             #   Agent SDK design (Python + Rust)
+├── impl/                    # Implementation specs (17 files — Rust/Tonic/SQLite-specific)
+│   # Note: these describe how the reference implementation is built, not the
+│   # portable protocol. Protocol specs live in github.com/Madahub-dev/wacp-protocol.
 │
-└── IMPLEMENTATION.md            # Decisions, language choice, roadmap
+├── ecosystem/               # Domain verticals (7 packages)
+│   ├── swe/
+│   ├── devops/
+│   ├── mlops/
+│   ├── finance/
+│   ├── healthcare/
+│   ├── analytics/
+│   └── datasci/
+│
+├── packages/                # TypeScript packages
+│   ├── wacp-local/          # Local SDK
+│   └── wacp-cli/            # CLI agent
+│
+├── sdk-python/              # Python agent SDK
+│
+├── highway-ui/              # Human oversight SPA
+│
+├── deploy/                  # systemd unit
+├── Dockerfile               # Multi-stage build
+└── .github/workflows/       # CI
 ```
-
----
-
-## Reading Guide
-
-**If you want the full picture**, start with `PROTOCOL.md`. It is the authoritative specification — approximately 70KB covering all primitives, roles, lifecycle states, and integration procedures in a single document.
-
-**If you want to understand a specific concept**, go directly to the relevant constituent spec. Each spec is self-contained with its own rules, examples, and conformance requirements.
-
-**Recommended reading order for newcomers:**
-
-1. `PROTOCOL.md` §1–3 — Scope, vocabulary, and design principles
-2. `primitives/workspace.md` — The foundational abstraction
-3. `primitives/envelope.md` — How agents communicate
-4. `primitives/signal.md` — How state changes propagate
-5. `primitives/checkpoint.md` — How progress is recorded
-6. `primitives/task.md` — How work is organized
-7. `primitives/trail.md` — How history is preserved
-8. `foundations/roles.md` — Who can do what
-9. `mechanisms/integration.md` — How results are assembled
-10. `mechanisms/human-highway.md` — How humans participate
-11. `TAXONOMY.md` — How the protocol is extended
-
-**If you want to implement WACP**, start with the implementation specs in `impl/`, then the conformance requirements in each protocol spec. See `IMPLEMENTATION.md` for architecture decisions, language choices, and the implementation roadmap.
 
 ---
 
 ## Status
 
-WACP v0.1 is **complete**. The protocol specification and all 20 constituent specs are published.
+See [`SEED-CONTEXT.md`](SEED-CONTEXT.md) for the current-state snapshot and [`IMPLEMENTATION.md`](IMPLEMENTATION.md) for the forward strategy.
 
-| Component | Status | Document |
+| Layer | Status |
+|---|---|
+| Protocol specification (separate repo: `wacp-protocol`) | Complete — v0.1 |
+| Runtime core (Phases 0–19 + T1–T5) | Complete — 12 foundational crates |
+| Middleware (Phases 20–24) | Complete — tool framework, LLM adapters, agent SDK v2, coordinator SDK, local SDK, security, transport extensions |
+| CLI agent + SWE vertical (Phases 25, 26) | Complete |
+| Remediation (Phase 26R) | Complete — no architectural gaps |
+| Remaining verticals (Phase 27A–G) | Complete — DevOps, MLOps, Finance, Healthcare, Data Analytics, Data Science |
+| Vertical wiring (Phase 27R) | Complete — multi-vertical ecosystem loader in the CLI |
+| Vertical surfacing (Phase 27S) | Complete — `GET /v1/verticals[/{id}]` REST endpoint |
+| **Runtime productionization + public API (Phase 29.1)** | **Pending** — see `IMPLEMENTATION.md` Stream A |
+| **IDE + chat bridge (Phase 28)** | **Pending** — see `IMPLEMENTATION.md` Stream B |
+| **Dashboard (Phase 29.2)** | **Pending** — built as `wacp-console`, separate repo |
+
+Total test coverage across the three ecosystems runs in the low thousands; see `SEED-CONTEXT.md` for the breakdown.
+
+---
+
+## Related Repositories
+
+| Repo | Purpose | License |
 |---|---|---|
-| Protocol specification | Complete | `PROTOCOL.md` |
-| Taxonomy | Complete | `TAXONOMY.md` |
-| Primitives (8 specs) | Complete | `primitives/` |
-| Foundations (2 specs) | Complete | `foundations/` |
-| Mechanisms (4 specs) | Complete | `mechanisms/` |
-| Topology (6 specs) | Complete | `topology/` |
-| Implementation specs (4 specs) | Complete | `impl/` |
-| Implementation journal | Active | `IMPLEMENTATION.md` |
+| [**Madahub-dev/wacp-protocol**](https://github.com/Madahub-dev/wacp-protocol) | Authoritative protocol specification — 20 specs + `PROTOCOL.md` + `TAXONOMY.md` | CC BY-SA 4.0 |
+| **Madahub-dev/wacp** (this repo) | Reference implementation — Rust runtime, TypeScript CLI, Python SDK, 7 verticals | Apache-2.0 |
+| **Madahub-dev/wacp-console** (in progress) | Browser-based workbench — profile studio, session launcher, live oversight dashboard. Consumes this repo via gRPC + REST. | Apache-2.0 |
+
+---
+
+## Contributing
+
+Contributions are welcome. For protocol-level changes (new primitives, new signal types, new integration rules), open a PR on `wacp-protocol` first — the implementation here follows the spec, not the reverse. For implementation-level changes (runtime internals, new REST endpoints, new vertical tools, bug fixes), open a PR here.
+
+Before contributing:
+
+- Run `cargo fmt --check && cargo clippy -- -D warnings && cargo test --workspace` for Rust changes.
+- Run `pnpm typecheck && pnpm test` in the affected TypeScript package.
+- Run `pytest tests/` in `sdk-python/` for Python SDK changes.
+
+By submitting a pull request, you agree that your contributions will be licensed under Apache-2.0 (see `LICENSE`) consistent with the rest of this repository.
 
 ---
 
@@ -268,6 +213,6 @@ WACP v0.1 is **complete**. The protocol specification and all 20 constituent spe
 
 ## License
 
-This work is licensed under [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/).
+This work is licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [`LICENSE`](LICENSE) for the full text and [`NOTICE`](NOTICE) for attribution and pointer to the protocol specification.
 
-You are free to share and adapt this material for any purpose, including commercially, provided you give appropriate credit and distribute contributions under the same license.
+The **protocol specification** in [Madahub-dev/wacp-protocol](https://github.com/Madahub-dev/wacp-protocol) is separately licensed under CC BY-SA 4.0. The two licenses are compatible: implementations of the WACP protocol are independent works, not derivative works of the specification in the share-alike sense, and may be licensed independently.

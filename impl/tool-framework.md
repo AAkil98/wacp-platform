@@ -867,4 +867,4 @@ crates/wacp-tools/
 ---
 
 *WACP implementation specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../protocol/PROTOCOL.md) | Implementation Plan: [IMPLEMENTATION.md](../IMPLEMENTATION.md)*
+*Protocol: [PROTOCOL.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/PROTOCOL.md) | Implementation Plan: [IMPLEMENTATION.md](../IMPLEMENTATION.md)*

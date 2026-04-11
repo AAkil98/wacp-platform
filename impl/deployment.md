@@ -2339,4 +2339,4 @@ The startup sequence has two performance-critical steps: trail integrity check (
 ---
 
 *WACP implementation specification — authored by Akil Abderrahim and Claude Opus 4.6*
-*Protocol: [PROTOCOL.md](../protocol/PROTOCOL.md) | Taxonomy: [TAXONOMY.md](../protocol/TAXONOMY.md)*
+*Protocol: [PROTOCOL.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/PROTOCOL.md) | Taxonomy: [TAXONOMY.md](https://github.com/Madahub-dev/wacp-protocol/blob/main/TAXONOMY.md)*

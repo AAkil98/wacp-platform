@@ -6,7 +6,9 @@
 
 ## What WACP Is
 
-WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinating autonomous agents. It defines how agents communicate, how work is organized, how progress is recorded, and how everything is audited. The protocol is complete — 20 constituent specs + PROTOCOL.md + TAXONOMY.md. The specification layer is complete — 10 implementation specs covering every protocol domain.
+WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinating autonomous agents. It defines how agents communicate, how work is organized, how progress is recorded, and how everything is audited.
+
+**This repository is the reference implementation** (Rust runtime + TypeScript CLI + Python SDK + 7 ecosystem verticals), licensed Apache-2.0. **The protocol specification itself lives in a sibling repository:** [`Madahub-dev/wacp-protocol`](https://github.com/Madahub-dev/wacp-protocol) under CC BY-SA 4.0 — 20 constituent specs + `PROTOCOL.md` + `TAXONOMY.md`. The protocol is complete at v0.1. The implementation-specs layer in this repo (`impl/`) is also complete — 10 implementation specs covering every protocol domain.
 
 ## Current State
 
@@ -33,17 +35,16 @@ wacp/
 ├── IMPLEMENTATION.md        # Forward strategy — runtime productionization + Phase 28/29
 ├── LAYER-MAPPING.md         # Historical map: mada-os layers → WACP (referenced by impl specs)
 ├── SEED-CONTEXT.md          # This file
-├── Cargo.toml               # Workspace manifest — 15 crates
+├── LICENSE                  # Apache-2.0 (specification is separately licensed CC BY-SA 4.0 in wacp-protocol)
+├── NOTICE                   # Attribution + pointer to wacp-protocol
+├── Cargo.toml               # Workspace manifest — 16 crates
 │
-├── protocol/                # The specification layer (20 specs)
-│   ├── PROTOCOL.md          # Authoritative protocol spec (976 lines)
-│   ├── TAXONOMY.md          # Extension registry (385 lines)
-│   ├── primitives/          # 8 specs
-│   ├── foundations/          # 2 specs
-│   ├── mechanisms/          # 4 specs
-│   └── topology/            # 6 specs
+# Protocol specification lives in the sibling repository:
+#   github.com/Madahub-dev/wacp-protocol (CC BY-SA 4.0)
+#   — PROTOCOL.md, TAXONOMY.md, primitives/, foundations/, mechanisms/, topology/
+# This repo implements those specs; it does not define them.
 │
-├── impl/                    # Implementation specs (17 total)
+├── impl/                    # Implementation specs (17 total — Rust/Tonic/SQLite-specific)
 │   ├── runtime.md           # State machine, permissions, trail, clock
 │   ├── storage.md           # Trail backend, checkpoints, snapshots
 │   ├── protocol-interface.md # Protobuf, gRPC, transport trait
@@ -70,7 +71,7 @@ wacp/
 │   ├── coordinator.proto    # CoordinatorService — 15 RPCs
 │   └── taxonomy.proto       # Taxonomy configuration
 │
-├── crates/                  # Rust implementation (15 crates)
+├── crates/                  # Rust implementation (16 crates)
 │   ├── wacp-types/          # Protocol enums, newtypes, structs — 45 tests
 │   ├── wacp-clock/          # HLC timestamps — 33 tests
 │   ├── wacp-fsm/            # Workspace/envelope/task FSMs — 55 tests

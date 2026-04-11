@@ -165,7 +165,7 @@ Tooling recommendation: **`cargo-dist`** for the build matrix. It handles the co
 Two viable paths. **Option A is recommended.**
 
 **Option A — crates.io publication.**
-- Add `description`, `license` (`CC-BY-SA-4.0` or relicense to Apache-2.0 for crate publication), `repository`, `keywords`, `readme` to both `crates/wacp-types/Cargo.toml` and `crates/wacp-taxonomy/Cargo.toml`.
+- Add `description`, `license = "Apache-2.0"`, `repository`, `keywords`, `readme` to both `crates/wacp-types/Cargo.toml` and `crates/wacp-taxonomy/Cargo.toml`. License is already set at workspace level post-Q7 resolution.
 - Publish in dependency order: `cargo publish -p wacp-types` → `cargo publish -p wacp-taxonomy`.
 - Start at `0.1.0`. Bump to `0.2.0` on any `VerticalManifest` field removal or rename. Patch bumps for additive fields.
 - Consumer (Console `Cargo.toml`): `wacp-taxonomy = "0.1"` instead of `git = "…"`.

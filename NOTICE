@@ -1,0 +1,14 @@
+WACP — Workspace Agent Coordination Protocol
+Reference Implementation
+
+Copyright 2026 Akil Abderrahim
+
+This product is the reference implementation of WACP. The WACP protocol
+specification is maintained in a separate repository under a different
+license (CC BY-SA 4.0):
+
+    https://github.com/Madahub-dev/wacp-protocol
+
+Implementations of the WACP protocol are independent works; they are
+not derivative works of the specification in the CC BY-SA 4.0
+share-alike sense and may be licensed independently.

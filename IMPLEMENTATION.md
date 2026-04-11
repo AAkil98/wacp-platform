@@ -89,7 +89,8 @@ The Console can start building today against:
   - `/v1/gates/{id}/respond`, `/v1/escalations/{id}/respond`
   - `/v1/verticals`, `/v1/verticals/{id}`
 - **WebSocket** — `/v1/ws`, JSON-RPC 2.0 framing, `GatewayBackend`-trait-based, already authenticated.
-- **Auth** — API key, session token, and OAuth (OIDC/JWT) authenticators in `wacp-transport`.
+- **Auth** — API key, session token, and OAuth (OIDC/JWT) authenticators in `wacp-transport`. Sufficient for Console Q2 Phase 1: the Console backend authenticates to the runtime via `ApiKeyAuthenticator`; the Console's user-facing multi-user auth (Argon2id + cookies + tokens + role hierarchy) lives inside the Console backend and is independent of runtime auth.
+- **TLS** — rustls on gRPC services via `wacp-runtime::tls`; supports plaintext, system trust store, and custom-CA / pinned-cert / client-cert modes. Aligns with Console Q3 (rustls-everywhere, no OpenSSL). The Console's three-mode trust boundary is Console-side connection logic; no runtime changes required.
 - **`wacp-taxonomy`** — `VerticalManifest` and sub-types are `Serialize + Deserialize`, forward-compatible via `#[serde(default)]`, authoritative for vertical schema evolution.
 - **Runtime CLI** — `wacp-runtime {serve,validate,defaults}` with TOML config + env overrides.
 - **Dockerfile** — multi-stage build producing a ~20–40 MB `debian:bookworm-slim` image (but see G1 below).
@@ -149,16 +150,22 @@ Fixes required:
 
 **Add `.github/workflows/release.yml`:**
 
-- Trigger: push of a tag matching `v*` (`v0.1.0`, `v0.2.0-rc.1`, …).
-- Matrix: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`. Windows deferred.
-- Build: `cargo build --release --bin wacp-runtime` with LTO + strip. Also `wacp-mock-runtime` once §4.5 lands.
-- Upload: attach binaries to the GitHub Release as archive + SHA256.
-- Docker: `docker buildx build --push -t ghcr.io/<owner>/wacp-runtime:<tag> .` (uses the fixed-ports `Dockerfile` from §4.1).
-- Optional: publish `wacp-types` + `wacp-taxonomy` to crates.io on the same trigger (see §4.3).
+- **Tool:** **`cargo-dist`**. This aligns with Console Q1 (`wacp-console/TECH_STACK_PROPOSAL.md` §10), which committed the Console binary to cargo-dist across five channels. The WACP runtime uses the same tool and the same target matrix so operators see a consistent install story across both binaries.
+- **Trigger:** push of a tag matching `v*` (`v0.1.0`, `v0.2.0-rc.1`, …).
+- **Target matrix** (mirrors Console §5.2):
+  - Tier 1: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`
+  - Tier 2: `x86_64-pc-windows-msvc`, `aarch64-unknown-linux-gnu`
+- **Five channels** (mirrors Console Q1):
+  1. GitHub Release — prebuilt binaries per target with `tar.gz` / `zip` archives + SHA256 sums
+  2. Shell installer — `curl https://.../install.sh | sh`, cargo-dist-generated
+  3. Homebrew tap — cargo-dist-generated formula
+  4. Windows — MSI installer or winget manifest (cargo-dist supports both)
+  5. Docker image on GHCR — `ghcr.io/Madahub-dev/wacp-runtime:<tag>` via the fixed-ports `Dockerfile` from §4.1
+- **Also builds** `wacp-mock-runtime` (once §4.5 lands) as a second binary artifact on the same target matrix.
+- **Optional on the same trigger:** publish `wacp-types` + `wacp-taxonomy` to crates.io (see §4.3).
+- **Deferred:** deb / rpm packages. Rationale matches Console Q1 — each distro package carries real per-version maintenance cost (systemd units, FHS conventions, signing, postinst scripts) not served by the current operator audience. `nfpm` / `cargo-deb` / `cargo-rpm` can generate packages later without rewriting the pipeline.
 
-Tooling recommendation: **`cargo-dist`** for the build matrix. It handles the common cases (tar.gz + zip + SHA256 + GH Release upload) in ~30 lines of `Cargo.toml` metadata.
-
-**Exit criteria.** Tagging `v0.1.0` produces a GitHub Release with four binaries, each runnable standalone; a Docker image on GHCR; and (if §4.3 is adopted) a crates.io publication. The CI matrix runs green on every PR for every package.
+**Exit criteria.** Tagging `v0.1.0` produces: a GitHub Release with Tier-1 + Tier-2 binaries + shell installer + Homebrew formula + (if configured) Windows installer + Docker image on GHCR; and (if §4.3 is adopted) a crates.io publication. The CI matrix runs green on every PR for every package.
 
 ### 4.3 `wacp-taxonomy` stability (G4)
 
@@ -233,9 +240,23 @@ Option A is cheaper for downstream consumers (standard registry resolution, cach
 
 **Recommended Console kickoff order** (tracked in `wacp-console/SPEC_BUILD.md` and its own `IMPLEMENTATION.md`):
 
-1. Finish spec set — answer the §10 open questions in `wacp-console/TECH_STACK_PROPOSAL.md`, then glossary, architecture, data-model, discovery, profiles, sessions, highway, api, ui, test.
-2. Bridge phase — `/tech-stack` → `/impl-plan` → `/setup-dev` inside `wacp-console`.
-3. Code phase — after §4.1–§4.4 land. Console specs and scaffolding can proceed in parallel with Stream A; only integration testing and release require Stream A complete.
+1. **Finish spec set.** §10 of `wacp-console/TECH_STACK_PROPOSAL.md` is now answered (Q1–Q7; Q7 is resolved by this repo's split in commit `ef20421`). **But Q2's Phase-1 multi-user auth commitment requires 7 Console-side spec revisions before `/impl-plan` can proceed:** a new `wcon-auth` spec (identity, sessions, authorization, bootstrap, password policy, audit schema, threat model) plus revisions to `wcon-architecture` §8, `wcon-data-model` §5 (new tables `users`, `user_sessions`, `api_tokens`, `audit_log`, `login_attempts` + `owner_user_id`/`visibility` columns on profile and session records), `wcon-api` (`/v1/auth/*`, `/v1/users/*`, `/v1/tokens/*`, `/v1/audit-log` endpoint families), `wcon-profiles` (ownership + visibility + ACL), `wcon-sessions` (launch identity + stream authorization), and `wcon-ui` (login screen, user menu, admin pages, audit log viewer). This is the critical-path blocker on the Console side and is independent of Stream A — the Console cannot write code against a data model that has no `owner_user_id` column until the spec revisions land.
+2. **Bridge phase.** `/tech-stack` → `/impl-plan` → `/setup-dev` inside `wacp-console` after step 1.
+3. **Code phase.** After §4.1–§4.4 land on the runtime side. Console specs and scaffolding can proceed in parallel with Stream A; only integration testing and release require Stream A complete.
+
+### 5.1 Console tech-stack decisions (Q1–Q7) — reference
+
+Recorded here for cross-session lookup. Decisions come from `wacp-console/TECH_STACK_PROPOSAL.md` §10. The last column records where each decision affects runtime-side work in this repo.
+
+| Q | Topic | Decision | Runtime-side impact |
+|---|---|---|---|
+| **Q1** | Distribution | `cargo-dist`, five channels (GitHub Release, shell installer, Homebrew tap, Windows MSI/winget, Docker image). Tier 1: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`. Tier 2: `x86_64-pc-windows-msvc`, `aarch64-unknown-linux-gnu`. deb/rpm deferred. | **§4.2** — runtime uses the same tool, matrix, and channel set. Operators install both binaries the same way. Docker base image note: Console ships distroless; WACP currently ships `debian:bookworm-slim`. Alignment optional, not blocking. |
+| **Q2** | Auth scope | Multi-user in Phase 1. Local users, Argon2id password hashing, SQLite storage. Cookie sessions (HttpOnly, Secure, SameSite=Strict, CSRF-protected). Named API tokens (bearer, scoped, revocable, hashed at rest). Three-role hierarchy (`admin` ⊃ `operator` ⊃ `viewer`). Ownership/visibility on profiles and sessions. First-launch bootstrap admin credential. Audit log + rate limiting. Future OIDC path. | Runtime **unchanged** — `wacp-transport::ApiKeyAuthenticator` already covers the Console backend → runtime channel. The Console's user-facing auth lives inside the Console backend. **Unblocks**: nothing on runtime side. **Blocks**: Console `/impl-plan` until 7 spec revisions land (see §5 step 1). |
+| **Q3** | gRPC TLS trust | Three modes, selected by address scheme: plaintext on loopback (implicit), system trust store (`https://` / `grpcs://`), explicit CA / pinned cert (`runtime.tls_ca_pem` or `runtime.tls_pinned_cert_sha256`). Fails closed on non-loopback plaintext unless `WCON_ALLOW_INSECURE_TLS=1`. rustls everywhere, no OpenSSL. | Runtime **unchanged** — `wacp-runtime::tls` already supports all three modes. The Console's connect-time logic and `runtime` table columns (`tls_mode`, `tls_ca_pem`, `tls_pinned_cert_sha256`, `tls_server_name`, `tls_client_cert_pem`, `tls_client_key_pem`) are Console-side implementation. |
+| **Q4** | Frontend bundle | Embed by default via `rust-embed`. `--frontend-path <dir>` override for dev convenience. Single release-build path, single dev-build path, no dual-code-path drift. | Console-internal. No runtime impact. |
+| **Q5** | Telemetry | Never phones home. `settings.telemetry.enabled` off by default. When enabled, exports OTLP to an *operator-configured* endpoint only — no Anthropic/WACP-owned URL is ever hard-coded. | Console-internal policy. The runtime follows the same pattern: `tracing-opentelemetry` export is opt-in, endpoint is operator-configured (see §4.2 observability mention). Aligned. |
+| **Q6** | Profile YAML versioning | `format_version: 1` required top-level integer key in all profile exports. Unknown major version → new `INVALID_FORMAT_VERSION` error code. Unknown fields within a known version → import warning (forward-compat). | Console-internal (profiles are Console entities, not runtime entities). **Follow-up consideration**: the runtime's `ecosystem/*/vertical.yaml` manifests currently have no `format_version` key; adopting the same convention would improve forward-compat symmetry. Out of scope for Q6 but worth revisiting as a Phase 27S follow-up. |
+| **Q7** | License | Apache-2.0 for reference implementation; CC BY-SA 4.0 for protocol spec in sibling `wacp-protocol` repo. | **Resolved in commit `ef20421`** — this repo fully relicensed, protocol spec extracted to sibling repo, 15 cross-references updated to GitHub URLs, 10 TypeScript `package.json` files given explicit `"license": "Apache-2.0"`. Remaining manual step: push `wacp-protocol` to GitHub (see `ef20421` commit body). |
 
 ## 6. Phase 28 — IDE + chat bridge (Stream B)
 

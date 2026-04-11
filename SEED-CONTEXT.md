@@ -30,9 +30,8 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 ```
 wacp/
-├── IMPLEMENTATION.md        # Forward plan — Phases 20–29 + 26R remediation
-├── LAYER-MAPPING.md         # Architectural mapping: mada-os layers → WACP equivalents
-├── TEST-STRATEGY.md         # Comprehensive test strategy
+├── IMPLEMENTATION.md        # Forward strategy — runtime productionization + Phase 28/29
+├── LAYER-MAPPING.md         # Historical map: mada-os layers → WACP (referenced by impl specs)
 ├── SEED-CONTEXT.md          # This file
 ├── Cargo.toml               # Workspace manifest — 15 crates
 │

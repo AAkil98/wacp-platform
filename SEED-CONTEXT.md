@@ -28,6 +28,16 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Phase 27R (Vertical Wiring Remediation): complete.** Discovered after 27D that the 6 new verticals were well-tested in isolation but architecturally orphaned: the CLI only loaded SWE, `detectTaskType()` only matched SWE keywords, the tool registry didn't include vertical tools, and constraint enforcement was unreachable. 27R closed all 7 wiring gaps: each vertical now exports `detectTaskType` + a `<UPPER>_VERTICAL` descriptor; the CLI's new `ecosystem.ts` loader composes all 7 via `loadEcosystem()`; `routeGoal()` dispatches across all loaded detectors; `buildToolDefinitionsForEcosystem` composes 7 built-in + 68 vertical tools; `executeTool()` dispatches to the owning vertical's executor; constraint enforcement reaches the CLI path end-to-end (Finance `trade_execute` blocked without compliance, Healthcare `clinical_report_generate` blocked without PHI grant, Data Science `hypothesis_test` blocked without declaration — all verified). The SWE inlining in `vertical.ts` is deleted — `@wacp/swe` is now the canonical source. **35 new cross-vertical integration tests** in `packages/wacp-cli/tests/ecosystem.test.ts`.
 
+**Phase 27S (Vertical Surfacing): complete.** Extended each `*_VERTICAL` descriptor with 6 new typed fields (`defining_constraint`, `context_schema`, `tool_policies`, `checkpoint_types`, `quality_criteria`, `task_types`) that surface domain knowledge previously embedded only in executable code. Added `packages/wacp-cli/scripts/generate-manifests.ts` which serializes each vertical to a deterministic `ecosystem/{id}/vertical.yaml`; all 7 manifests are committed. `wacp-taxonomy::VerticalManifest` (Rust) was extended to match. The runtime loads manifests from `taxonomy.verticals_dir` at startup and serves them via `GET /v1/verticals` + `GET /v1/verticals/{id}` through the REST gateway. **9 new tests** across `wacp-transport` + `wacp-taxonomy`. This phase unblocks `wacp-console` — the Console queries the runtime's REST endpoint for vertical manifests instead of filesystem-parsing per ADR-001 in its `SPEC_BUILD.md`.
+
+**Forward strategy + protocol split (2026-04-11): complete.** Three repo-level changes post-27S:
+
+1. **`IMPLEMENTATION.md` rewritten as a forward strategy** (commit `1b8d6e5`) — no longer a phase-by-phase historical record. Organized around Stream A (runtime productionization: port alignment, CI expansion, release pipeline, `wacp-taxonomy` stability, OpenAPI generation, REST surface audit, mock runtime binary) and Stream B (Phase 28 IDE + chat bridge). Phase 29.2 Dashboard is recognized as `wacp-console` sibling repo. Full task inventory in §8. Stale pre-Phase-20 planning docs (`SPEC-STRATEGY.md`, `TEST-STRATEGY.md`) deleted in the same commit.
+
+2. **Protocol specs extracted to sibling repo** (commit `ef20421`) — the `protocol/` subtree (22 files, 20 specs + `PROTOCOL.md` + `TAXONOMY.md`) was extracted via `git filter-repo` into a new repo at [`github.com/Madahub-dev/wacp-protocol`](https://github.com/Madahub-dev/wacp-protocol) **licensed CC BY-SA 4.0**. This repo (`Madahub-dev/wacp`) is now uniformly **Apache-2.0**: root `LICENSE` replaced, `NOTICE` file added, 10 TypeScript `package.json` files given explicit `"license": "Apache-2.0"` (they previously declared nothing), 15 markdown cross-references in `impl/*.md` updated to absolute URLs in the sibling repo. Resolves a three-way license drift that predated this session. Local clone of the sibling repo is at `/home/aakil98/mada/wacp-protocol/`.
+
+3. **Console Q1–Q6 folded into `IMPLEMENTATION.md`** (commit `199dee0`) — `wacp-console/TECH_STACK_PROPOSAL.md` §10 Q1–Q7 are all answered. Runtime-side impacts integrated: §3.2 notes Q2/Q3 compatibility (existing auth + TLS are sufficient), §4.2 commits Stream A to `cargo-dist` with 5 channels and Tier 1/Tier 2 matrix matching Console §5.2, §5 flags Q2's 7-Console-side-spec-revision blocker, new §5.1 table records all 7 Q decisions with runtime-side impact for future-session lookup.
+
 ## Repository Map
 
 ```
@@ -111,7 +121,7 @@ wacp/
 
 ## Architecture Summary
 
-**Runtime (Rust):** Event-driven actor system on `tokio`. Three actor types: coordinator (singleton), workspace (per active workspace), transport (routes messages). No shared mutable state. Three gRPC services: AgentService (port 9400), HighwayService (port 9401), CoordinatorService (port 9402). REST gateway + WebSocket binding on the transport layer.
+**Runtime (Rust):** Event-driven actor system on `tokio`. Three actor types: coordinator (singleton), workspace (per active workspace), transport (routes messages). No shared mutable state. Three gRPC services per `crates/wacp-runtime/src/config.rs` defaults: AgentService `[::1]:9090`, HighwayService `[::1]:9091`, CoordinatorService `[::1]:9402` — **note drift**: the coordinator port is inconsistent with the 9090/9091 pair, and the `Dockerfile` never sets or EXPOSEs it, so `CoordinatorService` is literally unreachable in the Docker image. Stream A task A1 canonicalizes to `9090/9091/9092/9093/9094/9095` across `config.rs`, `Dockerfile`, `deploy/wacp-runtime.service`, and this line. REST gateway + WebSocket binding on the transport layer.
 
 **CLI Agent (TypeScript):** Spawns `wacp-runtime serve` as child process. Connects via gRPC using `@grpc/grpc-js`. Loads the **full ecosystem** at boot via `loadEcosystem()` — all 7 verticals (SWE + 6 domain) with their workflows, profiles, tool definitions, executors, and detectors. When a goal arrives, `routeGoal(goal, ecosystem)` tries each vertical's `detectTaskType` in load order (domain verticals before SWE catchall), selects a workflow, and drives execution through CoordinatorService (SubmitGoal → Decompose → Dispatch) and AgentService (Bind → Signal → Checkpoint) per stage. Tool execution dispatches via `ecosystem.toolByName` to the owning vertical's `executeTool` — so `compliance_check`/`trade_execute`/`clinical_report_generate`/`hypothesis_test` and the other 64 vertical tools all run their constraint enforcement on the CLI path. LLM calls are raw HTTP (external to protocol); everything else goes through the runtime.
 
@@ -164,27 +174,42 @@ All 6 verticals share the same package structure as SWE and depend only on `@wac
 
 ## What's Next
 
-See `IMPLEMENTATION.md` for the full plan. Phase 27 (verticals) and Phase 27R (wiring) are both **complete**. Next up: Phase 28 (IDE + Chat Bridge) and Phase 29 (API Server + Dashboard).
+See `IMPLEMENTATION.md` — now the forward strategy, not a phase-by-phase plan. Organized around two parallel streams. Protocol spec + runtime + middleware + CLI + all 7 verticals are complete. No code blockers on either stream.
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 27A | DevOps Vertical | **Complete** (`c529f3e`) |
-| 27B | MLOps Vertical | **Complete** (`4c40f7b`) |
-| 27C | Finance Vertical | **Complete** |
-| 27D | Healthcare Vertical | **Complete** |
-| 27F | Data Analytics Vertical | **Complete** (`0ac589d`) |
-| 27G | Data Science Vertical | **Complete** (`03c922a`) |
-| **27R** | **Vertical Wiring Remediation** | **Complete** |
-| 28 | IDE + Chat Bridge | Pending — **resume here** |
-| 29 | API Server + Dashboard | Pending |
+| 27A–G | All 6 domain verticals (DevOps, MLOps, Finance, Healthcare, Analytics, Data Science) | **Complete** |
+| 27R | Vertical wiring (multi-vertical ecosystem loader, cross-vertical router, tool dispatch) | **Complete** |
+| 27S | Vertical surfacing + `GET /v1/verticals[/{id}]` REST endpoint | **Complete** |
+| — | Forward strategy rewrite + protocol split + Apache-2.0 relicense | **Complete** (`1b8d6e5`, `ef20421`, `199dee0`) |
+| **Stream A** | Runtime productionization — ports, CI, release pipeline, OpenAPI, mock binary | **Pending — resume here (task A1)** |
+| **Stream B** | Phase 28 — IDE + chat bridge (parallel to Stream A, no hard dependency) | **Pending — can start in parallel** |
+| 29.2 | Dashboard (≡ `wacp-console` sibling repo, separate project) | **Pending** — blocked on Console-side Q2 spec revisions, independent of Stream A |
+
+Stream A task list is in `IMPLEMENTATION.md` §8.1 (A1–A9). Stream B task list is in §8.2 (B1–B6).
 
 **Resumption notes for the next session:**
-- All 7 verticals are now wired into the CLI through `packages/wacp-cli/src/ecosystem.ts`. `loadEcosystem()` returns a `LoadedEcosystem` with workflows, profiles, tool definitions, executors, and detectors from every vertical. `routeGoal()` dispatches across them. `executeTool()` routes tool calls to the owning vertical's executor. Constraint enforcement (compliance_check, phi_access_grant, hypothesis declaration, SQL safety, env tier, compute budget) is reachable end-to-end from the CLI path.
-- The CLI's `vertical.ts` is now a thin backward-compat wrapper around `loadEcosystem(["swe"])`. The pre-27R inlined SWE definitions and "circular dependency" comment are gone — `@wacp/swe` is the canonical source.
+
+*Architecture (unchanged from Phase 27R/27S):*
+- All 7 verticals are wired into the CLI through `packages/wacp-cli/src/ecosystem.ts`. `loadEcosystem()` returns a `LoadedEcosystem` with workflows, profiles, tool definitions, executors, and detectors from every vertical. `routeGoal()` dispatches across them. `executeTool()` routes tool calls to the owning vertical's executor. Constraint enforcement (`compliance_check`, `phi_access_grant`, hypothesis declaration, SQL safety, env tier, compute budget) is reachable end-to-end from the CLI path.
 - Per-vertical detectors live in `ecosystem/<id>/src/detect.ts`. They return `null` for non-matches (so the router can try the next vertical), except for SWE which always returns at least the catchall `swe:implement-feature`.
-- Adding a new vertical (8th, etc.) requires: the standard package layout, exporting `<UPPER>_VERTICAL` from `index.ts`, and adding it to the `REGISTRY` map + `DEFAULT_LOAD_ORDER` array in `packages/wacp-cli/src/ecosystem.ts` plus `packages/wacp-cli/package.json` deps.
-- Phase 28 (IDE + Chat Bridge) — see `IMPLEMENTATION.md`. Likely focus: VS Code / JetBrains extension that connects to a running runtime via the existing Highway gRPC service, plus a chat bridge (Slack/Discord/Teams) that maps incoming messages to `SubmitGoal` and streams signals back. Both reuse existing transport — no new protocol surface needed.
-- Phase 29 (API Server + Dashboard) — REST + WebSocket gateway is already wired in `wacp-transport`; this phase is the dashboard frontend (web UI for trail browsing, workspace tree, signal stream) plus a stable public API surface contract.
+- Each `*_VERTICAL` descriptor has 6 typed fields from 27S: `defining_constraint`, `context_schema`, `tool_policies`, `checkpoint_types`, `quality_criteria`, `task_types`. Manifest generator (`scripts/generate-manifests.ts`) reads these and writes `ecosystem/{id}/vertical.yaml`. The runtime loads them via `taxonomy.verticals_dir`.
+- Adding an 8th vertical: standard package layout, export `<UPPER>_VERTICAL` from `index.ts`, add to `REGISTRY` + `DEFAULT_LOAD_ORDER` in `packages/wacp-cli/src/ecosystem.ts`, add dep in `packages/wacp-cli/package.json`.
+
+*Repo state (as of end of session 2026-04-11):*
+- `origin/dev` is at `199dee0` (3 session commits: `1b8d6e5`, `ef20421`, `199dee0` on top of the Phase 27S baseline `23395aa`). All pushed to `github.com/Madahub-dev/wacp`.
+- `origin/main` on GitHub is still ancient at `7f6a330` (pre-Phase-20). **Deliberately not updated.** If future work should be on `main`, either `git checkout main && git merge dev && git push` or continue on `dev`.
+- Sibling repo **`github.com/Madahub-dev/wacp-protocol`** (public, CC BY-SA 4.0) is live with `main` branch. Contains `PROTOCOL.md`, `TAXONOMY.md`, and 20 protocol specs in `primitives/`, `foundations/`, `mechanisms/`, `topology/`. Local clone at `/home/aakil98/mada/wacp-protocol/`. Cross-references in this repo's `impl/*.md` footers point at its GitHub URLs.
+- Sibling project **`wacp-console`** at `/home/aakil98/mada/wacp-console/` is **uninitialized** (zero commits, no remote). Spec set drafted: `SPEC_BUILD.md` + `TECH_STACK_PROPOSAL.md` (all 7 Q answers landed including Q7 resolution note) + draft specs in `specs/`. **Working tree has uncommitted edits** on `TECH_STACK_PROPOSAL.md` Q7 advisory and `SPEC_BUILD.md` "Upstream WACP License Clarification" section reflecting the Q7 resolution. Not committed — the user will seed the first commit when ready.
+
+*Where to start work:*
+- **Stream A — begin with task A1 (port alignment).** Smallest high-value task, unblocks A3/A5/A7/A8/A9. The canonical port map is `agent=9090, highway=9091, coordinator=9092, rest=9093, health=9094, metrics=9095`. Current state: `crates/wacp-runtime/src/config.rs` line 400 says `coordinator=[::1]:9402` (inconsistent), and `Dockerfile` never sets or EXPOSEs the coordinator port, orphaning `CoordinatorService` in the Docker image. Fix spans `config.rs` (`default_coordinator_listen`), `Dockerfile` (`EXPOSE` + `ENV`), `deploy/wacp-runtime.service`, and the port line in the Architecture Summary above. Exit criteria in `IMPLEMENTATION.md` §4.1.
+- **Stream B — independent.** Phase 28 (IDE + chat bridge) can start whenever. Depends only on a reachable runtime, which works locally via `cargo run --bin wacp-runtime` today. No need to wait for Stream A.
+- **`wacp-console` is blocked** on 7 Console-side spec revisions driven by Q2 (multi-user auth in Phase 1): new `wcon-auth` spec + updates to `wcon-architecture` §8, `wcon-data-model` §5, `wcon-api`, `wcon-profiles`, `wcon-sessions`, `wcon-ui`. See `IMPLEMENTATION.md` §5 step 1 for the full list. This is Console-side work, independent of Stream A — runtime productionization and Console spec work can proceed in parallel.
+
+*Other known state (not blocking but worth knowing):*
+- `LAYER-MAPPING.md` is a historical planning doc from early Phase 20 but is still referenced by 11 `impl/*.md` specs via `lineage:` frontmatter and References tables — left in place to avoid breaking cross-refs.
+- 35 Rust source files have `(PROTOCOL.md §X.Y)` prose citations in doc comments. Those were NOT updated in the repo split — they're English prose references, not markdown links, and editing 35 files for cosmetic alignment would be churn. Readers mentally map them to the `wacp-protocol` sibling repo; the `NOTICE` file and README make that pointer explicit.
 
 ---
 

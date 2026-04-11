@@ -1,0 +1,197 @@
+id: mlops
+name: MLOps
+defining_constraint: Compute-budget gating + reproducibility — train_launch refuses if max_hours would exceed the
+  session budget; every experiment must record a reproducibility checkpoint (data hash, code version, random seed,
+  hyperparameters).
+context_schema:
+  compute_budget:
+    type: number
+    required: true
+    description: Maximum GPU-hours available for training runs in this session.
+tool_policies:
+  train_launch:
+    kind: budget_limited
+    description: Training job refuses if max_hours would exceed the session compute_budget.
+    budget_field: max_hours
+checkpoint_types:
+  reproducibility_checkpoint:
+    description: Records the full provenance of a training run — required for reproducibility.
+    fields:
+      - name: data_hash
+        type: string
+        description: SHA-256 of the training dataset.
+      - name: code_version
+        type: string
+        description: Git commit or image digest of the training code.
+      - name: random_seed
+        type: number
+        description: Global random seed used for the run.
+      - name: hyperparameters
+        type: string
+        description: JSON-serialised hyperparameter map.
+quality_criteria:
+  - id: metric_performance
+    name: Metric Performance
+    description: Model meets target metrics.
+    weight: 1
+  - id: reproducibility
+    name: Reproducibility
+    description: Experiment can be reproduced within tolerance.
+    weight: 1
+  - id: data_quality
+    name: Data Quality
+    description: Dataset passes validation checks.
+    weight: 1
+  - id: compute_efficiency
+    name: Compute Efficiency
+    description: Training within budget.
+    weight: 1
+  - id: model_freshness
+    name: Model Freshness
+    description: Model not stale — trained within acceptable timeframe.
+    weight: 1
+  - id: documentation
+    name: Documentation
+    description: Experiment logged, model card present.
+    weight: 1
+task_types:
+  - id: mlops:reproduce
+    name: Reproduce Experiment
+    description: Re-run a prior experiment from its reproducibility checkpoint.
+    workflow_id: mlops:reproduce
+    keywords:
+      - reproduce
+      - reproducibility
+      - rerun
+      - recreate
+  - id: mlops:train
+    name: Train Model
+    description: Launch a training or fine-tuning run.
+    workflow_id: mlops:experiment
+    keywords:
+      - train
+      - fine-tune
+      - pretrain
+      - sweep
+      - hyperparameter
+  - id: mlops:experiment
+    name: Run Experiment
+    description: Design and run an experiment or ablation study.
+    workflow_id: mlops:experiment
+    keywords:
+      - experiment
+      - ablation
+      - grid search
+      - study
+  - id: mlops:deploy
+    name: Deploy Model
+    description: Register and deploy a trained model.
+    workflow_id: mlops:deploy
+    keywords:
+      - deploy model
+      - model registry
+      - register
+      - serve
+  - id: mlops:evaluate
+    name: Evaluate Model
+    description: Benchmark a model against an evaluation set.
+    workflow_id: mlops:evaluate-only
+    keywords:
+      - evaluate
+      - benchmark
+      - leaderboard
+      - eval set
+  - id: mlops:monitor
+    name: Monitor Drift
+    description: Detect distribution shift or model degradation in production.
+    workflow_id: mlops:monitor-only
+    keywords:
+      - drift
+      - distribution shift
+      - production monitoring
+      - staleness
+  - id: mlops:optimize
+    name: Optimize Model
+    description: Compress, quantize, or otherwise optimize a trained model.
+    workflow_id: mlops:optimize
+    keywords:
+      - optimize model
+      - compression
+      - quantization
+      - onnx
+      - pruning
+  - id: mlops:data_prep
+    name: Prepare Dataset
+    description: Validate, label, or preprocess a dataset.
+    workflow_id: mlops:data-prep-only
+    keywords:
+      - dataset
+      - data prep
+      - preprocess
+      - labeling
+      - annotation
+  - id: mlops:audit
+    name: Audit Model Lineage
+    description: Trace model provenance and data lineage.
+    workflow_id: mlops:audit-only
+    keywords:
+      - model audit
+      - data lineage
+      - provenance
+      - traceability
+workflows:
+  - id: mlops:experiment
+    name: Experiment
+    description: Design → data-prep → train → evaluate
+    stage_count: 4
+    gated_stage_count: 1
+  - id: mlops:deploy
+    name: Deploy
+    description: Validate → deploy → monitor
+    stage_count: 3
+    gated_stage_count: 1
+  - id: mlops:reproduce
+    name: Reproduce
+    description: Verify → execute
+    stage_count: 2
+    gated_stage_count: 0
+  - id: mlops:optimize
+    name: Optimize
+    description: Analyze → propose → train
+    stage_count: 3
+    gated_stage_count: 1
+profiles:
+  - role_id: mlops:researcher
+    autonomy: gated
+  - role_id: mlops:trainer
+    autonomy: gated
+  - role_id: mlops:evaluator
+    autonomy: autonomous
+  - role_id: mlops:deployer
+    autonomy: gated
+  - role_id: mlops:monitor
+    autonomy: autonomous
+tools:
+  - name: dataset_validate
+    description: Validate dataset quality — check schema, distributions, missing values, class balance, and data integrity.
+  - name: experiment_track
+    description: Log experiment parameters, metrics, and artifacts to experiment tracker (MLflow, W&B, etc.).
+  - name: train_launch
+    description: Launch a training job. Budget-checked before execution. Supports local GPU, cloud instances, and cluster
+      scheduling.
+  - name: eval_benchmark
+    description: Run model benchmarks — compute metrics (accuracy, F1, BLEU, perplexity, etc.) against test sets.
+  - name: model_register
+    description: Register a model version in the model registry with metadata, metrics, and lineage information.
+  - name: model_deploy
+    description: Deploy a registered model to a serving endpoint (REST, gRPC, batch inference).
+  - name: drift_detect
+    description: Detect data drift or model drift by comparing current distributions to the training baseline.
+  - name: compute_budget
+    description: "Check remaining compute budget. Returns budget status: total allocated, used, remaining, and utilization
+      percentage."
+  - name: reproduce_check
+    description: Verify experiment reproducibility. Compares hyperparameters, data hash, and metrics against a prior run
+      within tolerance.
+  - name: data_lineage
+    description: Query data and model lineage graph. Traces which data trained which model, and where models are deployed.

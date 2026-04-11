@@ -687,3 +687,181 @@ checkpoint_types: []
     assert_eq!(t.resolved_roles.len(), 0, "no derived roles");
     assert_eq!(t.envelope_permissions.len(), 3, "only 3 base envelope permissions");
 }
+
+// ---------------------------------------------------------------------------
+// VerticalManifest tests
+// ---------------------------------------------------------------------------
+
+use crate::vertical::{FieldType, ToolPolicyKind, VerticalManifest};
+
+fn swe_manifest_yaml() -> &'static str {
+    r#"
+id: swe
+name: Software Engineering
+defining_constraint: "DAG validation — every workflow stage declares an explicit dependsOn list."
+context_schema: {}
+tool_policies: {}
+checkpoint_types: {}
+quality_criteria:
+  - id: correctness
+    name: Correctness
+    description: Code does what the directive requires.
+    weight: 1.0
+task_types:
+  - id: swe:debug
+    name: Debug
+    description: Diagnose and fix a defect.
+    workflow_id: swe:fix-bug
+    keywords:
+      - fix
+      - bug
+workflows:
+  - id: swe:fix-bug
+    name: Fix Bug
+    description: Isolate → patch → verify
+    stage_count: 3
+    gated_stage_count: 0
+profiles:
+  - role_id: swe:implementer
+    autonomy: gated
+tools:
+  - name: code_edit
+    description: Edit source files.
+"#
+}
+
+fn finance_manifest_yaml() -> &'static str {
+    r#"
+id: finance
+name: Finance
+defining_constraint: "Regulatory pre-check + fiduciary duty."
+context_schema:
+  jurisdiction:
+    type: enum
+    required: true
+    description: Regulatory jurisdiction.
+    enum_values:
+      - SEC
+      - FINRA
+tool_policies:
+  trade_execute:
+    kind: requires_checkpoint
+    description: Requires a prior approved compliance_check.
+    checkpoint_type: compliance_check
+    matching_field: trade_id
+    expires_after_ms: 300000
+checkpoint_types:
+  compliance_check:
+    description: Pre-trade compliance verification.
+    fields:
+      - name: trade_id
+        type: string
+        description: Trade identifier.
+      - name: status
+        type: enum
+        description: Compliance decision.
+        enum_values:
+          - approved
+          - rejected
+quality_criteria:
+  - id: regulatory_compliance
+    name: Regulatory Compliance
+    description: All regulations cited and checked.
+    weight: 1.0
+task_types:
+  - id: finance:trade
+    name: Trade Execution
+    description: Execute a buy or sell order.
+    workflow_id: finance:trade-execution
+    keywords:
+      - buy
+      - sell
+workflows:
+  - id: finance:trade-execution
+    name: Trade Execution
+    description: Analyze → compliance → execute → record
+    stage_count: 4
+    gated_stage_count: 2
+profiles:
+  - role_id: finance:analyst
+    autonomy: gated
+tools:
+  - name: trade_execute
+    description: Execute a trade.
+"#
+}
+
+#[test]
+fn vertical_manifest_swe_roundtrip() {
+    let manifest = VerticalManifest::load_yaml(swe_manifest_yaml()).expect("parse");
+    assert_eq!(manifest.id, "swe");
+    assert_eq!(manifest.name, "Software Engineering");
+    assert!(manifest.context_schema.is_empty(), "SWE has no context requirements");
+    assert!(manifest.tool_policies.is_empty(), "SWE has no tool policies");
+    assert!(manifest.checkpoint_types.is_empty(), "SWE has no custom checkpoint types");
+    assert_eq!(manifest.quality_criteria.len(), 1);
+    assert_eq!(manifest.quality_criteria[0].id, "correctness");
+    assert_eq!(manifest.task_types.len(), 1);
+    assert_eq!(manifest.task_types[0].id, "swe:debug");
+    assert_eq!(manifest.task_types[0].workflow_id, "swe:fix-bug");
+    assert_eq!(manifest.task_types[0].keywords, vec!["fix", "bug"]);
+    assert_eq!(manifest.workflows.len(), 1);
+    assert_eq!(manifest.workflows[0].stage_count, 3);
+    assert_eq!(manifest.workflows[0].gated_stage_count, 0);
+}
+
+#[test]
+fn vertical_manifest_finance_roundtrip() {
+    let manifest = VerticalManifest::load_yaml(finance_manifest_yaml()).expect("parse");
+    assert_eq!(manifest.id, "finance");
+
+    // context_schema
+    let jurisdiction = manifest.context_schema.get("jurisdiction").expect("jurisdiction field");
+    assert_eq!(jurisdiction.field_type, FieldType::Enum);
+    assert!(jurisdiction.required);
+    let enum_vals = jurisdiction.enum_values.as_ref().expect("enum_values");
+    assert!(enum_vals.contains(&"SEC".to_string()));
+
+    // tool_policies
+    let policy = manifest.tool_policies.get("trade_execute").expect("trade_execute policy");
+    assert_eq!(policy.kind, ToolPolicyKind::RequiresCheckpoint);
+    assert_eq!(policy.checkpoint_type.as_deref(), Some("compliance_check"));
+    assert_eq!(policy.matching_field.as_deref(), Some("trade_id"));
+    assert_eq!(policy.expires_after_ms, Some(300_000));
+
+    // checkpoint_types
+    let ct = manifest.checkpoint_types.get("compliance_check").expect("compliance_check type");
+    assert_eq!(ct.fields.len(), 2);
+    let status_field = ct.fields.iter().find(|f| f.name == "status").expect("status field");
+    assert_eq!(status_field.field_type, FieldType::Enum);
+    let status_vals = status_field.enum_values.as_ref().expect("status enum_values");
+    assert!(status_vals.contains(&"approved".to_string()));
+
+    // quality_criteria
+    assert_eq!(manifest.quality_criteria.len(), 1);
+    assert!((manifest.quality_criteria[0].weight - 1.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn vertical_manifest_malformed_yaml_error() {
+    let bad = "id: [not a string\nbroken yaml: {{{";
+    let err = VerticalManifest::load_yaml(bad).unwrap_err();
+    assert!(matches!(err, TaxonomyError::ParseError(_)));
+}
+
+#[test]
+fn vertical_manifest_extra_fields_tolerated() {
+    // Future manifests may add fields; existing parser must not reject them.
+    let yaml = r#"
+id: test
+name: Test
+defining_constraint: "none"
+future_field_not_yet_known: 42
+another_future: [a, b, c]
+context_schema: {}
+tool_policies: {}
+checkpoint_types: {}
+"#;
+    let manifest = VerticalManifest::load_yaml(yaml).expect("should tolerate extra fields");
+    assert_eq!(manifest.id, "test");
+}

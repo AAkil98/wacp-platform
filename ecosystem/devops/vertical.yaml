@@ -1,0 +1,183 @@
+id: devops
+name: DevOps
+defining_constraint: Environment-scaled blast-radius gating — deploy_execute, rollback, and secret_rotate require an
+  environment context tag; production targets require human gate clearance before execution.
+context_schema:
+  environment:
+    type: enum
+    required: true
+    description: Target environment tier — determines blast radius and gate requirements.
+    enum_values:
+      - dev
+      - staging
+      - production
+tool_policies:
+  deploy_execute:
+    kind: requires_gate
+    description: Production deployments require human gate clearance before execution.
+    gate_condition: environment === production
+  rollback:
+    kind: requires_gate
+    description: Production rollbacks require human gate clearance before execution.
+    gate_condition: environment === production
+  secret_rotate:
+    kind: requires_gate
+    description: Production secret rotation requires human gate clearance before execution.
+    gate_condition: environment === production
+checkpoint_types: {}
+quality_criteria:
+  - id: availability
+    name: Availability
+    description: Services remain healthy after changes.
+    weight: 1
+  - id: security_posture
+    name: Security Posture
+    description: No new vulnerabilities introduced.
+    weight: 1
+  - id: blast_radius
+    name: Blast Radius
+    description: Changes scoped to declared target.
+    weight: 1
+  - id: rollback_readiness
+    name: Rollback Readiness
+    description: Rollback strategy exists and is executable.
+    weight: 1
+  - id: compliance
+    name: Compliance
+    description: Changes meet regulatory/policy requirements.
+    weight: 1
+  - id: documentation
+    name: Documentation
+    description: Runbook/playbook updated, changes documented.
+    weight: 1
+task_types:
+  - id: devops:respond
+    name: Incident Response
+    description: Respond to a production incident — triage, mitigate, postmortem.
+    workflow_id: devops:respond
+    keywords:
+      - rollback
+      - revert
+      - incident
+      - outage
+      - on-call
+  - id: devops:deploy
+    name: Deploy
+    description: Plan and execute a deployment to a target environment.
+    workflow_id: devops:deploy
+    keywords:
+      - deploy
+      - deployment
+      - release
+      - ship
+      - push
+  - id: devops:provision
+    name: Provision Infrastructure
+    description: Provision or update infrastructure via IaC.
+    workflow_id: devops:provision
+    keywords:
+      - provision
+      - terraform
+      - cloudformation
+      - infra
+      - vpc
+  - id: devops:secure
+    name: Harden / Secure
+    description: Apply security hardening or rotate credentials.
+    workflow_id: devops:secure
+    keywords:
+      - harden
+      - secure
+      - cve
+      - vulnerability
+      - secret rotate
+  - id: devops:optimize
+    name: Cost Optimize
+    description: Analyze and reduce infrastructure costs.
+    workflow_id: devops:optimize
+    keywords:
+      - optimize cost
+      - cost reduction
+      - right-size
+      - resource waste
+  - id: devops:audit
+    name: Compliance Audit
+    description: Run a compliance or security audit.
+    workflow_id: devops:audit
+    keywords:
+      - audit infra
+      - compliance scan
+      - security audit
+      - soc2
+  - id: devops:monitor
+    name: Monitor
+    description: Review dashboards, alerts, and metrics.
+    workflow_id: devops:monitor-only
+    keywords:
+      - monitor
+      - alert
+      - metric
+      - dashboard
+      - observability
+workflows:
+  - id: devops:provision
+    name: Provision
+    description: Plan → execute → verify
+    stage_count: 3
+    gated_stage_count: 1
+  - id: devops:deploy
+    name: Deploy
+    description: Plan → validate → execute → verify
+    stage_count: 4
+    gated_stage_count: 1
+  - id: devops:respond
+    name: Respond
+    description: Triage → mitigate → postmortem
+    stage_count: 3
+    gated_stage_count: 1
+  - id: devops:secure
+    name: Secure
+    description: Scan → remediate → verify
+    stage_count: 3
+    gated_stage_count: 1
+  - id: devops:optimize
+    name: Optimize
+    description: Analyze → propose → validate
+    stage_count: 3
+    gated_stage_count: 0
+profiles:
+  - role_id: devops:architect
+    autonomy: gated
+  - role_id: devops:deployer
+    autonomy: gated
+  - role_id: devops:monitor
+    autonomy: autonomous
+  - role_id: devops:responder
+    autonomy: gated
+  - role_id: devops:auditor
+    autonomy: autonomous
+tools:
+  - name: infra_plan
+    description: Generate/validate an infrastructure-as-code plan. Detects the IaC tool (Terraform, Pulumi, CDK) and runs a
+      dry-run plan showing planned changes.
+  - name: deploy_execute
+    description: Execute a deployment. Applies IaC changes, pushes containers, or runs deployment scripts. Environment-aware
+      — production requires gate clearance.
+  - name: rollback
+    description: Rollback to previous version. Reverts IaC state, undoes container deployments, or restores previous configuration.
+  - name: health_check
+    description: Check service health. Probes HTTP endpoints, TCP ports, or process state. Returns per-endpoint status.
+  - name: log_query
+    description: Query logs. Structured search across log files or aggregators. Supports time ranges and filters.
+  - name: metric_query
+    description: Query metrics. Time-series queries for CPU, memory, latency, error rate, etc.
+  - name: alert_manage
+    description: Manage alerts. Create, update, silence, or acknowledge alerts.
+  - name: config_validate
+    description: Validate configuration files. Schema and syntax checking for YAML, JSON, HCL, Dockerfile, Kubernetes manifests.
+  - name: secret_rotate
+    description: Rotate secrets. Generates new credentials, updates the secret store, and invalidates the old value.
+      Environment-aware.
+  - name: compliance_scan
+    description: Scan for compliance violations. Runs policy-as-code checks (OPA, Checkov, tfsec, kube-bench) against
+      infrastructure definitions.

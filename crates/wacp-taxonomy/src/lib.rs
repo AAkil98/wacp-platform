@@ -7,6 +7,7 @@ pub mod definition;
 pub mod error;
 mod loader;
 pub mod resolved;
+pub mod vertical;
 
 pub use definition::{
     CheckpointTypeDefinition, EnvelopePermission, EnvelopeTypeDefinition, RoleDefinition,
@@ -14,6 +15,10 @@ pub use definition::{
 };
 pub use error::TaxonomyError;
 pub use resolved::{EnvelopePermissionRow, ResolvedRole, Taxonomy};
+pub use vertical::{
+    CheckpointField, CheckpointSchema, ContextField, FieldType, ProfileSummary, QualityCriterion,
+    TaskTypeDescriptor, ToolPolicy, ToolPolicyKind, ToolSummary, VerticalManifest, WorkflowSummary,
+};
 
 impl Taxonomy {
     /// Load a taxonomy from YAML.

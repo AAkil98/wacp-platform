@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use wacp_taxonomy::VerticalManifest;
 
 use crate::proto::wacp_v1;
 
@@ -67,16 +68,35 @@ impl IntoResponse for GatewayError {
 
 pub type GatewayState = Arc<dyn GatewayBackend>;
 
+/// Loaded vertical manifests shared across all requests. Populated at startup
+/// from `vertical.yaml` files; empty if none are configured.
+pub type VerticalRegistry = Arc<Vec<VerticalManifest>>;
+
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
     pub code: String,
 }
 
+/// Summary of a vertical — returned by `GET /v1/verticals`.
+#[derive(Debug, Serialize)]
+pub struct VerticalSummary {
+    pub id: String,
+    pub name: String,
+    pub defining_constraint: String,
+    pub task_type_count: usize,
+    pub workflow_count: usize,
+    pub tool_count: usize,
+}
+
 pub struct RestGateway;
 
 impl RestGateway {
-    pub fn new(backend: Arc<dyn GatewayBackend>) -> Router {
+    /// Build the Axum router.
+    ///
+    /// `backend` handles all protocol-level endpoints (gRPC-backed).
+    /// `verticals` is static config loaded at startup; an empty vec is valid.
+    pub fn new(backend: Arc<dyn GatewayBackend>, verticals: VerticalRegistry) -> Router {
         Router::new()
             .route("/v1/health", get(health_handler))
             .route("/v1/goals", post(submit_goal_handler))
@@ -92,6 +112,10 @@ impl RestGateway {
             .route("/v1/escalations/{id}/respond", post(respond_escalation_handler))
             .route("/v1/trail", get(query_trail_handler))
             .route("/v1/budget", get(get_allocatable_handler))
+            // Vertical discovery — read-only, no auth required.
+            .route("/v1/verticals", get(list_verticals_handler))
+            .route("/v1/verticals/{id}", get(get_vertical_handler))
+            .layer(Extension(verticals))
             .with_state(backend)
     }
 }
@@ -320,6 +344,40 @@ async fn get_allocatable_handler(
 }
 
 // ---------------------------------------------------------------------------
+// Vertical discovery handlers — read-only, served from in-memory registry
+// ---------------------------------------------------------------------------
+
+async fn list_verticals_handler(
+    Extension(verticals): Extension<VerticalRegistry>,
+) -> Json<Vec<VerticalSummary>> {
+    Json(
+        verticals
+            .iter()
+            .map(|v| VerticalSummary {
+                id: v.id.clone(),
+                name: v.name.clone(),
+                defining_constraint: v.defining_constraint.clone(),
+                task_type_count: v.task_types.len(),
+                workflow_count: v.workflows.len(),
+                tool_count: v.tools.len(),
+            })
+            .collect(),
+    )
+}
+
+async fn get_vertical_handler(
+    Extension(verticals): Extension<VerticalRegistry>,
+    Path(id): Path<String>,
+) -> Result<Json<VerticalManifest>, GatewayError> {
+    verticals
+        .iter()
+        .find(|v| v.id == id)
+        .cloned()
+        .map(Json)
+        .ok_or_else(|| GatewayError::not_found(format!("vertical '{id}' not found")))
+}
+
+// ---------------------------------------------------------------------------
 // Tests with mock backend
 // ---------------------------------------------------------------------------
 
@@ -390,7 +448,29 @@ pub(crate) mod tests {
     }
 
     fn test_app() -> Router {
-        RestGateway::new(Arc::new(MockBackend))
+        RestGateway::new(Arc::new(MockBackend), Arc::new(vec![]))
+    }
+
+    /// Build a test app pre-loaded with the given vertical manifests.
+    fn test_app_with_verticals(verticals: Vec<wacp_taxonomy::VerticalManifest>) -> Router {
+        RestGateway::new(Arc::new(MockBackend), Arc::new(verticals))
+    }
+
+    /// Minimal VerticalManifest for use in tests.
+    fn stub_vertical(id: &str) -> wacp_taxonomy::VerticalManifest {
+        wacp_taxonomy::VerticalManifest {
+            id: id.into(),
+            name: format!("{id} vertical"),
+            defining_constraint: format!("{id} constraint"),
+            context_schema: Default::default(),
+            tool_policies: Default::default(),
+            checkpoint_types: Default::default(),
+            quality_criteria: vec![],
+            task_types: vec![],
+            workflows: vec![],
+            profiles: vec![],
+            tools: vec![],
+        }
     }
 
     async fn get_json(app: &Router, path: &str) -> (StatusCode, serde_json::Value) {
@@ -552,5 +632,45 @@ pub(crate) mod tests {
         assert_eq!(grpc_to_http_status(6), StatusCode::CONFLICT);
         assert_eq!(grpc_to_http_status(8), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(grpc_to_http_status(13), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // --- Vertical discovery ---
+
+    #[tokio::test]
+    async fn list_verticals_empty_registry() {
+        let (status, json) = get_json(&test_app(), "/v1/verticals").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json, serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn list_verticals_returns_summaries() {
+        let app = test_app_with_verticals(vec![stub_vertical("swe"), stub_vertical("finance")]);
+        let (status, json) = get_json(&app, "/v1/verticals").await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["id"], "swe");
+        assert_eq!(arr[0]["name"], "swe vertical");
+        assert!(arr[0]["defining_constraint"].is_string());
+        assert_eq!(arr[0]["task_type_count"], 0);
+        assert_eq!(arr[1]["id"], "finance");
+    }
+
+    #[tokio::test]
+    async fn get_vertical_returns_full_manifest() {
+        let app = test_app_with_verticals(vec![stub_vertical("swe")]);
+        let (status, json) = get_json(&app, "/v1/verticals/swe").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["id"], "swe");
+        assert_eq!(json["name"], "swe vertical");
+        assert_eq!(json["defining_constraint"], "swe constraint");
+    }
+
+    #[tokio::test]
+    async fn get_vertical_unknown_returns_404() {
+        let (status, json) = get_json(&test_app(), "/v1/verticals/nonexistent").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json["code"], "not_found");
     }
 }

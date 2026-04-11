@@ -104,6 +104,10 @@ pub struct RateLimitConfig {
 pub struct TaxonomyConfig {
     #[serde(default)]
     pub file: String,
+    /// Directory that contains per-vertical sub-directories each holding a
+    /// `vertical.yaml` file. When empty, no vertical manifests are loaded.
+    #[serde(default)]
+    pub verticals_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,0 +1,180 @@
+id: analytics
+name: Data Analytics
+defining_constraint: SQL safety + query reproducibility — classifySql() hard-blocks DROP/TRUNCATE and unscoped
+  UPDATE/DELETE unless allow_destructive=true with gate clearance; every report must cite its source queries and a
+  data_snapshot_id for reproducibility.
+context_schema:
+  data_snapshot_id:
+    type: string
+    required: true
+    description: Snapshot ID of the source data; all queries must target this snapshot for reproducibility.
+tool_policies:
+  sql_query:
+    kind: classification_gated
+    description: classifySql() blocks destructive and unscoped-mutation queries; set allow_destructive=true with gate
+      clearance to proceed.
+    blocked_classifications:
+      - destructive
+      - unscoped_mutation
+    override_flag: allow_destructive
+checkpoint_types:
+  data_snapshot:
+    description: Records the source data snapshot used for a query or report — required for reproducibility.
+    fields:
+      - name: snapshot_id
+        type: string
+        description: Unique snapshot identifier.
+      - name: created_at
+        type: number
+        description: Unix timestamp (ms) when the snapshot was taken.
+      - name: row_hash
+        type: string
+        description: SHA-256 of the canonical row order for this snapshot.
+      - name: table_name
+        type: string
+        description: Source table or view name.
+quality_criteria:
+  - id: accuracy
+    name: Accuracy
+    description: Numbers reconcile with source systems.
+    weight: 1
+  - id: data_freshness
+    name: Data Freshness
+    description: Underlying data within SLA window.
+    weight: 1
+  - id: reproducibility
+    name: Reproducibility
+    description: Queries re-executable with same result.
+    weight: 1
+  - id: completeness
+    name: Completeness
+    description: Report answers the original question.
+    weight: 1
+  - id: clarity
+    name: Clarity
+    description: Results understandable to target audience.
+    weight: 1
+  - id: performance
+    name: Performance
+    description: Queries execute within budget.
+    weight: 1
+task_types:
+  - id: analytics:dashboard
+    name: Build Dashboard
+    description: Design and build an analytics dashboard.
+    workflow_id: analytics:build-dashboard
+    keywords:
+      - dashboard
+      - grafana
+      - tableau
+      - looker
+      - superset
+  - id: analytics:query
+    name: Run Query
+    description: Write and execute a SQL query against source data.
+    workflow_id: analytics:query-and-report
+    keywords:
+      - sql query
+      - run query
+      - select from
+      - where clause
+  - id: analytics:report
+    name: KPI Report
+    description: Produce a KPI or metrics report.
+    workflow_id: analytics:query-and-report
+    keywords:
+      - kpi
+      - key performance
+      - north star metric
+      - funnel
+  - id: analytics:investigate
+    name: Investigate Discrepancy
+    description: Reconcile data discrepancies between systems.
+    workflow_id: analytics:investigate
+    keywords:
+      - reconcile
+      - data reconciliation
+      - discrepancy
+      - mismatch
+  - id: analytics:model
+    name: Model Data
+    description: Define or update a semantic data model.
+    workflow_id: analytics:model-data
+    keywords:
+      - schema model
+      - data model
+      - star schema
+      - snowflake schema
+      - dbt
+  - id: analytics:validate
+    name: Validate / Optimize
+    description: Validate query results or optimize slow queries.
+    workflow_id: analytics:validate-only
+    keywords:
+      - query optimize
+      - tune query
+      - slow query
+      - explain plan
+  - id: analytics:monitor
+    name: Monitor Freshness
+    description: Monitor data freshness and pipeline health.
+    workflow_id: analytics:monitor-only
+    keywords:
+      - monitor dashboard
+      - data freshness
+      - staleness
+      - pipeline health
+workflows:
+  - id: analytics:query-and-report
+    name: Query and Report
+    description: Query → validate → report
+    stage_count: 3
+    gated_stage_count: 1
+  - id: analytics:build-dashboard
+    name: Build Dashboard
+    description: Model → build → validate
+    stage_count: 3
+    gated_stage_count: 1
+  - id: analytics:investigate
+    name: Investigate
+    description: Explore → reconcile → report
+    stage_count: 3
+    gated_stage_count: 0
+  - id: analytics:model-data
+    name: Model Data
+    description: Explore → model → validate
+    stage_count: 3
+    gated_stage_count: 1
+profiles:
+  - role_id: analytics:analyst
+    autonomy: gated
+  - role_id: analytics:modeler
+    autonomy: gated
+  - role_id: analytics:validator
+    autonomy: autonomous
+  - role_id: analytics:reporter
+    autonomy: gated
+  - role_id: analytics:insights
+    autonomy: autonomous
+tools:
+  - name: sql_query
+    description: Execute a SQL query against a configured database. Read-only by default. Destructive operations (DROP,
+      TRUNCATE, unscoped UPDATE/DELETE) are hard-blocked.
+  - name: dashboard_build
+    description: Build or update a dashboard (Superset, Metabase, Tableau, Looker).
+  - name: data_profile
+    description: Profile a dataset — compute statistics, distributions, null counts, cardinality.
+  - name: kpi_calculate
+    description: Compute a KPI from raw data using a metric definition.
+  - name: report_generate
+    description: Generate a formatted report (Markdown, PDF, HTML) with cited source queries.
+  - name: viz_create
+    description: Create a visualization (bar, line, scatter, heatmap) from query results.
+  - name: data_reconcile
+    description: Reconcile two data sources — compare counts, aggregates, sample values.
+  - name: schema_explore
+    description: Explore a database schema — list tables, columns, types, relationships.
+  - name: query_optimize
+    description: Analyze and optimize a slow query — suggest indexes, rewrites, execution plan improvements.
+  - name: metric_define
+    description: Define a semantic metric in the metric store (dbt semantic layer, Cube, LookML).

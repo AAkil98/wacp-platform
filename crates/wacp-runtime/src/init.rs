@@ -1,12 +1,13 @@
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use wacp_coordinator::Coordinator;
 use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
-use wacp_taxonomy::Taxonomy;
+use wacp_taxonomy::{Taxonomy, VerticalManifest};
 use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
 use wacp_transport::{start_grpc_server, GrpcServerConfig};
 use wacp_types::*;
@@ -34,6 +35,10 @@ pub struct Runtime {
     pub config: RuntimeConfig,
     pub coordinator: Coordinator,
     pub taxonomy: Taxonomy,
+    /// Vertical manifests loaded from `taxonomy.verticals_dir` at startup.
+    /// Empty when no directory is configured. Passed to the REST gateway as
+    /// the read-only `VerticalRegistry`.
+    pub verticals: Arc<Vec<VerticalManifest>>,
     pub permissions: PermissionEngine,
     pub event_rx: mpsc::Receiver<WorkspaceEvent>,
     pub agent_request_rx: Option<mpsc::Receiver<wacp_transport::AgentRequest>>,
@@ -51,8 +56,10 @@ impl Runtime {
         fs::create_dir_all(data_dir.join("checkpoints"))?;
         fs::create_dir_all(data_dir.join("snapshots"))?;
 
-        // 2. Load taxonomy.
+        // 2. Load taxonomy and vertical manifests.
         let taxonomy = Self::load_taxonomy(&config)?;
+        let verticals = Self::load_vertical_manifests(&config);
+        tracing::info!(count = verticals.len(), "vertical manifests loaded");
 
         // 3. Open trail storage with crash recovery.
         let trail = FileTrailStorage::recover(FileTrailConfig {
@@ -130,6 +137,7 @@ impl Runtime {
             config,
             coordinator,
             taxonomy,
+            verticals,
             permissions,
             event_rx,
             agent_request_rx: Some(grpc_handles.agent_request_rx),
@@ -141,6 +149,7 @@ impl Runtime {
     /// Initialize with in-memory storage for testing (no gRPC, no filesystem).
     pub fn init_in_memory(config: RuntimeConfig) -> Result<Self, RuntimeError> {
         let taxonomy = Self::load_taxonomy(&config)?;
+        let verticals = Self::load_vertical_manifests(&config);
 
         let trail = InMemoryTrailStorage::new();
         let _recovered = RecoveryEngine::recover(&trail)
@@ -157,6 +166,7 @@ impl Runtime {
             config,
             coordinator,
             taxonomy,
+            verticals,
             permissions,
             event_rx,
             agent_request_rx: None,
@@ -379,5 +389,66 @@ impl Runtime {
             Taxonomy::load_yaml(&content, PROTOCOL_VERSION)
                 .map_err(|e| RuntimeError::Taxonomy(e.to_string()))
         }
+    }
+
+    /// Scan `taxonomy.verticals_dir` for `<id>/vertical.yaml` files and load
+    /// each as a `VerticalManifest`. Errors on individual files are logged and
+    /// skipped; a missing or unconfigured directory returns an empty registry.
+    fn load_vertical_manifests(config: &RuntimeConfig) -> Arc<Vec<VerticalManifest>> {
+        let dir = &config.taxonomy.verticals_dir;
+        if dir.is_empty() {
+            return Arc::new(vec![]);
+        }
+        let root = std::path::Path::new(dir);
+        if !root.is_dir() {
+            tracing::warn!(dir = %dir, "taxonomy.verticals_dir is not a directory — no manifests loaded");
+            return Arc::new(vec![]);
+        }
+
+        let entries = match fs::read_dir(root) {
+            Ok(e) => e,
+            Err(err) => {
+                tracing::warn!(dir = %dir, error = %err, "failed to read verticals_dir — no manifests loaded");
+                return Arc::new(vec![]);
+            }
+        };
+
+        let mut manifests: Vec<VerticalManifest> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let manifest_path = entry.path().join("vertical.yaml");
+                if !manifest_path.is_file() {
+                    return None;
+                }
+                match fs::read_to_string(&manifest_path) {
+                    Ok(content) => match VerticalManifest::load_yaml(&content) {
+                        Ok(m) => {
+                            tracing::debug!(id = %m.id, "loaded vertical manifest");
+                            Some(m)
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                path = %manifest_path.display(),
+                                error = %err,
+                                "failed to parse vertical manifest — skipped"
+                            );
+                            None
+                        }
+                    },
+                    Err(err) => {
+                        tracing::warn!(
+                            path = %manifest_path.display(),
+                            error = %err,
+                            "failed to read vertical manifest — skipped"
+                        );
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        // Stable ordering for deterministic registry layout.
+        manifests.sort_by(|a, b| a.id.cmp(&b.id));
+        Arc::new(manifests)
     }
 }

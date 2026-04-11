@@ -388,6 +388,95 @@ Each of the 7 verticals (`swe`, `devops`, `mlops`, `finance`, `healthcare`, `ana
 
 ---
 
+## Phase 27S — Vertical Surfacing
+
+**Rationale:** The 7 vertical descriptors carry all domain knowledge — constraint rules, context requirements, tool policies, checkpoint schemas — but this knowledge is embedded in executable code (guard conditions, regex detectors), not surfaced as structured data. This phase extracts that knowledge into six first-class typed fields on each `*_VERTICAL` descriptor, generates a `vertical.yaml` manifest per vertical from those fields, extends the Rust taxonomy loader to parse them, and exposes a `GET /api/verticals` discovery endpoint via the existing REST gateway.
+
+After this phase: (a) the CLI itself knows what context to request before dispatching a goal; (b) the runtime serves vertical metadata to any consumer over HTTP; (c) `wacp-console` queries `GET /api/verticals` at startup — no filesystem access, no Console redeploy needed when a new vertical is added to the runtime.
+
+### 27S.1 — Enrich `LoadedVertical` interface
+
+Extend `packages/wacp-cli/src/ecosystem.ts` with six new supporting types and six new fields on `LoadedVertical`.
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27S.1.1 | New supporting types | `ContextField` (`type`, `required`, `description`, optional `enum_values`/`default`); `ToolPolicy` (`requires_checkpoint`, optional `matching_field`, `expires_after_ms`); `CheckpointField` (`name`, `type`, `description`); `CheckpointSchema` (`description`, `fields: CheckpointField[]`); `QualityCriterion` (`id`, `name`, `description`, `weight`); `TaskTypeDescriptor` (`id`, `name`, `description`, `workflow_id`, `keywords: string[]`). |
+| 27S.1.2 | Six new fields on `LoadedVertical` | `defining_constraint: string`; `context_schema: Record<string, ContextField>`; `tool_policies: Record<string, ToolPolicy>`; `checkpoint_types: Record<string, CheckpointSchema>`; `quality_criteria: readonly QualityCriterion[]`; `task_types: readonly TaskTypeDescriptor[]`. Extension is additive — the `as LoadedVertical` casts in `REGISTRY` break until 27S.2 populates the fields, so implement 27S.1 and 27S.2 together before running `tsc`. |
+
+**Exit criteria:** `tsc --noEmit` passes after all 7 verticals are updated in 27S.2.
+
+### 27S.2 — Implement enriched descriptors (all 7 verticals)
+
+For each `ecosystem/{id}/src/index.ts`: implement the 6 new fields on the `*_VERTICAL` constant. All data is already present in the existing code — this step surfaces it.
+
+| Vertical | `defining_constraint` | `context_schema` keys | `tool_policies` keys | `checkpoint_types` keys |
+|---|---|---|---|---|
+| `swe` | DAG validation — stage order is a compile-time invariant | _(none)_ | _(none)_ | _(none)_ |
+| `devops` | Environment-scaled blast-radius gating | `environment: enum(dev,staging,production)` | `deploy_execute`, `rollback`, `secret_rotate` | `env_gate_clearance` |
+| `mlops` | Compute-budget gating + reproducibility checkpoints | `compute_budget: number (GPU-hours)` | `train_launch` | `reproducibility_checkpoint` |
+| `finance` | Regulatory pre-check + fiduciary duty — `trade_execute` refuses without approved `compliance_check` | `compliance_scope: string`, `jurisdiction: enum(SEC,FINRA,MiFID II,FCA)` | `trade_execute` | `compliance_check` |
+| `healthcare` | HIPAA PHI access grant — clinical tools refuse without a valid `phi_access_grant` | `phi_access_basis: enum(consent,de_identified)` | `clinical_report_generate`, `lab_interpret`, `risk_score` | `phi_access_grant` |
+| `analytics` | SQL safety + query reproducibility — destructive SQL is hard-blocked, every report cites source snapshot | `data_snapshot_id: string` | `sql_query` (destructive variant) | `data_snapshot` |
+| `datasci` | Pre-declared hypotheses — `hypothesis_test` refuses without a prior `declared_hypothesis` checkpoint | _(hypothesis template optional)_ | `hypothesis_test` | `declared_hypothesis` |
+
+For `quality_criteria`: wire from each vertical's existing `*_QUALITY_DIMENSIONS` array (already defined in `quality/quality.ts`).
+For `task_types`: extract from each `detect.ts` into declarative `TaskTypeDescriptor[]` with representative `keywords` (not full regex — the executor function stays as is).
+
+**Exit criteria:** `tsc --noEmit` passes across all packages. All 132 existing CLI tests pass.
+
+### 27S.3 — Manifest generator
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27S.3.1 | `scripts/generate-manifests.ts` | New file. Imports each `*_VERTICAL`. For each, serializes all non-function fields — the 6 new fields plus `id`, `name`, plus summary arrays for workflows (`id`, `name`, `stage_count`, `gated_stage_count`), profiles (`role_id`, `autonomy`), tools (`name`, `description`) — to YAML via `js-yaml`. Writes to `ecosystem/{id}/vertical.yaml`. Overwrites deterministically. |
+| 27S.3.2 | Root `package.json` script | `"generate:manifests": "tsx scripts/generate-manifests.ts"` |
+| 27S.3.3 | Run and commit | Execute `yarn generate:manifests`. Commit the 7 generated `vertical.yaml` files. Running the script again produces byte-for-byte identical output. |
+
+**Exit criteria:** `ecosystem/{swe,devops,mlops,finance,healthcare,analytics,datasci}/vertical.yaml` all exist. Each file has `id`, `name`, `defining_constraint`, `context_schema`, `tool_policies`, `checkpoint_types`, `quality_criteria`, `task_types`, `workflows`, `profiles`, `tools` sections.
+
+### 27S.4 — `VerticalManifest` in `wacp-taxonomy`
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27S.4.1 | `crates/wacp-taxonomy/src/vertical.rs` | `VerticalManifest` struct and all sub-types (`ContextField`, `ToolPolicy`, `CheckpointSchema`, `CheckpointField`, `QualityCriterion`, `TaskTypeDescriptor`, `WorkflowSummary`, `ProfileSummary`, `ToolSummary`). All `#[derive(Debug, Clone, Serialize, Deserialize)]`. Unknown YAML fields tolerated via `#[serde(default)]` for forward-compat. |
+| 27S.4.2 | `VerticalManifest::load_yaml(yaml: &str)` | Parse via `serde_yaml`. Returns `Result<VerticalManifest, TaxonomyError>`. Expose from `lib.rs`. |
+| 27S.4.3 | Tests | One round-trip test per vertical manifest (parse generated YAML → check key fields). `id` and `name` present. `context_schema` empty for SWE, non-empty for Finance/Healthcare. `tool_policies` populated for Finance. Extra YAML keys tolerated. Malformed YAML returns `TaxonomyError::ParseError`. |
+
+**Exit criteria:** `cargo test -p wacp-taxonomy` passes with new tests. All 42 existing taxonomy tests pass.
+
+### 27S.5 — Runtime loads vertical manifests at startup
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27S.5.1 | Config field | Add `verticals_dir: Option<PathBuf>` to the runtime config (wherever `GrpcServerConfig` or equivalent is defined). Default: `None` (manifests are optional). |
+| 27S.5.2 | Manifest loader | At startup, if `verticals_dir` is set: glob `{dir}/*/vertical.yaml`, parse each via `VerticalManifest::load_yaml`, collect into `Vec<VerticalManifest>`. Log each loaded vertical (id + name). Log a warning if zero manifests found. Store in `Arc<Vec<VerticalManifest>>`. Runtime starts normally in all cases — missing manifests are not fatal. |
+| 27S.5.3 | Pass to transport | Thread the `Arc<Vec<VerticalManifest>>` into the REST gateway state alongside the existing taxonomy. |
+
+**Exit criteria:** Runtime starts with `verticals_dir = ecosystem/` and logs "Loaded 7 vertical manifests". Runtime starts with no `verticals_dir` and logs a warning but continues normally.
+
+### 27S.6 — `GET /api/verticals` via REST gateway
+
+| # | Task | Deliverable |
+|---|------|-------------|
+| 27S.6.1 | Extend `GatewayBackend` | Add `list_verticals() -> Vec<VerticalSummary>` and `get_vertical(id: &str) -> Option<VerticalManifest>`. `VerticalSummary`: `id`, `name`, `defining_constraint`, `task_type_count`, `workflow_count`, `tool_count`. |
+| 27S.6.2 | Routes | `GET /api/verticals` → list; `GET /api/verticals/:id` → full manifest or 404. Both return JSON. No auth required (read-only, static config). |
+| 27S.6.3 | Production backend | Implement by serving from `Arc<Vec<VerticalManifest>>` — no gRPC call needed. Manifests are static at startup. |
+| 27S.6.4 | Tests | `list_verticals` with 7 manifests loaded returns 7 entries. `get_vertical("finance")` returns Finance manifest with `tool_policies` populated. `get_vertical("unknown")` → 404. Empty manifest store → list returns `[]`. |
+
+**Exit criteria:** `GET /api/verticals` returns `[{id, name, defining_constraint, task_type_count, workflow_count, tool_count}]` for all 7 verticals. `GET /api/verticals/finance` returns full Finance manifest including `context_schema` and `tool_policies`.
+
+### Phase 27S Exit Criteria
+
+- [x] All 7 `*_VERTICAL` descriptors implement the 6 new fields; `tsc --noEmit` passes
+- [x] All 132 existing CLI tests pass after the interface extension
+- [x] `generate-manifests.ts` produces valid YAML; 7 `vertical.yaml` files committed
+- [x] `wacp-taxonomy` parses all 7 manifests; 42 existing + 4 roundtrip tests pass (46 total)
+- [x] Runtime starts with `verticals_dir` set and loads all manifests; 5 new tests cover empty config, nonexistent dir, multi-manifest scan, malformed skip, and no-yaml-file ignore
+- [x] `GET /v1/verticals` returns summaries; `GET /v1/verticals/{id}` returns full manifest with `context_schema` and `tool_policies`; 404 on unknown id; 4 new transport tests
+- [x] All pre-existing tests continue to pass — 0 failures across full workspace
+
+---
+
 ## Phase 28 — IDE + Chat Bridge
 
 | # | Component | Scope |
@@ -428,8 +517,9 @@ Depends on: 27 (all verticals), 26R.
 | **27F** | **Data Analytics Vertical** | **Complete** | 26R |
 | **27G** | **Data Science Vertical** | **Complete** | 26R |
 | **27R** | **Vertical Wiring Remediation** | **Complete** | 27A–G |
-| 28 | IDE + Chat Bridge | Pending | 27R |
-| **29** | **API Server + Dashboard** | **Pending** | 27R |
+| **27S** | **Vertical Surfacing** | **Complete** | 27R |
+| 28 | IDE + Chat Bridge | Pending | 27S |
+| **29** | **API Server + Dashboard** | **Pending** | 27S |
 
 ---
 

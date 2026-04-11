@@ -457,6 +457,104 @@ async fn runtime_shutdown_no_workspaces() {
     rt.shutdown().await;
 }
 
+// ── Phase 27S.5: vertical manifest loading ──
+
+#[test]
+fn load_vertical_manifests_empty_config() {
+    // No verticals_dir configured → empty registry.
+    let rt = test_runtime();
+    assert_eq!(rt.verticals.len(), 0);
+}
+
+#[test]
+fn load_vertical_manifests_nonexistent_dir() {
+    let mut config = RuntimeConfig::default();
+    config.taxonomy.verticals_dir = "/tmp/wacp-nonexistent-9999xyz".into();
+    let rt = Runtime::init_in_memory(config).unwrap();
+    assert_eq!(rt.verticals.len(), 0);
+}
+
+#[test]
+fn load_vertical_manifests_scans_sub_dirs() {
+    let root = tempfile::tempdir().unwrap();
+
+    // Write two minimal vertical.yaml files under separate sub-directories.
+    let swe_dir = root.path().join("swe");
+    std::fs::create_dir_all(&swe_dir).unwrap();
+    std::fs::write(
+        swe_dir.join("vertical.yaml"),
+        r#"
+id: swe
+name: Software Engineering
+defining_constraint: DAG ordering
+"#,
+    )
+    .unwrap();
+
+    let finance_dir = root.path().join("finance");
+    std::fs::create_dir_all(&finance_dir).unwrap();
+    std::fs::write(
+        finance_dir.join("vertical.yaml"),
+        r#"
+id: finance
+name: Finance
+defining_constraint: Regulatory pre-check
+"#,
+    )
+    .unwrap();
+
+    let mut config = RuntimeConfig::default();
+    config.taxonomy.verticals_dir = root.path().to_string_lossy().to_string();
+    let rt = Runtime::init_in_memory(config).unwrap();
+
+    assert_eq!(rt.verticals.len(), 2);
+    // Stable alphabetical ordering.
+    assert_eq!(rt.verticals[0].id, "finance");
+    assert_eq!(rt.verticals[1].id, "swe");
+}
+
+#[test]
+fn load_vertical_manifests_skips_malformed_yaml() {
+    let root = tempfile::tempdir().unwrap();
+
+    let bad_dir = root.path().join("bad");
+    std::fs::create_dir_all(&bad_dir).unwrap();
+    std::fs::write(bad_dir.join("vertical.yaml"), b"\xFF\xFE invalid utf8 maybe not, but bad yaml: [\n").unwrap();
+
+    let good_dir = root.path().join("swe");
+    std::fs::create_dir_all(&good_dir).unwrap();
+    std::fs::write(
+        good_dir.join("vertical.yaml"),
+        r#"
+id: swe
+name: Software Engineering
+defining_constraint: DAG ordering
+"#,
+    )
+    .unwrap();
+
+    let mut config = RuntimeConfig::default();
+    config.taxonomy.verticals_dir = root.path().to_string_lossy().to_string();
+    // Must not fail — malformed files are skipped.
+    let rt = Runtime::init_in_memory(config).unwrap();
+    assert_eq!(rt.verticals.len(), 1);
+    assert_eq!(rt.verticals[0].id, "swe");
+}
+
+#[test]
+fn load_vertical_manifests_ignores_files_without_vertical_yaml() {
+    let root = tempfile::tempdir().unwrap();
+    // A directory with no vertical.yaml — should be ignored.
+    let empty_dir = root.path().join("misc");
+    std::fs::create_dir_all(&empty_dir).unwrap();
+    std::fs::write(empty_dir.join("README.md"), b"not a manifest").unwrap();
+
+    let mut config = RuntimeConfig::default();
+    config.taxonomy.verticals_dir = root.path().to_string_lossy().to_string();
+    let rt = Runtime::init_in_memory(config).unwrap();
+    assert_eq!(rt.verticals.len(), 0);
+}
+
 #[tokio::test]
 async fn runtime_shutdown_aborts_active_workspaces() {
     let mut rt = test_runtime();

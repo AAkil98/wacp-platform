@@ -1,0 +1,148 @@
+id: swe
+name: Software Engineering
+defining_constraint: DAG validation — every workflow stage declares an explicit dependsOn list; the stage graph must be
+  a valid DAG with no cycles.
+context_schema: {}
+tool_policies: {}
+checkpoint_types: {}
+quality_criteria:
+  - id: correctness
+    name: Correctness
+    description: Code does what the directive requires. No logic errors.
+    weight: 1
+  - id: type_safety
+    name: Type Safety
+    description: Type errors eliminated. Compiler/checker passes.
+    weight: 1
+  - id: style
+    name: Style
+    description: Follows project conventions. Lint passes.
+    weight: 1
+  - id: coverage
+    name: Coverage
+    description: Tests cover the changed code.
+    weight: 1
+  - id: scope
+    name: Scope
+    description: Changes limited to declared scope.
+    weight: 1
+  - id: design
+    name: Design
+    description: Architecture decisions sound. Maintainability preserved.
+    weight: 1
+task_types:
+  - id: swe:debug
+    name: Debug
+    description: Diagnose and fix a defect, crash, or error.
+    workflow_id: swe:fix-bug
+    keywords:
+      - fix
+      - bug
+      - error
+      - crash
+      - debug
+  - id: swe:refactor
+    name: Refactor
+    description: Restructure existing code without changing behaviour.
+    workflow_id: swe:refactor
+    keywords:
+      - refactor
+      - restructure
+      - reorganize
+      - simplify
+      - clean up
+  - id: swe:test
+    name: Write Tests
+    description: Add or improve test coverage.
+    workflow_id: swe:write-tests
+    keywords:
+      - test
+      - tests
+      - coverage
+      - spec
+  - id: swe:review
+    name: Code Review
+    description: Evaluate code quality without making changes.
+    workflow_id: swe:review-only
+    keywords:
+      - review
+      - evaluate
+      - assess
+      - check quality
+  - id: swe:document
+    name: Document
+    description: Write or improve documentation.
+    workflow_id: swe:document-only
+    keywords:
+      - document
+      - docs
+      - readme
+      - comments
+  - id: swe:investigate
+    name: Investigate
+    description: Research or understand a codebase area.
+    workflow_id: swe:investigate-only
+    keywords:
+      - investigate
+      - research
+      - explore
+      - understand
+  - id: swe:implement
+    name: Implement Feature
+    description: Build a new feature or capability (default catchall).
+    workflow_id: swe:implement-feature
+    keywords:
+      - implement
+      - add
+      - build
+      - create
+      - develop
+workflows:
+  - id: swe:implement-feature
+    name: Implement Feature
+    description: Plan → implement → test → review
+    stage_count: 4
+    gated_stage_count: 2
+  - id: swe:refactor
+    name: Refactor
+    description: Plan → implement → test → review (behavior-preserving)
+    stage_count: 4
+    gated_stage_count: 2
+  - id: swe:fix-bug
+    name: Fix Bug
+    description: Plan → implement → test (no review — urgency)
+    stage_count: 3
+    gated_stage_count: 1
+  - id: swe:write-tests
+    name: Write Tests
+    description: Plan → test (planner identifies gaps, tester fills them)
+    stage_count: 2
+    gated_stage_count: 0
+profiles:
+  - role_id: swe:planner
+    autonomy: gated
+  - role_id: swe:implementer
+    autonomy: gated
+  - role_id: swe:tester
+    autonomy: gated
+  - role_id: swe:reviewer
+    autonomy: autonomous
+tools:
+  - name: code_search
+    description: Search the codebase for a pattern (regex supported). Returns matching lines with file paths and line numbers.
+  - name: code_edit
+    description: Apply a targeted edit to a file by replacing an exact string match. Use this instead of write_file when
+      making small, precise changes.
+  - name: test_run
+    description: Run the test suite or a specific test file. Detects the test framework from the project (vitest, jest,
+      pytest, cargo test, etc.).
+  - name: lint_check
+    description: Run the project linter. Detects the linter from config files (eslint, biome, ruff, clippy, etc.).
+  - name: type_check
+    description: Run the type checker (tsc, mypy, cargo check, etc.). Returns type errors if any.
+  - name: git_branch
+    description: Create a new git branch or switch to an existing one.
+  - name: git_commit
+    description: Stage specified files (or all changes) and create a git commit.
+  - name: dependency_check
+    description: Check for outdated or vulnerable dependencies in the project.

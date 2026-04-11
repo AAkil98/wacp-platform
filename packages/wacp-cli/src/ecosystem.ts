@@ -51,6 +51,79 @@ export interface VerticalToolResult {
   isError: boolean;
 }
 
+/** Policy kind discriminant for tool-layer enforcement rules. */
+export type ToolPolicyKind =
+  | "requires_checkpoint"    // prior checkpoint of a specific type must exist in trail or as arg
+  | "requires_gate"          // protocol gate must be cleared (e.g. production env approval)
+  | "budget_limited"         // execution blocked if a resource budget would be exceeded
+  | "classification_gated";  // input is classified; blocked unless an override flag is set
+
+/**
+ * A tool-layer policy rule — describes how the vertical enforces a pre-condition
+ * before allowing a tool to execute. Surfaced by the Console so users aren't
+ * surprised at runtime.
+ */
+export interface ToolPolicy {
+  kind: ToolPolicyKind;
+  description: string;
+  /** requires_checkpoint: the checkpoint type that must exist. */
+  checkpoint_type?: string;
+  /** requires_checkpoint: a tool-arg field that must match the checkpoint's recorded value. */
+  matching_field?: string;
+  /** requires_checkpoint: freshness window in milliseconds. */
+  expires_after_ms?: number;
+  /** requires_gate: human-readable condition that triggers the gate. */
+  gate_condition?: string;
+  /** budget_limited: the tool-arg field carrying the requested amount. */
+  budget_field?: string;
+  /** classification_gated: the classification values blocked by default. */
+  blocked_classifications?: readonly string[];
+  /** classification_gated: boolean arg flag that bypasses the block (with gate clearance). */
+  override_flag?: string;
+}
+
+/** A typed field in a vertical's session-launch context schema. */
+export interface ContextField {
+  type: "string" | "number" | "boolean" | "enum";
+  required: boolean;
+  description: string;
+  enum_values?: readonly string[];
+  default?: string | number | boolean;
+}
+
+/** A field within a vertical-specific checkpoint type. */
+export interface CheckpointField {
+  name: string;
+  type: "string" | "number" | "boolean" | "enum";
+  description: string;
+  enum_values?: readonly string[];
+}
+
+/** Schema for a vertical-specific checkpoint type. */
+export interface CheckpointSchema {
+  description: string;
+  fields: readonly CheckpointField[];
+}
+
+/** Serializable quality criterion (without the evaluate function). */
+export interface QualityCriterion {
+  id: string;
+  name: string;
+  description: string;
+  /** Relative weight — used by the Console when computing an aggregate score. 1.0 = equal weight. */
+  weight: number;
+}
+
+/** Declarative task type with representative detection keywords. */
+export interface TaskTypeDescriptor {
+  id: string;
+  name: string;
+  description: string;
+  workflow_id: string;
+  /** Representative keywords (not full regex — for display and search purposes). */
+  keywords: readonly string[];
+}
+
 /**
  * A loaded vertical descriptor — the runtime contract between the CLI and a
  * vertical package. Each vertical's index.ts exports a constant matching this
@@ -70,6 +143,18 @@ export interface LoadedVertical {
     args: Record<string, unknown>,
   ) => Promise<VerticalToolResult>;
   toolOperation: (name: string) => string | null;
+  /** Human-readable description of the vertical's defining constraint. */
+  defining_constraint: string;
+  /** Typed schema for context tags the session launcher must collect before dispatch. */
+  context_schema: Readonly<Record<string, ContextField>>;
+  /** Tool-layer policy rules keyed by tool name. */
+  tool_policies: Readonly<Record<string, ToolPolicy>>;
+  /** Vertical-specific checkpoint types with field schemas. */
+  checkpoint_types: Readonly<Record<string, CheckpointSchema>>;
+  /** Serializable quality criteria (without evaluate functions). */
+  quality_criteria: readonly QualityCriterion[];
+  /** Declarative task type descriptors with representative keywords. */
+  task_types: readonly TaskTypeDescriptor[];
 }
 
 /** A loaded ecosystem — collection of verticals with O(1) tool lookup. */

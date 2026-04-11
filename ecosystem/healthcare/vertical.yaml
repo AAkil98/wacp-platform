@@ -1,0 +1,208 @@
+id: healthcare
+name: Healthcare
+defining_constraint: HIPAA PHI access grant — clinical_report_generate, lab_interpret, and risk_score refuse without a
+  valid phi_access_grant argument (consent or de-identification basis); 18 HIPAA Safe Harbor identifiers screened by
+  phi_filter; patient-assessment workflow is fully gated for clinician sign-off.
+context_schema:
+  phi_access_basis:
+    type: enum
+    required: true
+    description: Permitted basis under which PHI may be accessed in this session.
+    enum_values:
+      - consent
+      - de_identified
+tool_policies:
+  clinical_report_generate:
+    kind: requires_checkpoint
+    description: Requires a valid phi_access_grant argument (consent or de-identification basis) from a prior consent_verify
+      or de_identify call.
+    checkpoint_type: phi_access_grant
+  lab_interpret:
+    kind: requires_checkpoint
+    description: Requires a valid phi_access_grant argument (consent or de-identification basis).
+    checkpoint_type: phi_access_grant
+  risk_score:
+    kind: requires_checkpoint
+    description: Requires a valid phi_access_grant argument (consent or de-identification basis).
+    checkpoint_type: phi_access_grant
+checkpoint_types:
+  phi_access_grant:
+    description: PHI access authorisation — consent or de-identification basis — required before clinical tools execute.
+    fields:
+      - name: basis
+        type: enum
+        description: Authorisation basis.
+        enum_values:
+          - consent
+          - de_identified
+      - name: patient_id
+        type: string
+        description: Patient identifier (consent basis only).
+      - name: consent_id
+        type: string
+        description: Consent document identifier (consent basis only).
+      - name: consent_scope
+        type: string
+        description: JSON array of permitted use scopes (consent basis).
+      - name: deidentification_method
+        type: string
+        description: Method used to de-identify data (de_identified basis).
+      - name: deidentified_data_hash
+        type: string
+        description: SHA-256 of the de-identified dataset (de_identified basis).
+      - name: expires_at
+        type: number
+        description: Unix timestamp (ms) after which this grant expires.
+quality_criteria:
+  - id: clinical_accuracy
+    name: Clinical Accuracy
+    description: Recommendations align with current clinical guidelines.
+    weight: 1
+  - id: phi_compliance
+    name: PHI Compliance
+    description: No PHI exposed without a valid access grant.
+    weight: 1
+  - id: evidence_basis
+    name: Evidence Basis
+    description: Citations to clinical literature, evidence levels graded.
+    weight: 1
+  - id: completeness
+    name: Completeness
+    description: All relevant clinical context included.
+    weight: 1
+  - id: readability
+    name: Readability
+    description: Appropriate reading level for the audience.
+    weight: 1
+  - id: regulatory_adherence
+    name: Regulatory Adherence
+    description: HIPAA, GDPR, FDA where applicable.
+    weight: 1
+task_types:
+  - id: health:diagnose_support
+    name: Differential Diagnosis
+    description: Generate a differential diagnosis list to support a clinician.
+    workflow_id: health:patient-assessment
+    keywords:
+      - differential diagnosis
+      - ddx
+      - diagnose
+      - differential
+  - id: health:assess
+    name: Patient Assessment
+    description: Complete a history and physical or admission note.
+    workflow_id: health:patient-assessment
+    keywords:
+      - h&p
+      - history and physical
+      - admission note
+      - assessment
+  - id: health:report
+    name: Clinical Note
+    description: Write a progress note, chart note, or discharge summary.
+    workflow_id: health:patient-assessment
+    keywords:
+      - progress note
+      - chart note
+      - discharge summary
+      - soap note
+  - id: health:research
+    name: Literature Research
+    description: Conduct a systematic or narrative literature review.
+    workflow_id: health:literature-research
+    keywords:
+      - literature review
+      - systematic review
+      - pubmed
+      - evidence review
+  - id: health:audit
+    name: PHI Audit
+    description: Audit PHI access, consent records, or HIPAA compliance.
+    workflow_id: health:phi-audit
+    keywords:
+      - phi
+      - hipaa
+      - de-identify
+      - consent verify
+      - audit
+  - id: health:educate
+    name: Patient Education
+    description: Generate patient education materials at an appropriate reading level.
+    workflow_id: health:patient-education
+    keywords:
+      - patient education
+      - teach patient
+      - handout
+      - patient materials
+  - id: health:analyze
+    name: Cohort Analysis
+    description: Analyze de-identified population health data.
+    workflow_id: health:analyze-only
+    keywords:
+      - cohort
+      - de-identified data
+      - population health
+      - epidemiology
+  - id: health:monitor
+    name: Monitor Patient
+    description: Review vital sign trends or follow-up on a care plan.
+    workflow_id: health:monitor-only
+    keywords:
+      - monitor patient
+      - vital signs
+      - follow-up
+      - care plan
+workflows:
+  - id: health:patient-assessment
+    name: Patient Assessment
+    description: Consent → gather → analyze → report
+    stage_count: 4
+    gated_stage_count: 4
+  - id: health:literature-research
+    name: Literature Research
+    description: Question → search → synthesize → review
+    stage_count: 4
+    gated_stage_count: 1
+  - id: health:phi-audit
+    name: PHI Audit
+    description: Scan → report
+    stage_count: 2
+    gated_stage_count: 0
+  - id: health:patient-education
+    name: Patient Education
+    description: Assess level → generate
+    stage_count: 2
+    gated_stage_count: 2
+profiles:
+  - role_id: health:clinician
+    autonomy: gated
+  - role_id: health:researcher
+    autonomy: gated
+  - role_id: health:analyst
+    autonomy: gated
+  - role_id: health:compliance
+    autonomy: autonomous
+  - role_id: health:coordinator
+    autonomy: gated
+tools:
+  - name: clinical_search
+    description: Search clinical guidelines, protocols, and literature (PubMed, UpToDate, Cochrane). No PHI involved.
+  - name: protocol_lookup
+    description: Look up a specific clinical protocol — sepsis bundle, stroke pathway, ARDSnet, etc. No PHI involved.
+  - name: lab_interpret
+    description: Interpret lab results in clinical context with reference ranges. REQUIRES a phi_access_grant.
+  - name: risk_score
+    description: Compute clinical risk scores — CHADS2-VASc, ASCVD, CURB-65, MELD, APACHE. REQUIRES a phi_access_grant.
+  - name: phi_filter
+    description: Detect PHI in text against the 18 HIPAA identifiers. Returns the list of identifier categories detected.
+  - name: consent_verify
+    description: Verify patient consent for a specific use. Produces a consent-basis PHI access grant.
+  - name: de_identify
+    description: De-identify clinical data per HIPAA Safe Harbor. Removes the 18 identifiers and produces a de-identified
+      copy plus a hash.
+  - name: clinical_report_generate
+    description: Generate a clinical report — H&P, progress note, discharge summary. REQUIRES a phi_access_grant.
+  - name: audit_export
+    description: Export the audit trail with PHI access metadata for compliance review. Read-only.
+  - name: education_material
+    description: Generate patient education at a specified reading level (default 6th grade).

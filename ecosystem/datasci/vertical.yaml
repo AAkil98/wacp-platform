@@ -1,0 +1,183 @@
+id: datasci
+name: Data Science
+defining_constraint: Pre-declared hypotheses / statistical rigor — hypothesis_test refuses without a prior
+  declared_hypothesis checkpoint; all point estimates must carry confidence intervals; assumption checks are required
+  before parametric tests.
+context_schema:
+  hypothesis_framework:
+    type: string
+    required: false
+    description: Default hypothesis framework template for this session (optional; can be specified per-test).
+tool_policies:
+  hypothesis_test:
+    kind: requires_checkpoint
+    description: Refuses without a declared_hypothesis checkpoint providing null_hypothesis, alternative_hypothesis, alpha,
+      and test_type.
+    checkpoint_type: declared_hypothesis
+checkpoint_types:
+  declared_hypothesis:
+    description: Pre-declared statistical hypothesis — must exist before hypothesis_test can execute.
+    fields:
+      - name: null_hypothesis
+        type: string
+        description: The null hypothesis statement (H0).
+      - name: alternative_hypothesis
+        type: string
+        description: The alternative hypothesis statement (H1).
+      - name: alpha
+        type: number
+        description: Significance level (e.g. 0.05).
+      - name: test_type
+        type: string
+        description: Statistical test to use (e.g. t-test, chi-square, anova).
+      - name: multiple_testing_correction
+        type: string
+        description: Correction strategy (e.g. bonferroni, fdr-bh) if multiple comparisons are made.
+quality_criteria:
+  - id: statistical_rigor
+    name: Statistical Rigor
+    description: Hypotheses declared, corrections applied.
+    weight: 1
+  - id: reproducibility
+    name: Reproducibility
+    description: Analysis re-executable from recorded artifacts.
+    weight: 1
+  - id: interpretation_validity
+    name: Interpretation Validity
+    description: Interpretation matches the actual results.
+    weight: 1
+  - id: assumptions_checked
+    name: Assumptions Checked
+    description: Parametric assumptions verified before tests.
+    weight: 1
+  - id: effect_size
+    name: Effect Size
+    description: Effect sizes and confidence intervals reported.
+    weight: 1
+  - id: documentation
+    name: Documentation
+    description: Methodology documented, decisions justified.
+    weight: 1
+task_types:
+  - id: datasci:test
+    name: Hypothesis Test
+    description: Execute a formal statistical hypothesis test.
+    workflow_id: datasci:hypothesis-test
+    keywords:
+      - hypothesis test
+      - t-test
+      - chi-square
+      - anova
+      - p-value
+  - id: datasci:hypothesize
+    name: Declare Hypothesis
+    description: Formulate and declare a testable hypothesis.
+    workflow_id: datasci:hypothesis-test
+    keywords:
+      - test if
+      - test whether
+      - null hypothesis
+      - formulate hypothesis
+  - id: datasci:model
+    name: Build Model
+    description: Fit a statistical or ML model to data.
+    workflow_id: datasci:model-build
+    keywords:
+      - linear regression
+      - logistic regression
+      - glm
+      - gam
+      - model fit
+  - id: datasci:explore
+    name: Exploratory Analysis
+    description: Profile and visualise a dataset.
+    workflow_id: datasci:exploration
+    keywords:
+      - eda
+      - exploratory data analysis
+      - profile data
+      - describe data
+  - id: datasci:feature
+    name: Feature Engineering
+    description: Extract or transform features for modelling.
+    workflow_id: datasci:feature-only
+    keywords:
+      - feature extract
+      - feature transform
+      - standardize
+      - pca
+      - encoding
+  - id: datasci:interpret
+    name: Interpret Results
+    description: Compute effect sizes, confidence intervals, and interpret outputs.
+    workflow_id: datasci:interpret-only
+    keywords:
+      - interpret results
+      - effect size
+      - confidence interval
+      - odds ratio
+  - id: datasci:report
+    name: Statistical Report
+    description: Produce a full statistical analysis report.
+    workflow_id: datasci:full-analysis
+    keywords:
+      - statistical report
+      - statistical findings
+      - analysis report
+      - findings summary
+workflows:
+  - id: datasci:full-analysis
+    name: Full Analysis
+    description: Explore → hypothesize → test → interpret → review
+    stage_count: 5
+    gated_stage_count: 2
+  - id: datasci:hypothesis-test
+    name: Hypothesis Test
+    description: Declare → test → interpret
+    stage_count: 3
+    gated_stage_count: 1
+  - id: datasci:model-build
+    name: Model Build
+    description: Explore → feature → fit → validate
+    stage_count: 4
+    gated_stage_count: 1
+  - id: datasci:exploration
+    name: Exploration
+    description: Profile → visualize
+    stage_count: 2
+    gated_stage_count: 0
+profiles:
+  - role_id: datasci:explorer
+    autonomy: gated
+  - role_id: datasci:statistician
+    autonomy: gated
+  - role_id: datasci:feature_engineer
+    autonomy: gated
+  - role_id: datasci:modeler
+    autonomy: gated
+  - role_id: datasci:reviewer
+    autonomy: autonomous
+tools:
+  - name: stat_summary
+    description: Compute statistical summary of a dataset — mean, median, std, quartiles, skew, kurtosis, missingness.
+  - name: correlation_analysis
+    description: Compute correlation matrix with significance tests. Handles ties, missing data, and non-parametric alternatives.
+  - name: hypothesis_test
+    description: Run a statistical hypothesis test. REQUIRES a prior declared_hypothesis checkpoint in the trail. Refuses
+      execution if hypothesis was not declared.
+  - name: feature_extract
+    description: Extract features from raw data — text features (TF-IDF, embeddings), time-series features (lag, rolling),
+      categorical encoding.
+  - name: feature_transform
+    description: Transform features — standardize, normalize, impute, encode, reduce dimensionality (PCA, ICA).
+  - name: model_fit
+    description: Fit a statistical model — linear regression, logistic regression, GLM, GAM, mixed-effects, survival analysis.
+  - name: diagnostic_plots
+    description: Generate diagnostic plots — residuals, Q-Q, influence, leverage, ACF, PACF.
+  - name: bootstrap_sample
+    description: Bootstrap resampling for confidence intervals and non-parametric inference.
+  - name: causal_inference
+    description: Causal inference methods — DAG, propensity score matching, instrumental variables,
+      difference-in-differences, regression discontinuity.
+  - name: interpretation
+    description: Generate plain-language interpretation of statistical results with caveats and limitations.

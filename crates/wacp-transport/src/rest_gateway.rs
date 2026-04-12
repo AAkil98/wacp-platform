@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use wacp_taxonomy::VerticalManifest;
 
 use crate::proto::wacp_v1;
@@ -72,14 +73,14 @@ pub type GatewayState = Arc<dyn GatewayBackend>;
 /// from `vertical.yaml` files; empty if none are configured.
 pub type VerticalRegistry = Arc<Vec<VerticalManifest>>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
     pub code: String,
 }
 
 /// Summary of a vertical — returned by `GET /v1/verticals`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct VerticalSummary {
     pub id: String,
     pub name: String,
@@ -87,6 +88,108 @@ pub struct VerticalSummary {
     pub task_type_count: usize,
     pub workflow_count: usize,
     pub tool_count: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Typed request/response schemas for OpenAPI
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, ToSchema)]
+pub struct HealthResponse {
+    pub status: String,
+    pub version: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct SubmitGoalBody {
+    pub description: String,
+    #[serde(default)]
+    pub context: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct GoalCreatedResponse {
+    pub goal_id: String,
+    pub workspace_id: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TaskListItem {
+    pub task_id: String,
+    pub name: String,
+    pub status: i32,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WorkspaceResponse {
+    pub workspace_id: String,
+    pub state: i32,
+    pub role: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct DispatchBody {
+    pub task_id: String,
+    pub role: String,
+    #[serde(default)]
+    pub tools: Vec<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct DispatchCreatedResponse {
+    pub workspace_id: String,
+    pub task_id: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct AbortBody {
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct InjectBody {
+    #[serde(default)]
+    pub r#type: String,
+    #[serde(default)]
+    pub payload: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct InjectCreatedResponse {
+    pub envelope_id: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct IntegrationResponse {
+    pub result: String,
+    pub detail: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct GateResponseBody {
+    pub decision: String,
+    #[serde(default)]
+    pub modification: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct EscalationResponseBody {
+    pub action: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct TrailEntryItem {
+    pub id: String,
+    pub event_type: String,
+    pub workspace_id: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct BudgetResponse {
+    pub max_tokens: u64,
+    pub max_wall_time_ms: u64,
+    pub max_cost_micros: u64,
 }
 
 pub struct RestGateway;
@@ -151,63 +254,85 @@ pub fn http_status_to_code(status: StatusCode) -> &'static str {
 // Handlers — each calls the backend and returns JSON
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
-struct HealthResponse { status: &'static str, version: &'static str }
-
+#[utoipa::path(get, path = "/v1/health", tag = "health",
+    responses((status = 200, description = "Runtime healthy", body = HealthResponse))
+)]
 async fn health_handler() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok", version: env!("CARGO_PKG_VERSION") })
+    Json(HealthResponse {
+        status: "ok".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+    })
 }
 
-#[derive(Deserialize)]
-struct SubmitGoalBody { description: String, #[serde(default)] context: String }
-
+#[utoipa::path(post, path = "/v1/goals", tag = "goals",
+    request_body = SubmitGoalBody,
+    responses(
+        (status = 201, description = "Goal created", body = GoalCreatedResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+    )
+)]
 async fn submit_goal_handler(
     State(backend): State<GatewayState>,
     Json(body): Json<SubmitGoalBody>,
-) -> Result<(StatusCode, Json<serde_json::Value>), GatewayError> {
+) -> Result<(StatusCode, Json<GoalCreatedResponse>), GatewayError> {
     let resp = backend.submit_goal(wacp_v1::SubmitGoalRequest {
         description: body.description,
         context: body.context.into_bytes(),
         client_request_id: String::new(),
     }).await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({
-        "goal_id": resp.goal_id,
-        "workspace_id": resp.root_workspace_id,
-    }))))
-}
-
-async fn get_ready_tasks_handler(
-    State(backend): State<GatewayState>,
-) -> Result<Json<serde_json::Value>, GatewayError> {
-    let resp = backend.get_ready_tasks().await?;
-    let tasks: Vec<serde_json::Value> = resp.tasks.iter().map(|t| serde_json::json!({
-        "task_id": t.task_id,
-        "name": t.name,
-        "status": t.status,
-    })).collect();
-    Ok(Json(serde_json::json!(tasks)))
-}
-
-async fn get_workspace_handler(
-    State(backend): State<GatewayState>,
-    Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, GatewayError> {
-    let resp = backend.get_workspace(&id).await?;
-    Ok(Json(serde_json::json!({
-        "workspace_id": resp.id,
-        "state": resp.state,
-        "role": resp.role,
+    Ok((StatusCode::CREATED, Json(GoalCreatedResponse {
+        goal_id: resp.goal_id,
+        workspace_id: resp.root_workspace_id,
     })))
 }
 
-#[derive(Deserialize)]
-struct DispatchBody { task_id: String, role: String, #[serde(default)] tools: Vec<String> }
+#[utoipa::path(get, path = "/v1/tasks", tag = "tasks",
+    responses((status = 200, description = "Ready tasks", body = Vec<TaskListItem>))
+)]
+async fn get_ready_tasks_handler(
+    State(backend): State<GatewayState>,
+) -> Result<Json<Vec<TaskListItem>>, GatewayError> {
+    let resp = backend.get_ready_tasks().await?;
+    let tasks: Vec<TaskListItem> = resp.tasks.iter().map(|t| TaskListItem {
+        task_id: t.task_id.clone(),
+        name: t.name.clone(),
+        status: t.status,
+    }).collect();
+    Ok(Json(tasks))
+}
 
+#[utoipa::path(get, path = "/v1/workspaces/{id}", tag = "workspaces",
+    params(("id" = String, Path, description = "Workspace ID")),
+    responses(
+        (status = 200, description = "Workspace details", body = WorkspaceResponse),
+        (status = 404, description = "Not found", body = ErrorResponse),
+    )
+)]
+async fn get_workspace_handler(
+    State(backend): State<GatewayState>,
+    Path(id): Path<String>,
+) -> Result<Json<WorkspaceResponse>, GatewayError> {
+    let resp = backend.get_workspace(&id).await?;
+    Ok(Json(WorkspaceResponse {
+        workspace_id: resp.id,
+        state: resp.state,
+        role: resp.role,
+    }))
+}
+
+#[utoipa::path(post, path = "/v1/workspaces/{id}/dispatch", tag = "workspaces",
+    params(("id" = String, Path, description = "Parent workspace ID")),
+    request_body = DispatchBody,
+    responses(
+        (status = 201, description = "Workspace dispatched", body = DispatchCreatedResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+    )
+)]
 async fn dispatch_handler(
     State(backend): State<GatewayState>,
     Path(_id): Path<String>,
     Json(body): Json<DispatchBody>,
-) -> Result<(StatusCode, Json<serde_json::Value>), GatewayError> {
+) -> Result<(StatusCode, Json<DispatchCreatedResponse>), GatewayError> {
     let resp = backend.dispatch(wacp_v1::DispatchRequest {
         task_id: body.task_id,
         role: body.role,
@@ -216,15 +341,20 @@ async fn dispatch_handler(
         budget: None,
         client_request_id: String::new(),
     }).await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({
-        "workspace_id": resp.workspace_id,
-        "task_id": resp.task_id,
-    }))))
+    Ok((StatusCode::CREATED, Json(DispatchCreatedResponse {
+        workspace_id: resp.workspace_id,
+        task_id: resp.task_id,
+    })))
 }
 
-#[derive(Deserialize)]
-struct AbortBody { #[serde(default)] reason: String }
-
+#[utoipa::path(post, path = "/v1/workspaces/{id}/abort", tag = "workspaces",
+    params(("id" = String, Path, description = "Workspace ID")),
+    request_body = AbortBody,
+    responses(
+        (status = 204, description = "Workspace aborted"),
+        (status = 404, description = "Not found", body = ErrorResponse),
+    )
+)]
 async fn abort_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
@@ -236,6 +366,13 @@ async fn abort_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(post, path = "/v1/workspaces/{id}/suspend", tag = "workspaces",
+    params(("id" = String, Path, description = "Workspace ID")),
+    responses(
+        (status = 204, description = "Workspace suspended"),
+        (status = 404, description = "Not found", body = ErrorResponse),
+    )
+)]
 async fn suspend_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
@@ -246,6 +383,13 @@ async fn suspend_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(post, path = "/v1/workspaces/{id}/resume", tag = "workspaces",
+    params(("id" = String, Path, description = "Workspace ID")),
+    responses(
+        (status = 204, description = "Workspace resumed"),
+        (status = 404, description = "Not found", body = ErrorResponse),
+    )
+)]
 async fn resume_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
@@ -256,14 +400,18 @@ async fn resume_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
-struct InjectBody { #[serde(default)] r#type: String, #[serde(default)] payload: String }
-
+#[utoipa::path(post, path = "/v1/workspaces/{id}/inject", tag = "workspaces",
+    params(("id" = String, Path, description = "Target workspace ID")),
+    request_body = InjectBody,
+    responses(
+        (status = 201, description = "Envelope injected", body = InjectCreatedResponse),
+    )
+)]
 async fn inject_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
     Json(body): Json<InjectBody>,
-) -> Result<(StatusCode, Json<serde_json::Value>), GatewayError> {
+) -> Result<(StatusCode, Json<InjectCreatedResponse>), GatewayError> {
     let resp = backend.inject_envelope(wacp_v1::InjectEnvelopeRequest {
         to_workspace: id,
         r#type: body.r#type,
@@ -271,22 +419,35 @@ async fn inject_handler(
         priority: 0,
         client_request_id: String::new(),
     }).await?;
-    Ok((StatusCode::CREATED, Json(serde_json::json!({"envelope_id": resp.envelope_id}))))
+    Ok((StatusCode::CREATED, Json(InjectCreatedResponse {
+        envelope_id: resp.envelope_id,
+    })))
 }
 
+#[utoipa::path(post, path = "/v1/workspaces/{id}/integrate", tag = "workspaces",
+    params(("id" = String, Path, description = "Workspace ID")),
+    responses(
+        (status = 200, description = "Integration result", body = IntegrationResponse),
+    )
+)]
 async fn integrate_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, GatewayError> {
+) -> Result<Json<IntegrationResponse>, GatewayError> {
     let resp = backend.trigger_integration(wacp_v1::TriggerIntegrationRequest {
         workspace_id: id, client_request_id: String::new(),
     }).await?;
-    Ok(Json(serde_json::json!({"result": resp.result, "detail": resp.detail})))
+    Ok(Json(IntegrationResponse { result: resp.result, detail: resp.detail }))
 }
 
-#[derive(Deserialize)]
-struct GateResponseBody { decision: String, #[serde(default)] modification: String }
-
+#[utoipa::path(post, path = "/v1/gates/{id}/respond", tag = "gates",
+    params(("id" = String, Path, description = "Gate ID")),
+    request_body = GateResponseBody,
+    responses(
+        (status = 204, description = "Gate response accepted"),
+        (status = 404, description = "Gate not found", body = ErrorResponse),
+    )
+)]
 async fn respond_gate_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
@@ -301,9 +462,14 @@ async fn respond_gate_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
-struct EscalationResponseBody { action: String }
-
+#[utoipa::path(post, path = "/v1/escalations/{id}/respond", tag = "escalations",
+    params(("id" = String, Path, description = "Escalation ID")),
+    request_body = EscalationResponseBody,
+    responses(
+        (status = 204, description = "Escalation response accepted"),
+        (status = 404, description = "Escalation not found", body = ErrorResponse),
+    )
+)]
 async fn respond_escalation_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
@@ -317,36 +483,45 @@ async fn respond_escalation_handler(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(get, path = "/v1/trail", tag = "trail",
+    responses((status = 200, description = "Trail entries", body = Vec<TrailEntryItem>))
+)]
 async fn query_trail_handler(
     State(backend): State<GatewayState>,
-) -> Result<Json<serde_json::Value>, GatewayError> {
+) -> Result<Json<Vec<TrailEntryItem>>, GatewayError> {
     let mut trail_req = wacp_v1::HighwayQueryTrailRequest::default();
     trail_req.limit = 100;
     let resp = backend.query_trail(trail_req).await?;
-    let entries: Vec<serde_json::Value> = resp.entries.iter().map(|e| serde_json::json!({
-        "id": e.id,
-        "event_type": e.event_type,
-        "workspace_id": e.workspace_id,
-    })).collect();
-    Ok(Json(serde_json::json!(entries)))
+    let entries: Vec<TrailEntryItem> = resp.entries.iter().map(|e| TrailEntryItem {
+        id: e.id.clone(),
+        event_type: e.event_type.clone(),
+        workspace_id: e.workspace_id.clone(),
+    }).collect();
+    Ok(Json(entries))
 }
 
+#[utoipa::path(get, path = "/v1/budget", tag = "resources",
+    responses((status = 200, description = "Allocatable budget", body = BudgetResponse))
+)]
 async fn get_allocatable_handler(
     State(backend): State<GatewayState>,
-) -> Result<Json<serde_json::Value>, GatewayError> {
+) -> Result<Json<BudgetResponse>, GatewayError> {
     let resp = backend.get_allocatable().await?;
     let budget = resp.remaining.unwrap_or_default();
-    Ok(Json(serde_json::json!({
-        "max_tokens": budget.max_tokens,
-        "max_wall_time_ms": budget.max_wall_time_ms,
-        "max_cost_micros": budget.max_cost_micros,
-    })))
+    Ok(Json(BudgetResponse {
+        max_tokens: budget.max_tokens,
+        max_wall_time_ms: budget.max_wall_time_ms,
+        max_cost_micros: budget.max_cost_micros,
+    }))
 }
 
 // ---------------------------------------------------------------------------
 // Vertical discovery handlers — read-only, served from in-memory registry
 // ---------------------------------------------------------------------------
 
+#[utoipa::path(get, path = "/v1/verticals", tag = "verticals",
+    responses((status = 200, description = "All verticals", body = Vec<VerticalSummary>))
+)]
 async fn list_verticals_handler(
     Extension(verticals): Extension<VerticalRegistry>,
 ) -> Json<Vec<VerticalSummary>> {
@@ -365,6 +540,13 @@ async fn list_verticals_handler(
     )
 }
 
+#[utoipa::path(get, path = "/v1/verticals/{id}", tag = "verticals",
+    params(("id" = String, Path, description = "Vertical ID")),
+    responses(
+        (status = 200, description = "Vertical manifest"),
+        (status = 404, description = "Not found", body = ErrorResponse),
+    )
+)]
 async fn get_vertical_handler(
     Extension(verticals): Extension<VerticalRegistry>,
     Path(id): Path<String>,

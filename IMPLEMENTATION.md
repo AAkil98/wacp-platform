@@ -340,7 +340,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 | **A2** | ~~CI matrix for `packages/wacp-cli`, `packages/wacp-local`, `ecosystem/*`~~ | `.github/workflows/ci.yml` | **Done** |
 | **A3** | ~~`release.yml` — tag-triggered matrix build + GitHub Release + GHCR image~~ | `.github/workflows/release.yml` | **Done** |
 | **A4** | ~~Prepare `wacp-types` + `wacp-taxonomy` for crates.io~~ | `crates/wacp-types/Cargo.toml`, `crates/wacp-taxonomy/Cargo.toml` — metadata ready, `cargo publish` pending | **Done** (metadata) |
-| **A5** | Annotate 16 REST handlers with `utoipa::path`; derive `ToSchema` on request/response types | `crates/wacp-transport/src/rest_gateway.rs`, `crates/wacp-transport/src/messages.rs` | A1 |
+| **A5** | ~~Annotate 16 REST handlers with `utoipa::path`; derive `ToSchema` on request/response types~~ | `crates/wacp-transport/src/rest_gateway.rs`, `Cargo.toml` | **Done** |
 | **A6** | `gen_openapi` binary; commit `openapi.yaml`; CI drift check | `crates/wacp-transport/src/bin/gen_openapi.rs`, root `openapi.yaml`, CI step | A5 |
 | **A7** | `GET /v1/sessions/{id}/workspaces` (or parent-filter equivalent) | `crates/wacp-transport/src/rest_gateway.rs`, `crates/wacp-coordinator/src/...` if list method missing | A1 |
 | **A8** | `subscribe_session_trail` method on `/v1/ws` | `crates/wacp-transport/src/websocket.rs`, schema docs in `openapi.yaml` sibling | A1 |

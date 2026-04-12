@@ -18,6 +18,7 @@ parking_lot = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+utoipa = { version = "5", features = ["axum_extras"] }
 futures = { workspace = true }
 tokio-stream = "0.1"
 

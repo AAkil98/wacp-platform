@@ -34,8 +34,8 @@ jobs:
       - name: Format check
         run: cargo fmt --check --all
 
-  typescript:
-    name: TypeScript — typecheck, test, build
+  typescript-highway:
+    name: TypeScript — highway-ui
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -64,6 +64,48 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  typescript-packages:
+    name: TypeScript — ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - packages/wacp-local
+          - packages/wacp-cli
+          - ecosystem/swe
+          - ecosystem/devops
+          - ecosystem/mlops
+          - ecosystem/finance
+          - ecosystem/healthcare
+          - ecosystem/analytics
+          - ecosystem/datasci
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm run --if-present build
 
   python:
     name: Python ${{ matrix.python }} — test

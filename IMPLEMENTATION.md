@@ -344,7 +344,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 | **A6** | ~~`gen_openapi` binary; commit `openapi.yaml`; CI drift check~~ | `gen_openapi.rs`, root `openapi.yaml`, `ci.yml` drift step | **Done** |
 | **A7** | ~~`GET /v1/sessions/{id}/workspaces`~~ | `rest_gateway.rs` — handler, backend trait, mock, test, OpenAPI | **Done** |
 | **A8** | ~~`subscribe_session_trail` method on `/v1/ws`~~ | `websocket.rs` — JSON-RPC method + 2 tests | **Done** |
-| **A9** | Mock runtime binary with fixture loader + signal scripts | `crates/wacp-runtime/src/bin/mock.rs` (or new `crates/wacp-mock-runtime/`), `tests/fixtures/` | A1 |
+| **A9** | ~~Mock runtime binary with fixture loader~~ | `crates/wacp-runtime/src/bin/mock.rs` — gRPC + REST + WS, simple/complex fixtures | **Done** |
 
 ### 8.2 Stream B
 

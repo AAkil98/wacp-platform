@@ -28,6 +28,10 @@ tracing-subscriber = { workspace = true }
 prometheus = { workspace = true }
 axum = { workspace = true }
 
+[[bin]]
+name = "wacp-mock-runtime"
+path = "src/bin/mock.rs"
+
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = "3"

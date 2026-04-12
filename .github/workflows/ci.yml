@@ -102,7 +102,7 @@ jobs:
           node-version: 22
 
       - name: Install
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
         run: pnpm typecheck

@@ -257,7 +257,7 @@ pub fn http_status_to_code(status: StatusCode) -> &'static str {
 #[utoipa::path(get, path = "/v1/health", tag = "health",
     responses((status = 200, description = "Runtime healthy", body = HealthResponse))
 )]
-async fn health_handler() -> Json<HealthResponse> {
+pub async fn health_handler() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".into(),
         version: env!("CARGO_PKG_VERSION").into(),
@@ -271,7 +271,7 @@ async fn health_handler() -> Json<HealthResponse> {
         (status = 400, description = "Bad request", body = ErrorResponse),
     )
 )]
-async fn submit_goal_handler(
+pub async fn submit_goal_handler(
     State(backend): State<GatewayState>,
     Json(body): Json<SubmitGoalBody>,
 ) -> Result<(StatusCode, Json<GoalCreatedResponse>), GatewayError> {
@@ -289,7 +289,7 @@ async fn submit_goal_handler(
 #[utoipa::path(get, path = "/v1/tasks", tag = "tasks",
     responses((status = 200, description = "Ready tasks", body = Vec<TaskListItem>))
 )]
-async fn get_ready_tasks_handler(
+pub async fn get_ready_tasks_handler(
     State(backend): State<GatewayState>,
 ) -> Result<Json<Vec<TaskListItem>>, GatewayError> {
     let resp = backend.get_ready_tasks().await?;
@@ -308,7 +308,7 @@ async fn get_ready_tasks_handler(
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]
-async fn get_workspace_handler(
+pub async fn get_workspace_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
 ) -> Result<Json<WorkspaceResponse>, GatewayError> {
@@ -328,7 +328,7 @@ async fn get_workspace_handler(
         (status = 400, description = "Bad request", body = ErrorResponse),
     )
 )]
-async fn dispatch_handler(
+pub async fn dispatch_handler(
     State(backend): State<GatewayState>,
     Path(_id): Path<String>,
     Json(body): Json<DispatchBody>,
@@ -355,7 +355,7 @@ async fn dispatch_handler(
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]
-async fn abort_handler(
+pub async fn abort_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
     Json(body): Json<AbortBody>,
@@ -373,7 +373,7 @@ async fn abort_handler(
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]
-async fn suspend_handler(
+pub async fn suspend_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, GatewayError> {
@@ -390,7 +390,7 @@ async fn suspend_handler(
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]
-async fn resume_handler(
+pub async fn resume_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, GatewayError> {
@@ -407,7 +407,7 @@ async fn resume_handler(
         (status = 201, description = "Envelope injected", body = InjectCreatedResponse),
     )
 )]
-async fn inject_handler(
+pub async fn inject_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
     Json(body): Json<InjectBody>,
@@ -430,7 +430,7 @@ async fn inject_handler(
         (status = 200, description = "Integration result", body = IntegrationResponse),
     )
 )]
-async fn integrate_handler(
+pub async fn integrate_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
 ) -> Result<Json<IntegrationResponse>, GatewayError> {
@@ -448,7 +448,7 @@ async fn integrate_handler(
         (status = 404, description = "Gate not found", body = ErrorResponse),
     )
 )]
-async fn respond_gate_handler(
+pub async fn respond_gate_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
     Json(body): Json<GateResponseBody>,
@@ -470,7 +470,7 @@ async fn respond_gate_handler(
         (status = 404, description = "Escalation not found", body = ErrorResponse),
     )
 )]
-async fn respond_escalation_handler(
+pub async fn respond_escalation_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
     Json(_body): Json<EscalationResponseBody>,
@@ -486,7 +486,7 @@ async fn respond_escalation_handler(
 #[utoipa::path(get, path = "/v1/trail", tag = "trail",
     responses((status = 200, description = "Trail entries", body = Vec<TrailEntryItem>))
 )]
-async fn query_trail_handler(
+pub async fn query_trail_handler(
     State(backend): State<GatewayState>,
 ) -> Result<Json<Vec<TrailEntryItem>>, GatewayError> {
     let mut trail_req = wacp_v1::HighwayQueryTrailRequest::default();
@@ -503,7 +503,7 @@ async fn query_trail_handler(
 #[utoipa::path(get, path = "/v1/budget", tag = "resources",
     responses((status = 200, description = "Allocatable budget", body = BudgetResponse))
 )]
-async fn get_allocatable_handler(
+pub async fn get_allocatable_handler(
     State(backend): State<GatewayState>,
 ) -> Result<Json<BudgetResponse>, GatewayError> {
     let resp = backend.get_allocatable().await?;
@@ -522,7 +522,7 @@ async fn get_allocatable_handler(
 #[utoipa::path(get, path = "/v1/verticals", tag = "verticals",
     responses((status = 200, description = "All verticals", body = Vec<VerticalSummary>))
 )]
-async fn list_verticals_handler(
+pub async fn list_verticals_handler(
     Extension(verticals): Extension<VerticalRegistry>,
 ) -> Json<Vec<VerticalSummary>> {
     Json(
@@ -547,7 +547,7 @@ async fn list_verticals_handler(
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]
-async fn get_vertical_handler(
+pub async fn get_vertical_handler(
     Extension(verticals): Extension<VerticalRegistry>,
     Path(id): Path<String>,
 ) -> Result<Json<VerticalManifest>, GatewayError> {

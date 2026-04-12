@@ -18,13 +18,17 @@ parking_lot = { workspace = true }
 axum = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-utoipa = { version = "5", features = ["axum_extras"] }
+utoipa = { version = "5", features = ["axum_extras", "yaml"] }
 futures = { workspace = true }
 tokio-stream = "0.1"
 
 [dev-dependencies]
 tokio = { workspace = true }
 tower = "0.5"
+
+[[bin]]
+name = "gen_openapi"
+path = "src/bin/gen_openapi.rs"
 
 [build-dependencies]
 tonic-build = "0.13"

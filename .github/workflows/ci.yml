@@ -34,6 +34,12 @@ jobs:
       - name: Format check
         run: cargo fmt --check --all
 
+      - name: OpenAPI drift check
+        run: |
+          cargo run -p wacp-transport --bin gen_openapi > openapi.yaml.gen
+          diff openapi.yaml openapi.yaml.gen || (echo "openapi.yaml is stale — regenerate with: cargo run -p wacp-transport --bin gen_openapi > openapi.yaml" && exit 1)
+          rm openapi.yaml.gen
+
   typescript-highway:
     name: TypeScript — highway-ui
     runs-on: ubuntu-latest

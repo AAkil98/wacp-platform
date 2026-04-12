@@ -338,7 +338,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 |---|---|---|---|
 | **A1** | ~~Canonicalize port map~~ | `config.rs`, `grpc_server.rs`, `Dockerfile`, `deploy/`, `runtime-manager.ts`, 5 impl specs, `SEED-CONTEXT.md` | **Done** |
 | **A2** | ~~CI matrix for `packages/wacp-cli`, `packages/wacp-local`, `ecosystem/*`~~ | `.github/workflows/ci.yml` | **Done** |
-| **A3** | `release.yml` — tag-triggered matrix build + GitHub Release + GHCR image | `.github/workflows/release.yml`, optional `dist-workspace.toml` for `cargo-dist` | A1 |
+| **A3** | ~~`release.yml` — tag-triggered matrix build + GitHub Release + GHCR image~~ | `.github/workflows/release.yml` | **Done** |
 | **A4** | Publish `wacp-types` + `wacp-taxonomy` to crates.io at `0.1.0` | `crates/wacp-types/Cargo.toml`, `crates/wacp-taxonomy/Cargo.toml`, one-time publication | A2 |
 | **A5** | Annotate 16 REST handlers with `utoipa::path`; derive `ToSchema` on request/response types | `crates/wacp-transport/src/rest_gateway.rs`, `crates/wacp-transport/src/messages.rs` | A1 |
 | **A6** | `gen_openapi` binary; commit `openapi.yaml`; CI drift check | `crates/wacp-transport/src/bin/gen_openapi.rs`, root `openapi.yaml`, CI step | A5 |

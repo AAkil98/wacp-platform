@@ -1,9 +1,12 @@
 [package]
 name = "wacp-types"
-description = "WACP — Protocol type definitions"
+description = "WACP protocol type definitions — enums, newtypes, and core structs for the Workspace Agent Coordination Protocol"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+repository.workspace = true
+keywords = ["wacp", "protocol", "agents", "coordination"]
+categories = ["data-structures"]
 
 [dependencies]
 serde = { workspace = true }

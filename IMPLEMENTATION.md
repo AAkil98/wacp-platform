@@ -342,7 +342,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 | **A4** | ~~Prepare `wacp-types` + `wacp-taxonomy` for crates.io~~ | `crates/wacp-types/Cargo.toml`, `crates/wacp-taxonomy/Cargo.toml` — metadata ready, `cargo publish` pending | **Done** (metadata) |
 | **A5** | ~~Annotate 16 REST handlers with `utoipa::path`; derive `ToSchema` on request/response types~~ | `crates/wacp-transport/src/rest_gateway.rs`, `Cargo.toml` | **Done** |
 | **A6** | ~~`gen_openapi` binary; commit `openapi.yaml`; CI drift check~~ | `gen_openapi.rs`, root `openapi.yaml`, `ci.yml` drift step | **Done** |
-| **A7** | `GET /v1/sessions/{id}/workspaces` (or parent-filter equivalent) | `crates/wacp-transport/src/rest_gateway.rs`, `crates/wacp-coordinator/src/...` if list method missing | A1 |
+| **A7** | ~~`GET /v1/sessions/{id}/workspaces`~~ | `rest_gateway.rs` — handler, backend trait, mock, test, OpenAPI | **Done** |
 | **A8** | `subscribe_session_trail` method on `/v1/ws` | `crates/wacp-transport/src/websocket.rs`, schema docs in `openapi.yaml` sibling | A1 |
 | **A9** | Mock runtime binary with fixture loader + signal scripts | `crates/wacp-runtime/src/bin/mock.rs` (or new `crates/wacp-mock-runtime/`), `tests/fixtures/` | A1 |
 

@@ -33,6 +33,7 @@ pub trait GatewayBackend: Send + Sync + 'static {
     async fn respond_to_gate(&self, req: wacp_v1::GateResponse) -> Result<wacp_v1::GateResponseAck, GatewayError>;
     async fn respond_to_escalation(&self, req: wacp_v1::EscalationResponse) -> Result<wacp_v1::EscalationResponseAck, GatewayError>;
     async fn get_allocatable(&self) -> Result<wacp_v1::GetAllocatableResponse, GatewayError>;
+    async fn list_workspaces(&self, parent_id: Option<&str>) -> Result<Vec<WorkspaceSummaryItem>, GatewayError>;
 }
 
 #[derive(Debug)]
@@ -192,6 +193,15 @@ pub struct BudgetResponse {
     pub max_cost_micros: u64,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct WorkspaceSummaryItem {
+    pub id: String,
+    pub parent_id: String,
+    pub state: i32,
+    pub owner: String,
+    pub task_id: String,
+}
+
 pub struct RestGateway;
 
 impl RestGateway {
@@ -215,6 +225,7 @@ impl RestGateway {
             .route("/v1/escalations/{id}/respond", post(respond_escalation_handler))
             .route("/v1/trail", get(query_trail_handler))
             .route("/v1/budget", get(get_allocatable_handler))
+            .route("/v1/sessions/{id}/workspaces", get(list_session_workspaces_handler))
             // Vertical discovery — read-only, no auth required.
             .route("/v1/verticals", get(list_verticals_handler))
             .route("/v1/verticals/{id}", get(get_vertical_handler))
@@ -516,6 +527,24 @@ pub async fn get_allocatable_handler(
 }
 
 // ---------------------------------------------------------------------------
+// Session workspace listing
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(get, path = "/v1/sessions/{id}/workspaces", tag = "workspaces",
+    params(("id" = String, Path, description = "Session (root workspace) ID")),
+    responses(
+        (status = 200, description = "Workspaces in session", body = Vec<WorkspaceSummaryItem>),
+        (status = 404, description = "Session not found", body = ErrorResponse),
+    )
+)]
+pub async fn list_session_workspaces_handler(
+    State(backend): State<GatewayState>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<WorkspaceSummaryItem>>, GatewayError> {
+    backend.list_workspaces(Some(&id)).await.map(Json)
+}
+
+// ---------------------------------------------------------------------------
 // Vertical discovery handlers — read-only, served from in-memory registry
 // ---------------------------------------------------------------------------
 
@@ -626,6 +655,16 @@ pub(crate) mod tests {
                 max_tokens: 100_000, max_wall_time_ms: 300_000, max_storage_bytes: 0,
                 max_network_bytes: 0, max_cost_micros: 5_000_000, warning_threshold: 0.8,
             })})
+        }
+        async fn list_workspaces(&self, parent_id: Option<&str>) -> Result<Vec<WorkspaceSummaryItem>, GatewayError> {
+            let pid = parent_id.unwrap_or("ws-root");
+            Ok(vec![WorkspaceSummaryItem {
+                id: format!("{pid}-child-1"),
+                parent_id: pid.into(),
+                state: 1,
+                owner: "system".into(),
+                task_id: "t-1".into(),
+            }])
         }
     }
 
@@ -854,5 +893,17 @@ pub(crate) mod tests {
         let (status, json) = get_json(&test_app(), "/v1/verticals/nonexistent").await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(json["code"], "not_found");
+    }
+
+    // --- Session workspace listing ---
+
+    #[tokio::test]
+    async fn list_session_workspaces_returns_children() {
+        let (status, json) = get_json(&test_app(), "/v1/sessions/ws-root/workspaces").await;
+        assert_eq!(status, StatusCode::OK);
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], "ws-root-child-1");
+        assert_eq!(arr[0]["parent_id"], "ws-root");
     }
 }

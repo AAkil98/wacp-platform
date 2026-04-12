@@ -29,6 +29,7 @@ use wacp_transport::rest_gateway::*;
         respond_escalation_handler,
         query_trail_handler,
         get_allocatable_handler,
+        list_session_workspaces_handler,
         list_verticals_handler,
         get_vertical_handler,
     ),
@@ -49,6 +50,7 @@ use wacp_transport::rest_gateway::*;
         EscalationResponseBody,
         TrailEntryItem,
         BudgetResponse,
+        WorkspaceSummaryItem,
         VerticalSummary,
     )),
     tags(

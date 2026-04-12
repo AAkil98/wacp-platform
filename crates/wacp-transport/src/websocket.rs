@@ -238,6 +238,21 @@ async fn dispatch_method(
             }
         }
 
+        "subscribe_session_trail" => {
+            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+            if session_id.is_empty() {
+                return JsonRpcResponse::error(id, -32602, "session_id is required");
+            }
+            // Validate the session exists via the workspace backend.
+            match backend.get_workspace(session_id).await {
+                Ok(_) => JsonRpcResponse::success(id, serde_json::json!({
+                    "subscribed": true,
+                    "session_id": session_id,
+                })),
+                Err(e) => JsonRpcResponse::error(id, -32000, e.message),
+            }
+        }
+
         _ => JsonRpcResponse::error(id, -32601, format!("Method not found: {}", request.method)),
     }
 }
@@ -364,6 +379,35 @@ mod tests {
         let resp = dispatch_method(&req, &backend).await;
         let budget = resp.result.unwrap();
         assert_eq!(budget["max_tokens"], 100_000);
+    }
+
+    #[tokio::test]
+    async fn dispatch_subscribe_session_trail() {
+        let backend: Arc<dyn GatewayBackend> = Arc::new(MockBackend);
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            method: "subscribe_session_trail".into(),
+            params: serde_json::json!({"session_id": "ws-1"}),
+            id: Some(serde_json::json!(7)),
+        };
+        let resp = dispatch_method(&req, &backend).await;
+        let result = resp.result.unwrap();
+        assert_eq!(result["subscribed"], true);
+        assert_eq!(result["session_id"], "ws-1");
+    }
+
+    #[tokio::test]
+    async fn dispatch_subscribe_session_trail_missing_id() {
+        let backend: Arc<dyn GatewayBackend> = Arc::new(MockBackend);
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            method: "subscribe_session_trail".into(),
+            params: serde_json::json!({}),
+            id: Some(serde_json::json!(8)),
+        };
+        let resp = dispatch_method(&req, &backend).await;
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.unwrap().code, -32602);
     }
 
     #[tokio::test]

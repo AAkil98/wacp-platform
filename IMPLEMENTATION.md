@@ -343,7 +343,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 | **A5** | ~~Annotate 16 REST handlers with `utoipa::path`; derive `ToSchema` on request/response types~~ | `crates/wacp-transport/src/rest_gateway.rs`, `Cargo.toml` | **Done** |
 | **A6** | ~~`gen_openapi` binary; commit `openapi.yaml`; CI drift check~~ | `gen_openapi.rs`, root `openapi.yaml`, `ci.yml` drift step | **Done** |
 | **A7** | ~~`GET /v1/sessions/{id}/workspaces`~~ | `rest_gateway.rs` — handler, backend trait, mock, test, OpenAPI | **Done** |
-| **A8** | `subscribe_session_trail` method on `/v1/ws` | `crates/wacp-transport/src/websocket.rs`, schema docs in `openapi.yaml` sibling | A1 |
+| **A8** | ~~`subscribe_session_trail` method on `/v1/ws`~~ | `websocket.rs` — JSON-RPC method + 2 tests | **Done** |
 | **A9** | Mock runtime binary with fixture loader + signal scripts | `crates/wacp-runtime/src/bin/mock.rs` (or new `crates/wacp-mock-runtime/`), `tests/fixtures/` | A1 |
 
 ### 8.2 Stream B

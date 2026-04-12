@@ -24,9 +24,9 @@ pub struct GrpcServerConfig {
 impl Default for GrpcServerConfig {
     fn default() -> Self {
         Self {
-            agent_addr: ([0, 0, 0, 0], 9400).into(),
-            highway_addr: ([0, 0, 0, 0], 9401).into(),
-            coordinator_addr: ([0, 0, 0, 0], 9402).into(),
+            agent_addr: ([0, 0, 0, 0], 9090).into(),
+            highway_addr: ([0, 0, 0, 0], 9091).into(),
+            coordinator_addr: ([0, 0, 0, 0], 9092).into(),
             tls: None,
         }
     }

@@ -84,7 +84,7 @@ from wacp import Agent, Checkpoint, Envelope, Signal
 async def main():
     # Connect and bind to a workspace
     agent = await Agent.connect(
-        runtime_url="localhost:9400",
+        runtime_url="localhost:9090",
         workspace_id="ws-abc123",
         auth_token="tok-xyz",
     )
@@ -175,7 +175,7 @@ use wacp_sdk::{Agent, AgentConfig, Signal, CheckpointStatus, Confidence};
 #[tokio::main]
 async fn main() -> Result<(), wacp_sdk::Error> {
     let agent = Agent::connect(AgentConfig {
-        runtime_url: "http://localhost:9400".into(),
+        runtime_url: "http://localhost:9090".into(),
         workspace_id: "ws-abc123".parse()?,
         auth_token: "tok-xyz".into(),
     }).await?;

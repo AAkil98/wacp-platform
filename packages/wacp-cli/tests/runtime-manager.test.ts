@@ -4,23 +4,23 @@ import { RuntimeManager, DEFAULT_RUNTIME_CONFIG } from "../src/runtime-manager.j
 describe("RuntimeManager", () => {
   it("has correct default config", () => {
     const mgr = new RuntimeManager();
-    expect(mgr.config.agentPort).toBe(9400);
-    expect(mgr.config.coordinatorPort).toBe(9402);
+    expect(mgr.config.agentPort).toBe(9090);
+    expect(mgr.config.coordinatorPort).toBe(9092);
     expect(mgr.config.binaryPath).toBe("wacp-runtime");
   });
 
   it("accepts custom config", () => {
-    const mgr = new RuntimeManager({ agentPort: 19400, coordinatorPort: 19402 });
-    expect(mgr.config.agentPort).toBe(19400);
-    expect(mgr.config.coordinatorPort).toBe(19402);
+    const mgr = new RuntimeManager({ agentPort: 19090, coordinatorPort: 19092 });
+    expect(mgr.config.agentPort).toBe(19090);
+    expect(mgr.config.coordinatorPort).toBe(19092);
     expect(mgr.config.binaryPath).toBe("wacp-runtime"); // default preserved
   });
 
   it("generates correct URLs", () => {
-    const mgr = new RuntimeManager({ agentPort: 9400, coordinatorPort: 9402, highwayPort: 9401 });
-    expect(mgr.agentUrl).toBe("127.0.0.1:9400");
-    expect(mgr.coordinatorUrl).toBe("127.0.0.1:9402");
-    expect(mgr.highwayUrl).toBe("127.0.0.1:9401");
+    const mgr = new RuntimeManager({ agentPort: 9090, coordinatorPort: 9092, highwayPort: 9091 });
+    expect(mgr.agentUrl).toBe("127.0.0.1:9090");
+    expect(mgr.coordinatorUrl).toBe("127.0.0.1:9092");
+    expect(mgr.highwayUrl).toBe("127.0.0.1:9091");
   });
 
   it("starts as not ready", () => {

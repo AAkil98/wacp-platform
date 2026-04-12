@@ -47,7 +47,7 @@ This spec defines how the WACP highway becomes a TypeScript application. It answ
 
 The highway UI is the human's window into the runtime. Through it, the human exercises the four highway capabilities: **visibility** (live trail stream), **gates** (approve/reject/modify transitions), **injection** (send envelopes to any workspace), and **escalation handling** (respond to agents that need human input). The UI does not enforce protocol rules — the runtime does that. The UI renders state, captures intent, and relays decisions.
 
-**Scope.** The TypeScript client application that connects to the runtime's `HighwayService` (port 9401). gRPC-Web transport and connection management. Client-side state management for real-time streams. UI components for trail viewing, gate resolution, escalation response, envelope composition, workspace inspection, and task graph visualization. Authentication flow. Autonomy preset configuration.
+**Scope.** The TypeScript client application that connects to the runtime's `HighwayService` (port 9091). gRPC-Web transport and connection management. Client-side state management for real-time streams. UI components for trail viewing, gate resolution, escalation response, envelope composition, workspace inspection, and task graph visualization. Authentication flow. Autonomy preset configuration.
 
 **Not in scope.** Runtime internals (runtime spec). Wire format and protobuf definitions (protocol-interface spec). Protocol semantics — gate mechanics, timeout behavior, fallback logic, trail recording (human-highway spec). Agent SDK surface (sdk-agent spec). The UI renders what the runtime provides and sends what the protocol accepts; it does not implement protocol logic.
 
@@ -84,7 +84,7 @@ The highway UI is a single-page web application that connects to the runtime ove
                     │ gRPC (HTTP/2)
                     │
 ┌───────────────────┼─────────────────────────────────┐
-│          WACP Runtime — HighwayService :9401          │
+│          WACP Runtime — HighwayService :9091          │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -135,7 +135,7 @@ import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { HighwayService } from "./gen/highway_connect";
 
 const transport = createGrpcWebTransport({
-  baseUrl: "http://localhost:9401",
+  baseUrl: "http://localhost:9091",
   // Connect protocol: works over HTTP/1.1 in dev, HTTP/2 in prod
 });
 

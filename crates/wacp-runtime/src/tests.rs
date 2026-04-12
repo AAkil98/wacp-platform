@@ -266,9 +266,9 @@ async fn e2e_grpc_bind_and_authenticate() {
     let mut config = RuntimeConfig::default();
     let tmp = tempfile::tempdir().unwrap();
     config.storage.data_dir = tmp.path().to_string_lossy().to_string();
-    config.server.agent_listen = "127.0.0.1:29400".into();
-    config.server.highway_listen = "127.0.0.1:29401".into();
-    config.server.coordinator_listen = "127.0.0.1:29402".into();
+    config.server.agent_listen = "127.0.0.1:29090".into();
+    config.server.highway_listen = "127.0.0.1:29091".into();
+    config.server.coordinator_listen = "127.0.0.1:29092".into();
 
     let mut rt = Runtime::init(config).await.unwrap();
 
@@ -289,7 +289,7 @@ async fn e2e_grpc_bind_and_authenticate() {
 
     // Connect agent client and call Bind.
     let mut agent_client =
-        AgentServiceClient::connect("http://127.0.0.1:29400")
+        AgentServiceClient::connect("http://127.0.0.1:29090")
             .await
             .unwrap();
 
@@ -306,7 +306,7 @@ async fn e2e_grpc_bind_and_authenticate() {
 
     // Connect highway client and call Authenticate.
     let mut highway_client =
-        HighwayServiceClient::connect("http://127.0.0.1:29401")
+        HighwayServiceClient::connect("http://127.0.0.1:29091")
             .await
             .unwrap();
 
@@ -365,9 +365,9 @@ async fn init_creates_data_dirs() {
     let dir = tempfile::tempdir().unwrap();
     let mut config = RuntimeConfig::default();
     config.storage.data_dir = dir.path().to_string_lossy().to_string();
-    config.server.agent_listen = "127.0.0.1:39400".into();
-    config.server.highway_listen = "127.0.0.1:39401".into();
-    config.server.coordinator_listen = "127.0.0.1:39402".into();
+    config.server.agent_listen = "127.0.0.1:39090".into();
+    config.server.highway_listen = "127.0.0.1:39091".into();
+    config.server.coordinator_listen = "127.0.0.1:39092".into();
 
     let _rt = Runtime::init(config).await.unwrap();
 

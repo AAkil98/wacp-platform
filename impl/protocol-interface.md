@@ -807,7 +807,7 @@ The `GrpcTransport` is the production transport implementation. It uses `tonic` 
 
 1. Load TLS configuration (certificate, key, optional CA for mutual TLS).
 2. Build the `tonic::Server` with two services: `AgentServiceServer` and `HighwayServiceServer`.
-3. Bind to the configured address and port (default: `0.0.0.0:9400` for agents, `0.0.0.0:9401` for highway). Two ports separate agent traffic from human traffic — different firewall rules, different rate limits, different TLS requirements.
+3. Bind to the configured address and port (default: `0.0.0.0:9090` for agents, `0.0.0.0:9091` for highway, `0.0.0.0:9092` for coordinator). Separate ports enable different firewall rules, rate limits, and TLS requirements per service.
 4. Start accepting connections.
 
 **Service implementation.** The `tonic` service implementations are thin adapters. They receive protobuf request messages, convert them to the internal Rust types (`AgentInbound`/`HighwayInbound`), forward them to the transport actor, receive the response, convert back to protobuf, and return. No protocol logic lives in the gRPC layer — it is a serialization/deserialization boundary.

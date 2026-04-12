@@ -164,9 +164,9 @@ async fn grpc_server_starts() {
 
     // Use random ports to avoid conflicts.
     let handles = start_grpc_server(GrpcServerConfig {
-        agent_addr: ([127, 0, 0, 1], 19400).into(),
-        highway_addr: ([127, 0, 0, 1], 19401).into(),
-        coordinator_addr: ([127, 0, 0, 1], 19402).into(),
+        agent_addr: ([127, 0, 0, 1], 19090).into(),
+        highway_addr: ([127, 0, 0, 1], 19091).into(),
+        coordinator_addr: ([127, 0, 0, 1], 19092).into(),
         tls: None,
     })
     .await

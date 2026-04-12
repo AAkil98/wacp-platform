@@ -19,9 +19,9 @@ export interface RuntimeConfig {
 
 export const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   binaryPath: "wacp-runtime",
-  agentPort: 9400,
-  highwayPort: 9401,
-  coordinatorPort: 9402,
+  agentPort: 9090,
+  highwayPort: 9091,
+  coordinatorPort: 9092,
   dataDir: ".wacp/data",
   workingDir: ".",
 };

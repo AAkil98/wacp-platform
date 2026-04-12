@@ -336,7 +336,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 
 | # | Task | Files / crates | Blocker |
 |---|---|---|---|
-| **A1** | Canonicalize port map | `crates/wacp-runtime/src/config.rs`, `Dockerfile`, `deploy/wacp-runtime.service`, `SEED-CONTEXT.md` | — |
+| **A1** | ~~Canonicalize port map~~ | `config.rs`, `grpc_server.rs`, `Dockerfile`, `deploy/`, `runtime-manager.ts`, 5 impl specs, `SEED-CONTEXT.md` | **Done** |
 | **A2** | CI matrix for `packages/wacp-cli`, `packages/wacp-local`, `ecosystem/*` | `.github/workflows/ci.yml` | — |
 | **A3** | `release.yml` — tag-triggered matrix build + GitHub Release + GHCR image | `.github/workflows/release.yml`, optional `dist-workspace.toml` for `cargo-dist` | A1 |
 | **A4** | Publish `wacp-types` + `wacp-taxonomy` to crates.io at `0.1.0` | `crates/wacp-types/Cargo.toml`, `crates/wacp-taxonomy/Cargo.toml`, one-time publication | A2 |
@@ -410,13 +410,13 @@ VS Code before JetBrains. Slack before Discord. Subjective — revisit if stakeh
 
 Not defined. Suggested default: tag on any change that is visible in `openapi.yaml` or `VerticalManifest` (new endpoint, new vertical, new manifest field, auth provider). `0.1.x` for additive; `0.2.0` for breaking. Revisit once Console is consuming releases.
 
-### 10.6 Port 9402 → 9092 migration risk
+### 10.6 ~~Port 9402 → 9092 migration risk~~ (resolved by A1)
 
-Nothing currently deployed binds to 9402 (the Dockerfile doesn't expose it). The rename is low-risk. But external configs or scripts that do `nc localhost 9402` would break. Search the org for 9402 references before merging A1.
+Canonical port map is now `9090/9091/9092/9093/9094/9095` across all code, deployment files, and docs. Zero references to the old `9400/9401/9402` range remain in code or impl specs.
 
-### 10.7 SEED-CONTEXT.md port drift
+### 10.7 ~~SEED-CONTEXT.md port drift~~ (resolved by A1)
 
-SEED-CONTEXT.md claims `9400/9401/9402` for the three gRPC services. This does not match `config.rs` (`9090/9091/9402`). This drift will be corrected by A1. Until then, trust `config.rs`, not SEED-CONTEXT.
+Architecture Summary in `SEED-CONTEXT.md` now documents the canonical port map. No drift.
 
 ---
 

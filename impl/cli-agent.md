@@ -84,7 +84,7 @@ This spec defines the CLI agent — a terminal-based AI assistant that spawns th
 │  │ AgentClient       │   │                              │
 │  └────────┬──────────┘   │                              │
 ├───────────┼──────────────┴──────────────────────────────┤
-│           │ gRPC (ports 9400, 9402)                      │
+│           │ gRPC (ports 9090, 9092)                      │
 │           ▼                                              │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │  WACP Runtime (Rust child process)               │   │
@@ -128,7 +128,7 @@ system_prompt: |
 5. Load SWE vertical (4 workflows, 4 profiles)
 6. Spawn WACP runtime (wacp-runtime serve) as child process
 7. Wait for runtime ready (TCP probe on agent port, up to 15s)
-8. Connect gRPC clients (CoordinatorClient → port 9402, AgentClient → port 9400)
+8. Connect gRPC clients (CoordinatorClient → port 9092, AgentClient → port 9090)
 9. Create LocalSession (autonomy, resources, context)
 10. Print banner (provider, model, autonomy, vertical)
 11. Enter REPL loop

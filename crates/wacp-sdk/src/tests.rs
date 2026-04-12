@@ -17,12 +17,12 @@ use crate::*;
 #[test]
 fn agent_config_constructable() {
     let config = AgentConfig {
-        runtime_url: "http://localhost:9400".into(),
+        runtime_url: "http://localhost:9090".into(),
         workspace_id: WorkspaceId::from("ws-1"),
         auth_token: "token".into(),
     };
     assert_eq!(config.workspace_id, WorkspaceId::from("ws-1"));
-    assert_eq!(config.runtime_url, "http://localhost:9400");
+    assert_eq!(config.runtime_url, "http://localhost:9090");
 }
 
 #[tokio::test]

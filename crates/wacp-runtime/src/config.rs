@@ -53,6 +53,8 @@ pub struct ServerConfig {
     pub highway_listen: String,
     #[serde(default = "default_coordinator_listen")]
     pub coordinator_listen: String,
+    #[serde(default = "default_rest_listen")]
+    pub rest_listen: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,6 +255,7 @@ impl Default for ServerConfig {
             agent_listen: default_agent_listen(),
             highway_listen: default_highway_listen(),
             coordinator_listen: default_coordinator_listen(),
+            rest_listen: default_rest_listen(),
         }
     }
 }
@@ -395,9 +398,19 @@ impl Default for HealthConfig {
 
 // ── Default functions ──────────────────────────────────────────────────────
 
+// Canonical port map (contiguous, non-overlapping):
+//   AgentService (gRPC)           [::1]:9090
+//   HighwayService (gRPC)         [::1]:9091
+//   CoordinatorService (gRPC)     [::1]:9092
+//   REST gateway + WebSocket      [::1]:9093
+//   Health (/healthz, /readyz)    [::1]:9094
+//   Metrics (Prometheus)          [::1]:9095
+// See IMPLEMENTATION.md §4.1 for the full rationale.
+
 fn default_agent_listen() -> String { "[::1]:9090".into() }
 fn default_highway_listen() -> String { "[::1]:9091".into() }
-fn default_coordinator_listen() -> String { "[::1]:9402".into() }
+fn default_coordinator_listen() -> String { "[::1]:9092".into() }
+fn default_rest_listen() -> String { "[::1]:9093".into() }
 fn default_tls_min_version() -> String { "1.2".into() }
 fn default_auth_provider() -> String { "psk".into() }
 fn default_auth_timeout() -> u64 { 5000 }
@@ -422,10 +435,10 @@ fn default_retry_backoff() -> u64 { 100 }
 fn default_log_level() -> String { "info".into() }
 fn default_log_format() -> String { "json".into() }
 fn default_log_output() -> String { "stderr".into() }
-fn default_metrics_listen() -> String { "[::1]:9092".into() }
+fn default_metrics_listen() -> String { "[::1]:9095".into() }
 fn default_metrics_path() -> String { "/metrics".into() }
 fn default_health_enabled() -> bool { true }
-fn default_health_listen() -> String { "[::1]:9093".into() }
+fn default_health_listen() -> String { "[::1]:9094".into() }
 fn default_health_path() -> String { "/healthz".into() }
 
 // ── Loading ────────────────────────────────────────────────────────────────
@@ -556,6 +569,7 @@ impl RuntimeConfig {
             ("server.agent_listen", &self.server.agent_listen),
             ("server.highway_listen", &self.server.highway_listen),
             ("server.coordinator_listen", &self.server.coordinator_listen),
+            ("server.rest_listen", &self.server.rest_listen),
         ];
         if self.observability.metrics.enabled {
             addresses.push((
@@ -806,6 +820,7 @@ fn apply_single_override(
         "server.agent_listen" => config.server.agent_listen = value.into(),
         "server.highway_listen" => config.server.highway_listen = value.into(),
         "server.coordinator_listen" => config.server.coordinator_listen = value.into(),
+        "server.rest_listen" => config.server.rest_listen = value.into(),
         // tls
         "tls.enabled" => config.tls.enabled = parse_bool_env(var, value)?,
         "tls.cert_file" => config.tls.cert_file = value.into(),
@@ -1059,11 +1074,11 @@ logging:
 observability:
   metrics:
     enabled: true
-    listen: "0.0.0.0:9092"
+    listen: "0.0.0.0:9095"
     path: "/metrics"
   health:
     enabled: true
-    listen: "0.0.0.0:9093"
+    listen: "0.0.0.0:9094"
     path: "/healthz"
 "#;
         let config = RuntimeConfig::parse(yaml).unwrap();
@@ -1375,6 +1390,8 @@ observability:
         // Server
         assert_eq!(parsed.server.agent_listen, d.server.agent_listen);
         assert_eq!(parsed.server.highway_listen, d.server.highway_listen);
+        assert_eq!(parsed.server.coordinator_listen, d.server.coordinator_listen);
+        assert_eq!(parsed.server.rest_listen, d.server.rest_listen);
         // TLS
         assert_eq!(parsed.tls.enabled, d.tls.enabled);
         assert_eq!(parsed.tls.cert_file, d.tls.cert_file);
@@ -1560,7 +1577,8 @@ observability:
             server: ServerConfig {
                 agent_listen: "127.0.0.1:9090".into(),
                 highway_listen: "127.0.0.1:9091".into(),
-                coordinator_listen: "127.0.0.1:9402".into(),
+                coordinator_listen: "127.0.0.1:9092".into(),
+                rest_listen: "127.0.0.1:9093".into(),
             },
             tls: TlsConfig {
                 enabled: true,
@@ -1594,12 +1612,12 @@ observability:
             observability: ObservabilityConfig {
                 metrics: MetricsConfig {
                     enabled: true,
-                    listen: "127.0.0.1:9092".into(),
+                    listen: "127.0.0.1:9095".into(),
                     path: "/metrics".into(),
                 },
                 health: HealthConfig {
                     enabled: true,
-                    listen: "127.0.0.1:9093".into(),
+                    listen: "127.0.0.1:9094".into(),
                     path: "/healthz".into(),
                 },
             },

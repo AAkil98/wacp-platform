@@ -67,3 +67,14 @@ uuid = { version = "1", features = ["v4"] }
 
 # Randomness
 rand = "0.9"
+
+# ── WSL2 memory-pressure profiles ──────────────────────────────
+# High codegen-units = smaller compilation units = less RAM per rustc.
+# Trade-off: slightly slower runtime in dev (doesn't matter for dev builds).
+[profile.dev]
+codegen-units = 512
+debug = "line-tables-only"   # full debuginfo doubles memory; line-tables suffice for backtraces
+
+[profile.test]
+codegen-units = 512
+debug = "line-tables-only"

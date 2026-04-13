@@ -270,7 +270,7 @@ async fn main() {
 
     // Build REST + WebSocket router.
     let backend: Arc<dyn GatewayBackend> = Arc::new(MockBackend);
-    let rest_router = RestGateway::new(backend.clone(), Arc::new(manifests));
+    let rest_router = RestGateway::router(backend.clone(), Arc::new(manifests));
     let ws_router = Router::new()
         .route("/v1/ws", axum::routing::get(ws_handler))
         .with_state(backend);

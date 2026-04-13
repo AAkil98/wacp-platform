@@ -10,7 +10,7 @@ use crate::auth::{AgentIdentity, AuthError, AuthRateLimiter, Authenticator};
 pub struct ApiKeyAuthenticator {
     agent_keys: RwLock<HashMap<String, ApiKeyEntry>>,
     human_keys: RwLock<HashMap<String, HumanKeyEntry>>,
-    rate_limiter: AuthRateLimiter,
+    _rate_limiter: AuthRateLimiter,
 }
 
 struct ApiKeyEntry {
@@ -29,7 +29,7 @@ impl ApiKeyAuthenticator {
         Self {
             agent_keys: RwLock::new(HashMap::new()),
             human_keys: RwLock::new(HashMap::new()),
-            rate_limiter: AuthRateLimiter::new(max_failures, window_seconds),
+            _rate_limiter: AuthRateLimiter::new(max_failures, window_seconds),
         }
     }
 

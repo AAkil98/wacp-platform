@@ -122,7 +122,6 @@ impl ContentFilter {
                     }
                 }
                 FilterAction::Redact => {
-                    let mut offset_adj: i64 = 0;
                     for m in rule.pattern.find_iter(input) {
                         redactions.push(Redaction {
                             rule_name: rule.name.clone(),

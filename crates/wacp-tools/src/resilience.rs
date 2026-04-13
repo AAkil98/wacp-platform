@@ -80,11 +80,11 @@ impl CircuitBreaker {
             BreakerStatus::Closed => Ok(()),
             BreakerStatus::Open => {
                 // Check if cooldown has elapsed → transition to half-open
-                if let Some(opened_at) = state.opened_at {
-                    if now.duration_since(opened_at) >= self.config.cooldown {
-                        state.status = BreakerStatus::HalfOpen;
-                        return Ok(()); // allow one probe
-                    }
+                if let Some(opened_at) = state.opened_at
+                    && now.duration_since(opened_at) >= self.config.cooldown
+                {
+                    state.status = BreakerStatus::HalfOpen;
+                    return Ok(()); // allow one probe
                 }
                 Err(ToolError::unavailable(format!(
                     "circuit breaker open, cooldown remaining: {:?}",
@@ -234,13 +234,11 @@ impl ConcurrencyLimiter {
     pub async fn acquire(&self) -> Result<ConcurrencyPermit<'_>, ToolError> {
         // Try immediate acquire
         match self.semaphore.try_acquire() {
-            Ok(permit) => {
-                return Ok(ConcurrencyPermit {
-                    _permit: permit,
-                    queued: &self.queued,
-                    was_queued: false,
-                });
-            }
+            Ok(permit) => Ok(ConcurrencyPermit {
+                _permit: permit,
+                queued: &self.queued,
+                was_queued: false,
+            }),
             Err(_) => {
                 // No permit available — check queue capacity
                 if self.config.max_concurrent == 0 {

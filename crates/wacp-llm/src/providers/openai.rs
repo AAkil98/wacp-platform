@@ -158,19 +158,18 @@ fn message_to_openai(msg: &Message) -> serde_json::Value {
         }
         Content::Blocks(blocks) => {
             // For tool results, OpenAI uses role=tool + tool_call_id
-            if msg.role == Role::Tool {
-                if let Some(ContentBlock::ToolResult {
+            if msg.role == Role::Tool
+                && let Some(ContentBlock::ToolResult {
                     tool_use_id,
                     content,
                     ..
                 }) = blocks.first()
-                {
-                    return json!({
-                        "role": "tool",
-                        "tool_call_id": tool_use_id,
-                        "content": content,
-                    });
-                }
+            {
+                return json!({
+                    "role": "tool",
+                    "tool_call_id": tool_use_id,
+                    "content": content,
+                });
             }
             // For assistant with tool_use blocks, reconstruct tool_calls
             if msg.role == Role::Assistant {

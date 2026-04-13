@@ -150,10 +150,10 @@ impl RecoveryEngine {
         // Extract workspace states from tree snapshot.
         if let Some(nodes) = snap.tree.get("nodes").and_then(|n| n.as_object()) {
             for (ws_id, node) in nodes {
-                if let Some(status_str) = node.get("status").and_then(|s| s.as_str()) {
-                    if let Some(state) = parse_workspace_state(status_str) {
-                        ws_states.insert(ws_id.clone(), state);
-                    }
+                if let Some(status_str) = node.get("status").and_then(|s| s.as_str())
+                    && let Some(state) = parse_workspace_state(status_str)
+                {
+                    ws_states.insert(ws_id.clone(), state);
                 }
             }
         }
@@ -161,10 +161,10 @@ impl RecoveryEngine {
         // Extract task statuses from task_graph snapshot.
         if let Some(tasks) = snap.task_graph.get("tasks").and_then(|t| t.as_object()) {
             for (task_id, task) in tasks {
-                if let Some(status_str) = task.get("status").and_then(|s| s.as_str()) {
-                    if let Some(status) = parse_task_status(status_str) {
-                        task_statuses.insert(task_id.clone(), status);
-                    }
+                if let Some(status_str) = task.get("status").and_then(|s| s.as_str())
+                    && let Some(status) = parse_task_status(status_str)
+                {
+                    task_statuses.insert(task_id.clone(), status);
                 }
             }
         }

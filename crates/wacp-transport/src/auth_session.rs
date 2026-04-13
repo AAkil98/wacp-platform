@@ -18,7 +18,7 @@ pub struct SessionTokenAuthenticator {
 
 struct SessionEntry {
     user_id: UserId,
-    created_at: Instant,
+    _created_at: Instant,
     expires_at: Instant,
     last_activity: Instant,
 }
@@ -41,7 +41,7 @@ impl SessionTokenAuthenticator {
             token.clone(),
             SessionEntry {
                 user_id,
-                created_at: now,
+                _created_at: now,
                 expires_at: now + self.token_ttl,
                 last_activity: now,
             },

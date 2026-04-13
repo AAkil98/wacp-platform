@@ -205,32 +205,32 @@ pub fn parse_openai_event(data: &str) -> Option<StreamEvent> {
     let delta = choice.get("delta")?;
 
     // Text content
-    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
-        if !content.is_empty() {
-            return Some(StreamEvent::ContentDelta {
-                delta: content.to_string(),
-            });
-        }
+    if let Some(content) = delta.get("content").and_then(|v| v.as_str())
+        && !content.is_empty()
+    {
+        return Some(StreamEvent::ContentDelta {
+            delta: content.to_string(),
+        });
     }
 
     // Tool calls
-    if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
-        if let Some(tc) = tool_calls.first() {
-            return Some(StreamEvent::ToolCallDelta {
-                index: tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                id: tc.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                name: tc
-                    .get("function")
-                    .and_then(|f| f.get("name"))
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                arguments_delta: tc
-                    .get("function")
-                    .and_then(|f| f.get("arguments"))
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-            });
-        }
+    if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array())
+        && let Some(tc) = tool_calls.first()
+    {
+        return Some(StreamEvent::ToolCallDelta {
+            index: tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+            id: tc.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            name: tc
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            arguments_delta: tc
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        });
     }
 
     None
@@ -259,12 +259,12 @@ pub fn parse_ndjson_event(data: &str) -> Option<StreamEvent> {
     }
 
     // Content delta
-    if let Some(response) = json.get("response").and_then(|v| v.as_str()) {
-        if !response.is_empty() {
-            return Some(StreamEvent::ContentDelta {
-                delta: response.to_string(),
-            });
-        }
+    if let Some(response) = json.get("response").and_then(|v| v.as_str())
+        && !response.is_empty()
+    {
+        return Some(StreamEvent::ContentDelta {
+            delta: response.to_string(),
+        });
     }
 
     // Also handle "message" format (Ollama chat API)
@@ -272,12 +272,11 @@ pub fn parse_ndjson_event(data: &str) -> Option<StreamEvent> {
         .get("message")
         .and_then(|m| m.get("content"))
         .and_then(|v| v.as_str())
+        && !content.is_empty()
     {
-        if !content.is_empty() {
-            return Some(StreamEvent::ContentDelta {
-                delta: content.to_string(),
-            });
-        }
+        return Some(StreamEvent::ContentDelta {
+            delta: content.to_string(),
+        });
     }
 
     None

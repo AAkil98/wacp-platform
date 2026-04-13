@@ -251,7 +251,7 @@ impl RestGateway {
     ///
     /// `backend` handles all protocol-level endpoints (gRPC-backed).
     /// `verticals` is static config loaded at startup; an empty vec is valid.
-    pub fn new(backend: Arc<dyn GatewayBackend>, verticals: VerticalRegistry) -> Router {
+    pub fn router(backend: Arc<dyn GatewayBackend>, verticals: VerticalRegistry) -> Router {
         Router::new()
             .route("/v1/health", get(health_handler))
             .route("/v1/goals", post(submit_goal_handler))
@@ -587,8 +587,10 @@ pub async fn respond_escalation_handler(
 pub async fn query_trail_handler(
     State(backend): State<GatewayState>,
 ) -> Result<Json<Vec<TrailEntryItem>>, GatewayError> {
-    let mut trail_req = wacp_v1::HighwayQueryTrailRequest::default();
-    trail_req.limit = 100;
+    let trail_req = wacp_v1::HighwayQueryTrailRequest {
+        limit: 100,
+        ..Default::default()
+    };
     let resp = backend.query_trail(trail_req).await?;
     let entries: Vec<TrailEntryItem> = resp
         .entries
@@ -808,12 +810,12 @@ pub(crate) mod tests {
     }
 
     fn test_app() -> Router {
-        RestGateway::new(Arc::new(MockBackend), Arc::new(vec![]))
+        RestGateway::router(Arc::new(MockBackend), Arc::new(vec![]))
     }
 
     /// Build a test app pre-loaded with the given vertical manifests.
     fn test_app_with_verticals(verticals: Vec<wacp_taxonomy::VerticalManifest>) -> Router {
-        RestGateway::new(Arc::new(MockBackend), Arc::new(verticals))
+        RestGateway::router(Arc::new(MockBackend), Arc::new(verticals))
     }
 
     /// Minimal VerticalManifest for use in tests.

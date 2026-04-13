@@ -76,10 +76,10 @@ pub fn apply_retry_after(
     retry_after_ms: Option<u64>,
     config: &RetryConfig,
 ) -> Duration {
-    if config.honor_retry_after {
-        if let Some(after_ms) = retry_after_ms {
-            return computed.max(Duration::from_millis(after_ms));
-        }
+    if config.honor_retry_after
+        && let Some(after_ms) = retry_after_ms
+    {
+        return computed.max(Duration::from_millis(after_ms));
     }
     computed
 }

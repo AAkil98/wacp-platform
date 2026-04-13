@@ -61,7 +61,7 @@ impl JsonRpcResponse {
         }
     }
 
-    fn notification(method: &str, params: serde_json::Value) -> Self {
+    fn _notification(method: &str, params: serde_json::Value) -> Self {
         Self {
             jsonrpc: "2.0",
             result: Some(serde_json::json!({"method": method, "params": params})),
@@ -260,8 +260,10 @@ async fn dispatch_method(
         }
 
         "query_trail" => {
-            let mut req = wacp_v1::HighwayQueryTrailRequest::default();
-            req.limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as u32;
+            let req = wacp_v1::HighwayQueryTrailRequest {
+                limit: params.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as u32,
+                ..Default::default()
+            };
             match backend.query_trail(req).await {
                 Ok(resp) => {
                     let entries: Vec<serde_json::Value> = resp

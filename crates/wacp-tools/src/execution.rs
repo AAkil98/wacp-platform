@@ -58,7 +58,7 @@ pub async fn execute(
     // 3. Build context
     let cancel = opts
         .cancellation_token
-        .unwrap_or_else(CancellationToken::new);
+        .unwrap_or_default();
     let ctx = ToolContext {
         tool_name: tool_name.to_string(),
         capability_name: capability.name.clone(),

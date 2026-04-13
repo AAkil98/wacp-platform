@@ -15,7 +15,7 @@ pub struct ToolRegistry {
 }
 
 /// Framework-level configuration for the registry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RegistryConfig {
     /// Per-tool deployment configuration. Tool name → config value.
     pub tool_configs: HashMap<String, serde_json::Value>,
@@ -25,17 +25,6 @@ pub struct RegistryConfig {
     pub default_concurrency: ConcurrencyConfig,
     /// Default circuit breaker config for tools that don't override.
     pub default_circuit_breaker: CircuitBreakerConfig,
-}
-
-impl Default for RegistryConfig {
-    fn default() -> Self {
-        Self {
-            tool_configs: HashMap::new(),
-            execution: ExecutionConfig::default(),
-            default_concurrency: ConcurrencyConfig::default(),
-            default_circuit_breaker: CircuitBreakerConfig::default(),
-        }
-    }
 }
 
 /// A tool loaded into the registry with its runtime state.

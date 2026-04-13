@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
@@ -91,6 +91,9 @@ pub struct Runtime {
 
     // Escalation ID -> workspace ID mapping for routing responses.
     escalation_index: HashMap<String, String>,
+
+    // Workspace timestamps: (created_at_us, last_activity_us) in microseconds since epoch.
+    workspace_timestamps: HashMap<String, (u64, u64)>,
 
     // Monotonic counters for ID generation.
     next_goal_id: u64,
@@ -258,6 +261,7 @@ impl Runtime {
             trail_index,
             gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
             escalation_index: HashMap::new(),
+            workspace_timestamps: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -307,6 +311,7 @@ impl Runtime {
             trail_index,
             gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
             escalation_index: HashMap::new(),
+            workspace_timestamps: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -325,6 +330,13 @@ impl Runtime {
 
                 // Process workspace events (signals, state changes, terminations).
                 Some(event) = self.event_rx.recv() => {
+                    // Touch last_activity for the workspace that emitted the event.
+                    match &event {
+                        WorkspaceEvent::Signal(s) => self.touch_workspace(s.workspace_id.as_ref()),
+                        WorkspaceEvent::StateChanged { workspace_id, .. } => self.touch_workspace(workspace_id.as_ref()),
+                        WorkspaceEvent::Terminated(archived) => self.touch_workspace(archived.id.as_ref()),
+                        _ => {}
+                    }
                     self.coordinator.handle_event(&event);
                     self.fan_out_event(&event);
                 }
@@ -598,6 +610,29 @@ impl Runtime {
                     client_request_id: client_request_id.to_string(),
                 }
             }
+        }
+    }
+
+    /// Current time in microseconds since Unix epoch.
+    fn now_us() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64
+    }
+
+    /// Record workspace creation timestamp; update last_activity.
+    fn record_workspace_created(&mut self, ws_id: &str) {
+        let now = Self::now_us();
+        self.workspace_timestamps
+            .insert(ws_id.to_string(), (now, now));
+    }
+
+    /// Touch last_activity for a workspace.
+    fn touch_workspace(&mut self, ws_id: &str) {
+        let now = Self::now_us();
+        if let Some(ts) = self.workspace_timestamps.get_mut(ws_id) {
+            ts.1 = now;
         }
     }
 
@@ -1065,7 +1100,13 @@ impl Runtime {
                             .as_ref()
                             .map(|t| t.to_string())
                             .unwrap_or_default(),
-                        current_usage: None,
+                        current_usage: Some(wacp_transport::wacp_v1::ResourceUsage {
+                            tokens: 0,
+                            wall_time_ms: 0,
+                            storage_bytes: 0,
+                            network_bytes: 0,
+                            cost_micros: 0,
+                        }),
                         budget: Some(wacp_transport::wacp_v1::ResourceBudget {
                             max_tokens: self.config.resources.default_budget.max_tokens,
                             max_wall_time_ms: self.config.resources.default_budget.max_wall_time_ms,
@@ -1087,8 +1128,20 @@ impl Runtime {
                             .values()
                             .filter(|r| r.workspace_id == ws_id.as_ref())
                             .count() as u32,
-                        created_at: None,
-                        last_activity: None,
+                        created_at: self
+                            .workspace_timestamps
+                            .get(ws_id.as_ref())
+                            .map(|(created, _)| wacp_transport::wacp_v1::Timestamp {
+                                physical_us: *created,
+                                logical: 0,
+                            }),
+                        last_activity: self
+                            .workspace_timestamps
+                            .get(ws_id.as_ref())
+                            .map(|(_, last)| wacp_transport::wacp_v1::Timestamp {
+                                physical_us: *last,
+                                logical: 0,
+                            }),
                     };
                     let _ = reply.send(Ok(response));
                 } else {
@@ -1247,6 +1300,7 @@ impl Runtime {
                     task_id: task_id.clone(),
                     config: ws_config,
                 });
+                self.record_workspace_created(ws_id.as_ref());
 
                 // Bind task to workspace and advance to Assigned.
                 let _ = self.coordinator.task_graph.bind(&task_id, &ws_id);
@@ -1333,6 +1387,7 @@ impl Runtime {
                     task_id: task_id.clone(),
                     config: ws_config,
                 });
+                self.record_workspace_created(ws_id.as_ref());
 
                 // Bind task to workspace and advance to Assigned.
                 let _ = self.coordinator.task_graph.bind(&task_id, &ws_id);

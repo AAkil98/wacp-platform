@@ -986,42 +986,66 @@ async fn highway_svc_query_trail_success() {
 
 #[tokio::test]
 async fn highway_svc_stream_trail_returns_stream() {
-    let (svc, _rx) = highway_svc();
-    let result = svc
-        .stream_trail(tonic::Request::new(pb::StreamTrailRequest::default()))
-        .await;
+    let (svc, mut rx) = highway_svc();
+    let (result, _) = tokio::join!(
+        svc.stream_trail(tonic::Request::new(pb::StreamTrailRequest::default())),
+        async {
+            match rx.recv().await.unwrap() {
+                HighwayRequest::SubscribeTrail { .. } => {}
+                other => panic!("expected SubscribeTrail, got {other:?}"),
+            }
+        }
+    );
     assert!(result.is_ok());
     assert!(result.unwrap().into_inner().next().await.is_none());
 }
 
 #[tokio::test]
 async fn highway_svc_stream_gates_returns_stream() {
-    let (svc, _rx) = highway_svc();
-    let result = svc
-        .stream_gates(tonic::Request::new(pb::StreamGatesRequest::default()))
-        .await;
+    let (svc, mut rx) = highway_svc();
+    let (result, _) = tokio::join!(
+        svc.stream_gates(tonic::Request::new(pb::StreamGatesRequest::default())),
+        async {
+            match rx.recv().await.unwrap() {
+                HighwayRequest::SubscribeGates { .. } => {}
+                other => panic!("expected SubscribeGates, got {other:?}"),
+            }
+        }
+    );
     assert!(result.is_ok());
     assert!(result.unwrap().into_inner().next().await.is_none());
 }
 
 #[tokio::test]
 async fn highway_svc_stream_escalations_returns_stream() {
-    let (svc, _rx) = highway_svc();
-    let result = svc
-        .stream_escalations(tonic::Request::new(pb::StreamEscalationsRequest::default()))
-        .await;
+    let (svc, mut rx) = highway_svc();
+    let (result, _) = tokio::join!(
+        svc.stream_escalations(tonic::Request::new(pb::StreamEscalationsRequest::default(),)),
+        async {
+            match rx.recv().await.unwrap() {
+                HighwayRequest::SubscribeEscalations { .. } => {}
+                other => panic!("expected SubscribeEscalations, got {other:?}"),
+            }
+        }
+    );
     assert!(result.is_ok());
     assert!(result.unwrap().into_inner().next().await.is_none());
 }
 
 #[tokio::test]
 async fn highway_svc_stream_workspace_changes_returns_stream() {
-    let (svc, _rx) = highway_svc();
-    let result = svc
-        .stream_workspace_changes(tonic::Request::new(
+    let (svc, mut rx) = highway_svc();
+    let (result, _) = tokio::join!(
+        svc.stream_workspace_changes(tonic::Request::new(
             pb::StreamWorkspaceChangesRequest::default(),
-        ))
-        .await;
+        )),
+        async {
+            match rx.recv().await.unwrap() {
+                HighwayRequest::SubscribeWorkspaceChanges { .. } => {}
+                other => panic!("expected SubscribeWorkspaceChanges, got {other:?}"),
+            }
+        }
+    );
     assert!(result.is_ok());
     assert!(result.unwrap().into_inner().next().await.is_none());
 }

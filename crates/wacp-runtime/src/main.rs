@@ -94,6 +94,7 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         // Start observability endpoints before runtime init (so health shows Starting).
+        let health_start = std::time::Instant::now();
         let health_state =
             std::sync::Arc::new(std::sync::atomic::AtomicU8::new(health::HEALTH_STARTING));
 
@@ -133,13 +134,14 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
             );
         }
 
-        let mut runtime = match Runtime::init(config).await {
-            Ok(rt) => rt,
-            Err(e) => {
-                tracing::error!(error = %e, "initialization failed");
-                return exit_code_for_runtime_error(&e);
-            }
-        };
+        let mut runtime =
+            match Runtime::init(config, Some((health_state.clone(), health_start))).await {
+                Ok(rt) => rt,
+                Err(e) => {
+                    tracing::error!(error = %e, "initialization failed");
+                    return exit_code_for_runtime_error(&e);
+                }
+            };
 
         // Mark ready after all subsystems initialized.
         health_state.store(health::HEALTH_READY, std::sync::atomic::Ordering::Relaxed);

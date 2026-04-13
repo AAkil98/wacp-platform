@@ -111,7 +111,7 @@ fn load_yaml_descriptor(path: &Path) -> Result<ToolDescriptor, DiscoveryError> {
     })?;
 
     let desc: ToolDescriptor =
-        serde_yaml::from_str(&content).map_err(|e| DiscoveryError::ParseFailed {
+        serde_yaml_ng::from_str(&content).map_err(|e| DiscoveryError::ParseFailed {
             path: path.display().to_string(),
             reason: e.to_string(),
         })?;

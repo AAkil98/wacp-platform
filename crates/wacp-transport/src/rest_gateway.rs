@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::Instant;
 
 use axum::{
     Extension, Json, Router,
@@ -144,10 +146,24 @@ pub struct VerticalSummary {
 // Typed request/response schemas for OpenAPI
 // ---------------------------------------------------------------------------
 
+/// Shared runtime lifecycle state for the Console-facing health endpoint.
+/// When not provided (e.g. in tests), the handler defaults to "ready".
+#[derive(Clone)]
+pub struct RuntimeHealth {
+    pub state: Arc<AtomicU8>,
+    pub start_time: Instant,
+}
+
+/// Health-state constants (mirrors `wacp_runtime::health`).
+pub const HEALTH_STARTING: u8 = 0;
+pub const HEALTH_READY: u8 = 1;
+pub const HEALTH_DRAINING: u8 = 2;
+
 #[derive(Serialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
+    pub uptime_seconds: u64,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -258,7 +274,17 @@ impl RestGateway {
     ///
     /// `backend` handles all protocol-level endpoints (gRPC-backed).
     /// `verticals` is static config loaded at startup; an empty vec is valid.
-    pub fn router(backend: Arc<dyn GatewayBackend>, verticals: VerticalRegistry) -> Router {
+    /// `health` carries the runtime lifecycle state; when `None` the health
+    /// endpoint defaults to reporting "ready" (useful in tests).
+    pub fn router(
+        backend: Arc<dyn GatewayBackend>,
+        verticals: VerticalRegistry,
+        health: Option<RuntimeHealth>,
+    ) -> Router {
+        let health = health.unwrap_or(RuntimeHealth {
+            state: Arc::new(AtomicU8::new(HEALTH_READY)),
+            start_time: Instant::now(),
+        });
         Router::new()
             .route("/v1/health", get(health_handler))
             .route("/v1/goals", post(submit_goal_handler))
@@ -285,6 +311,7 @@ impl RestGateway {
             .route("/v1/verticals", get(list_verticals_handler))
             .route("/v1/verticals/{id}", get(get_vertical_handler))
             .layer(Extension(verticals))
+            .layer(Extension(health))
             .layer(
                 CorsLayer::new()
                     .allow_origin(Any)
@@ -327,13 +354,32 @@ pub fn http_status_to_code(status: StatusCode) -> &'static str {
 // ---------------------------------------------------------------------------
 
 #[utoipa::path(get, path = "/v1/health", tag = "health",
-    responses((status = 200, description = "Runtime healthy", body = HealthResponse))
+    responses(
+        (status = 200, description = "Runtime ready", body = HealthResponse),
+        (status = 503, description = "Runtime starting or draining", body = HealthResponse),
+    )
 )]
-pub async fn health_handler() -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: "ok".into(),
-        version: env!("CARGO_PKG_VERSION").into(),
-    })
+pub async fn health_handler(
+    Extension(health): Extension<RuntimeHealth>,
+) -> (StatusCode, Json<HealthResponse>) {
+    let state_val = health.state.load(Ordering::Relaxed);
+    let uptime = health.start_time.elapsed().as_secs();
+
+    let (status_str, http_status) = match state_val {
+        HEALTH_STARTING => ("starting", StatusCode::SERVICE_UNAVAILABLE),
+        HEALTH_READY => ("ready", StatusCode::OK),
+        HEALTH_DRAINING => ("draining", StatusCode::SERVICE_UNAVAILABLE),
+        _ => ("unknown", StatusCode::INTERNAL_SERVER_ERROR),
+    };
+
+    (
+        http_status,
+        Json(HealthResponse {
+            status: status_str.into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            uptime_seconds: uptime,
+        }),
+    )
 }
 
 #[utoipa::path(post, path = "/v1/goals", tag = "goals",
@@ -846,12 +892,12 @@ pub(crate) mod tests {
     }
 
     fn test_app() -> Router {
-        RestGateway::router(Arc::new(MockBackend), Arc::new(vec![]))
+        RestGateway::router(Arc::new(MockBackend), Arc::new(vec![]), None)
     }
 
     /// Build a test app pre-loaded with the given vertical manifests.
     fn test_app_with_verticals(verticals: Vec<wacp_taxonomy::VerticalManifest>) -> Router {
-        RestGateway::router(Arc::new(MockBackend), Arc::new(verticals))
+        RestGateway::router(Arc::new(MockBackend), Arc::new(verticals), None)
     }
 
     /// Minimal VerticalManifest for use in tests.
@@ -905,10 +951,36 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn health_returns_ok() {
+    async fn health_returns_ready() {
         let (status, json) = get_json(&test_app(), "/v1/health").await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(json["status"], "ok");
+        assert_eq!(json["status"], "ready");
+        assert!(json["version"].is_string());
+        assert!(json["uptime_seconds"].is_number());
+    }
+
+    #[tokio::test]
+    async fn health_starting_returns_503() {
+        let health = RuntimeHealth {
+            state: Arc::new(AtomicU8::new(HEALTH_STARTING)),
+            start_time: Instant::now(),
+        };
+        let app = RestGateway::router(Arc::new(MockBackend), Arc::new(vec![]), Some(health));
+        let (status, json) = get_json(&app, "/v1/health").await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(json["status"], "starting");
+    }
+
+    #[tokio::test]
+    async fn health_draining_returns_503() {
+        let health = RuntimeHealth {
+            state: Arc::new(AtomicU8::new(HEALTH_DRAINING)),
+            start_time: Instant::now(),
+        };
+        let app = RestGateway::router(Arc::new(MockBackend), Arc::new(vec![]), Some(health));
+        let (status, json) = get_json(&app, "/v1/health").await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(json["status"], "draining");
     }
 
     #[tokio::test]

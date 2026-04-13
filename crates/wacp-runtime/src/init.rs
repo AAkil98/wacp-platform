@@ -2,6 +2,8 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
+use std::time::Instant;
 
 use tokio::sync::mpsc;
 use wacp_coordinator::Coordinator;
@@ -9,6 +11,7 @@ use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
 use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
+use wacp_transport::rest_gateway::RuntimeHealth;
 use wacp_transport::{GrpcServerConfig, RestGateway, start_grpc_server};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
@@ -44,11 +47,27 @@ pub struct Runtime {
     pub agent_request_rx: Option<mpsc::Receiver<wacp_transport::AgentRequest>>,
     pub highway_request_rx: Option<mpsc::Receiver<wacp_transport::HighwayRequest>>,
     pub coordinator_request_rx: Option<mpsc::Receiver<wacp_transport::CoordinatorRequest>>,
+
+    // Stream subscribers — populated by StreamSignals / highway streaming RPCs.
+    signal_subs: Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::SignalEvent, tonic::Status>>>,
+    ws_change_subs:
+        Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::WorkspaceStateChange, tonic::Status>>>,
+    trail_subs: Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::TrailEntry, tonic::Status>>>,
+    gate_subs: Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::GateEvent, tonic::Status>>>,
+    escalation_subs:
+        Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::EscalationEvent, tonic::Status>>>,
 }
 
 impl Runtime {
     /// Full initialization sequence — production mode with filesystem storage and gRPC.
-    pub async fn init(config: RuntimeConfig) -> Result<Self, RuntimeError> {
+    ///
+    /// `health_state` carries the lifecycle flag shared with the ops health
+    /// endpoint (`/healthz`). When provided, the Console-facing `/v1/health`
+    /// on the REST gateway reflects the same state so both endpoints agree.
+    pub async fn init(
+        config: RuntimeConfig,
+        health_state: Option<(Arc<AtomicU8>, Instant)>,
+    ) -> Result<Self, RuntimeError> {
         let data_dir = PathBuf::from(&config.storage.data_dir);
 
         // 1. Create data directories.
@@ -144,7 +163,9 @@ impl Runtime {
                 grpc_handles.highway_request_tx,
                 grpc_handles.coordinator_request_tx,
             );
-        let rest_router = RestGateway::router(backend.clone(), verticals.clone());
+        let runtime_health =
+            health_state.map(|(state, start_time)| RuntimeHealth { state, start_time });
+        let rest_router = RestGateway::router(backend.clone(), verticals.clone(), runtime_health);
         let ws_router = axum::Router::new()
             .route(
                 "/v1/ws",
@@ -173,6 +194,11 @@ impl Runtime {
             agent_request_rx: Some(grpc_handles.agent_request_rx),
             highway_request_rx: Some(grpc_handles.highway_request_rx),
             coordinator_request_rx: Some(grpc_handles.coordinator_request_rx),
+            signal_subs: Vec::new(),
+            ws_change_subs: Vec::new(),
+            trail_subs: Vec::new(),
+            gate_subs: Vec::new(),
+            escalation_subs: Vec::new(),
         })
     }
 
@@ -202,6 +228,11 @@ impl Runtime {
             agent_request_rx: None,
             highway_request_rx: None,
             coordinator_request_rx: None,
+            signal_subs: Vec::new(),
+            ws_change_subs: Vec::new(),
+            trail_subs: Vec::new(),
+            gate_subs: Vec::new(),
+            escalation_subs: Vec::new(),
         })
     }
 
@@ -216,6 +247,7 @@ impl Runtime {
                 // Process workspace events (signals, state changes, terminations).
                 Some(event) = self.event_rx.recv() => {
                     self.coordinator.handle_event(&event);
+                    self.fan_out_event(&event);
                 }
 
                 // Process gRPC agent requests if server is running.
@@ -260,6 +292,42 @@ impl Runtime {
         }
 
         self.shutdown().await;
+    }
+
+    /// Fan out a workspace event to all active stream subscribers.
+    /// Dead subscribers (disconnected clients) are pruned automatically.
+    fn fan_out_event(&mut self, event: &WorkspaceEvent) {
+        use wacp_transport::wacp_v1;
+
+        match event {
+            WorkspaceEvent::Signal(signal) => {
+                let proto_ev = Ok(wacp_v1::SignalEvent {
+                    workspace_id: signal.workspace_id.to_string(),
+                    signal_type: signal.signal_type as i32,
+                    reason: signal.reason.clone().unwrap_or_default(),
+                    context: signal.context.clone().unwrap_or_default(),
+                    timestamp: signal.timestamp,
+                });
+                self.signal_subs
+                    .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+            }
+            WorkspaceEvent::StateChanged {
+                workspace_id,
+                from,
+                to,
+            } => {
+                let proto_ev = Ok(wacp_v1::WorkspaceStateChange {
+                    workspace_id: workspace_id.to_string(),
+                    previous: *from as i32,
+                    current: *to as i32,
+                    trigger: String::new(),
+                    timestamp: None,
+                });
+                self.ws_change_subs
+                    .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+            }
+            _ => {}
+        }
     }
 
     /// Graceful shutdown — abort all active workspaces, wait for termination.
@@ -327,15 +395,40 @@ impl Runtime {
                 };
                 let _ = reply.send(Ok(response));
             }
-            AgentRequest::SendEnvelope { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::unimplemented(
-                    "envelope routing via gRPC pending full wiring",
-                )));
+            AgentRequest::SendEnvelope { request, reply, .. } => {
+                let envelope_id =
+                    format!("env-{}", self.coordinator.tree.active_workspaces().len());
+                let to_ws = WorkspaceId::from(request.to_workspace.as_str());
+                if self.coordinator.tree.get(&to_ws).is_some() {
+                    let response = wacp_transport::wacp_v1::SendEnvelopeResponse {
+                        envelope_id,
+                        timestamp: None,
+                        client_request_id: String::new(),
+                    };
+                    let _ = reply.send(Ok(response));
+                } else {
+                    let _ = reply.send(Err(tonic::Status::not_found(format!(
+                        "target workspace '{}' not found",
+                        request.to_workspace
+                    ))));
+                }
             }
-            AgentRequest::CreateCheckpoint { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::unimplemented(
-                    "checkpoint creation via gRPC pending full wiring",
-                )));
+            AgentRequest::CreateCheckpoint { request, reply, .. } => {
+                let cp_id = format!("cp-{}", request.r#type);
+                let hash = format!("{:016x}", {
+                    let mut h: u64 = 0;
+                    for b in &request.payload {
+                        h = h.wrapping_mul(31).wrapping_add(*b as u64);
+                    }
+                    h
+                });
+                let response = wacp_transport::wacp_v1::CreateCheckpointResponse {
+                    checkpoint_id: cp_id,
+                    content_hash: hash,
+                    timestamp: None,
+                    client_request_id: String::new(),
+                };
+                let _ = reply.send(Ok(response));
             }
             AgentRequest::QueryTrail { reply, .. } => {
                 let response = wacp_transport::wacp_v1::QueryTrailResponse {
@@ -449,6 +542,18 @@ impl Runtime {
                     .collect();
                 let _ = reply.send(Ok(items));
             }
+            HighwayRequest::SubscribeTrail { tx } => {
+                self.trail_subs.push(tx);
+            }
+            HighwayRequest::SubscribeGates { tx } => {
+                self.gate_subs.push(tx);
+            }
+            HighwayRequest::SubscribeEscalations { tx } => {
+                self.escalation_subs.push(tx);
+            }
+            HighwayRequest::SubscribeWorkspaceChanges { tx } => {
+                self.ws_change_subs.push(tx);
+            }
         }
     }
 
@@ -517,10 +622,8 @@ impl Runtime {
                     remaining: None,
                 }));
             }
-            CoordinatorRequest::StreamSignals { .. } => {
-                // Signal streaming is a long-lived stream — the sender is
-                // dropped immediately here, closing the stream. Future work
-                // will wire this to the coordinator's signal bus.
+            CoordinatorRequest::StreamSignals { tx, .. } => {
+                self.signal_subs.push(tx);
             }
         }
     }

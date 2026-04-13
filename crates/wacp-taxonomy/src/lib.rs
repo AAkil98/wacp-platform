@@ -24,7 +24,7 @@ impl Taxonomy {
     /// Load a taxonomy from YAML.
     pub fn load_yaml(yaml: &str, protocol_version: &str) -> Result<Self, TaxonomyError> {
         let def: TaxonomyDefinition =
-            serde_yaml::from_str(yaml).map_err(|e| TaxonomyError::ParseError(e.to_string()))?;
+            serde_yaml_ng::from_str(yaml).map_err(|e| TaxonomyError::ParseError(e.to_string()))?;
         loader::load(def, protocol_version)
     }
 

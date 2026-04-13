@@ -86,7 +86,7 @@ fn load_yaml_reviewer() {
 fn load_json_roundtrip() {
     let yaml_t = Taxonomy::load_yaml(reviewer_yaml(), PV).unwrap();
     let json_str = serde_json::to_string(
-        &serde_yaml::from_str::<TaxonomyDefinition>(reviewer_yaml()).unwrap(),
+        &serde_yaml_ng::from_str::<TaxonomyDefinition>(reviewer_yaml()).unwrap(),
     )
     .unwrap();
     let json_t = Taxonomy::load_json(&json_str, PV).unwrap();

@@ -262,6 +262,12 @@ impl E2eHarness {
             HighwayRequest::ListWorkspaces { reply, .. } => {
                 let _ = reply.send(Ok(vec![]));
             }
+            HighwayRequest::SubscribeTrail { .. }
+            | HighwayRequest::SubscribeGates { .. }
+            | HighwayRequest::SubscribeEscalations { .. }
+            | HighwayRequest::SubscribeWorkspaceChanges { .. } => {
+                // Streaming subscribers — senders are dropped, closing the stream.
+            }
         }
     }
 }

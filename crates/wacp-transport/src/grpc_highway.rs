@@ -48,6 +48,18 @@ pub enum HighwayRequest {
         parent_id: Option<String>,
         reply: tokio::sync::oneshot::Sender<Result<Vec<crate::WorkspaceSummaryItem>, Status>>,
     },
+    SubscribeTrail {
+        tx: mpsc::Sender<Result<wacp_v1::TrailEntry, Status>>,
+    },
+    SubscribeGates {
+        tx: mpsc::Sender<Result<wacp_v1::GateEvent, Status>>,
+    },
+    SubscribeEscalations {
+        tx: mpsc::Sender<Result<wacp_v1::EscalationEvent, Status>>,
+    },
+    SubscribeWorkspaceChanges {
+        tx: mpsc::Sender<Result<wacp_v1::WorkspaceStateChange, Status>>,
+    },
 }
 
 impl HighwayServiceImpl {
@@ -171,7 +183,11 @@ impl HighwayService for HighwayServiceImpl {
         &self,
         _request: Request<wacp_v1::StreamTrailRequest>,
     ) -> Result<Response<Self::StreamTrailStream>, Status> {
-        let (_tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(64);
+        self.coordinator_tx
+            .send(HighwayRequest::SubscribeTrail { tx })
+            .await
+            .map_err(|_| Status::internal("coordinator unavailable"))?;
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
@@ -181,7 +197,11 @@ impl HighwayService for HighwayServiceImpl {
         &self,
         _request: Request<wacp_v1::StreamGatesRequest>,
     ) -> Result<Response<Self::StreamGatesStream>, Status> {
-        let (_tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(64);
+        self.coordinator_tx
+            .send(HighwayRequest::SubscribeGates { tx })
+            .await
+            .map_err(|_| Status::internal("coordinator unavailable"))?;
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
@@ -191,7 +211,11 @@ impl HighwayService for HighwayServiceImpl {
         &self,
         _request: Request<wacp_v1::StreamEscalationsRequest>,
     ) -> Result<Response<Self::StreamEscalationsStream>, Status> {
-        let (_tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(64);
+        self.coordinator_tx
+            .send(HighwayRequest::SubscribeEscalations { tx })
+            .await
+            .map_err(|_| Status::internal("coordinator unavailable"))?;
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 
@@ -202,7 +226,11 @@ impl HighwayService for HighwayServiceImpl {
         &self,
         _request: Request<wacp_v1::StreamWorkspaceChangesRequest>,
     ) -> Result<Response<Self::StreamWorkspaceChangesStream>, Status> {
-        let (_tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(64);
+        self.coordinator_tx
+            .send(HighwayRequest::SubscribeWorkspaceChanges { tx })
+            .await
+            .map_err(|_| Status::internal("coordinator unavailable"))?;
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 }

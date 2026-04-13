@@ -266,7 +266,7 @@ async fn e2e_grpc_bind_and_authenticate() {
     config.server.highway_listen = "127.0.0.1:29091".into();
     config.server.coordinator_listen = "127.0.0.1:29092".into();
 
-    let mut rt = Runtime::init(config).await.unwrap();
+    let mut rt = Runtime::init(config, None).await.unwrap();
 
     // Dispatch a workspace so Bind has something to find.
     rt.coordinator.dispatch(DispatchRequest {
@@ -365,7 +365,7 @@ async fn init_creates_data_dirs() {
     config.server.highway_listen = "127.0.0.1:39091".into();
     config.server.coordinator_listen = "127.0.0.1:39092".into();
 
-    let _rt = Runtime::init(config).await.unwrap();
+    let _rt = Runtime::init(config, None).await.unwrap();
 
     assert!(dir.path().join("trail").exists());
     assert!(dir.path().join("checkpoints").exists());

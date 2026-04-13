@@ -548,12 +548,12 @@ impl RuntimeConfig {
 
     /// Parse a YAML string into RuntimeConfig.
     pub fn parse(yaml: &str) -> Result<Self, ConfigError> {
-        serde_yaml::from_str(yaml).map_err(|e| ConfigError::Parse(e.to_string()))
+        serde_yaml_ng::from_str(yaml).map_err(|e| ConfigError::Parse(e.to_string()))
     }
 
     /// Serialize default config as YAML.
     pub fn default_yaml() -> String {
-        serde_yaml::to_string(&Self::default()).expect("default config serializes")
+        serde_yaml_ng::to_string(&Self::default()).expect("default config serializes")
     }
 }
 

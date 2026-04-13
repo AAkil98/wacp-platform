@@ -1,7 +1,7 @@
 ---
 id: wacp-audit-runtime-001
 type: impl
-status: final
+status: final (all gaps resolved)
 created: 2026-04-13T00:00:00
 authors: [Akil Abderrahim, Claude Opus 4.6]
 tags: [audit, runtime, console, limitations]
@@ -289,16 +289,16 @@ for that workspace.
 | K3 | Dispatch no-op | High | Yes | K2 | Resolved (phase 2) |
 | A1 | workspace_id not extracted | High | Indirect | -- | Resolved (phase 3) |
 | A2 | Envelope/command subscriptions dropped | High | No (agent-side) | -- | Resolved (phase 3) |
-| C3 | GetTaskGraph empty | Medium | Yes | K2, K3 | Open (phase 5) |
+| C3 | GetTaskGraph empty | Medium | Yes | K2, K3 | Resolved (phase 5) |
 | C4 | Highway gRPC UNIMPLEMENTED (3) | Medium | No (REST works) | -- | Resolved (phase 4) |
-| C5 | GetWorkspace incomplete fields | Medium | Yes (partial) | -- | Partial (phase 5) |
+| C5 | GetWorkspace incomplete fields | Medium | Yes (partial) | -- | Resolved (phase 5) |
 | K4 | 5 coordinator ops are no-ops | Medium | Yes (actions fail silently) | -- | Resolved (phase 2) |
 | K5 | GetReadyTasks empty | Medium | Indirect | K2, K3 | Resolved (phase 2) |
 | C6 | GetAllocatable returns None | Low | Cosmetic | -- | Resolved (phase 2) |
-| C7 | Authenticate stub | Low | No (future spec) | -- | Open (phase 5) |
-| C8 | State change trigger empty | Low | Cosmetic | -- | Open (phase 5) |
+| C7 | Authenticate stub | Low | No (future spec) | -- | Resolved (phase 5) |
+| C8 | State change trigger empty | Low | Cosmetic | -- | Resolved (phase 5) |
 | K6 | TriggerIntegration stub | Low | No | -- | Resolved (phase 2) |
-| A3 | ReadResource unimplemented | Low | No | -- | Open (phase 5) |
+| A3 | ReadResource unimplemented | Low | No | -- | Resolved (phase 5) |
 
 ### Console critical path
 
@@ -338,19 +338,19 @@ event loop.
 Wire InjectEnvelope, RespondToGate, RespondToEscalation through the coordinator
 -- same logic as the REST ChannelBackend path.
 
-### Phase 5: Remaining gaps (C3, C5, C7, C8, A3)
+### Phase 5: Remaining gaps (C3, C5, C7, C8, A3) — Resolved
 
-Wire GetTaskGraph to walk the coordinator task graph and return real task views.
-Populate the three remaining empty GetWorkspace fields (`current_usage`,
-`created_at`, `last_activity`) from workspace actor metadata. Replace the
-Authenticate pass-through with token validation against a configurable auth
-backend (or at minimum reject empty/malformed tokens). Populate the `trigger`
-field on WorkspaceStateChange from the event that caused the transition. Wire
-ReadResource in the Agent gRPC service to read workspace-scoped resources from
-the coordinator.
+All phase 5 items resolved:
+- **C3** (`9fa0db8`): GetTaskGraph walks coordinator tree, returns real task views.
+- **C5** (`bdb5044`): GetWorkspace populates `current_usage`, `created_at`, `last_activity`.
+- **C7** (`a55f999`): Authenticate rejects empty/short tokens, derives stable `user_id` via SHA-256.
+- **C8** (`eed7026`): State change `trigger` derived from the transition event.
+- **A3** (`ba05c1c`): ReadResource wired in agent gRPC, resolves against checkpoint storage.
 
 Note: C6 (GetAllocatable), K4 (Decompose/CancelTask), K5 (GetReadyTasks), and
 K6 (TriggerIntegration) were resolved during phases 2-4 and are no longer open.
+
+**All 17 audit items are now resolved. No open gaps remain.**
 
 ---
 

@@ -56,9 +56,7 @@ pub async fn execute(
     let timeout_ms = resolve_timeout(opts.timeout_ms, capability.timeout_ms, framework_config);
 
     // 3. Build context
-    let cancel = opts
-        .cancellation_token
-        .unwrap_or_default();
+    let cancel = opts.cancellation_token.unwrap_or_default();
     let ctx = ToolContext {
         tool_name: tool_name.to_string(),
         capability_name: capability.name.clone(),

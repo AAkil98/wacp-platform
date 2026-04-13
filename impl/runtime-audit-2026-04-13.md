@@ -280,25 +280,25 @@ for that workspace.
 
 ## 7. Severity Matrix
 
-| ID | Gap | Severity | Console-blocking? | Depends on |
-|----|-----|----------|-------------------|------------|
-| C1 | GetCheckpoint returns 404 | High | Yes | -- |
-| C2 | QueryTrail returns empty | High | Yes | -- |
-| K1 | SubmitGoal ID collision | High | Yes | -- |
-| K2 | SubmitGoal no-op | High | Yes | -- |
-| K3 | Dispatch no-op | High | Yes | K2 |
-| A1 | workspace_id not extracted | High | Indirect | -- |
-| A2 | Envelope/command subscriptions dropped | High | No (agent-side) | -- |
-| C3 | GetTaskGraph empty | Medium | Yes | K2, K3 |
-| C4 | Highway gRPC UNIMPLEMENTED (3) | Medium | No (REST works) | -- |
-| C5 | GetWorkspace incomplete fields | Medium | Yes (partial) | -- |
-| K4 | 5 coordinator ops are no-ops | Medium | Yes (actions fail silently) | -- |
-| K5 | GetReadyTasks empty | Medium | Indirect | K2, K3 |
-| C6 | GetAllocatable returns None | Low | Cosmetic | -- |
-| C7 | Authenticate stub | Low | No (future spec) | -- |
-| C8 | State change trigger empty | Low | Cosmetic | -- |
-| K6 | TriggerIntegration stub | Low | No | -- |
-| A3 | ReadResource unimplemented | Low | No | -- |
+| ID | Gap | Severity | Console-blocking? | Depends on | Status |
+|----|-----|----------|-------------------|------------|--------|
+| C1 | GetCheckpoint returns 404 | High | Yes | -- | Resolved (phase 1) |
+| C2 | QueryTrail returns empty | High | Yes | -- | Resolved (phase 1) |
+| K1 | SubmitGoal ID collision | High | Yes | -- | Resolved (phase 2) |
+| K2 | SubmitGoal no-op | High | Yes | -- | Resolved (phase 2) |
+| K3 | Dispatch no-op | High | Yes | K2 | Resolved (phase 2) |
+| A1 | workspace_id not extracted | High | Indirect | -- | Resolved (phase 3) |
+| A2 | Envelope/command subscriptions dropped | High | No (agent-side) | -- | Resolved (phase 3) |
+| C3 | GetTaskGraph empty | Medium | Yes | K2, K3 | Open (phase 5) |
+| C4 | Highway gRPC UNIMPLEMENTED (3) | Medium | No (REST works) | -- | Resolved (phase 4) |
+| C5 | GetWorkspace incomplete fields | Medium | Yes (partial) | -- | Partial (phase 5) |
+| K4 | 5 coordinator ops are no-ops | Medium | Yes (actions fail silently) | -- | Resolved (phase 2) |
+| K5 | GetReadyTasks empty | Medium | Indirect | K2, K3 | Resolved (phase 2) |
+| C6 | GetAllocatable returns None | Low | Cosmetic | -- | Resolved (phase 2) |
+| C7 | Authenticate stub | Low | No (future spec) | -- | Open (phase 5) |
+| C8 | State change trigger empty | Low | Cosmetic | -- | Open (phase 5) |
+| K6 | TriggerIntegration stub | Low | No | -- | Resolved (phase 2) |
+| A3 | ReadResource unimplemented | Low | No | -- | Open (phase 5) |
 
 ### Console critical path
 
@@ -337,6 +337,20 @@ event loop.
 
 Wire InjectEnvelope, RespondToGate, RespondToEscalation through the coordinator
 -- same logic as the REST ChannelBackend path.
+
+### Phase 5: Remaining gaps (C3, C5, C7, C8, A3)
+
+Wire GetTaskGraph to walk the coordinator task graph and return real task views.
+Populate the three remaining empty GetWorkspace fields (`current_usage`,
+`created_at`, `last_activity`) from workspace actor metadata. Replace the
+Authenticate pass-through with token validation against a configurable auth
+backend (or at minimum reject empty/malformed tokens). Populate the `trigger`
+field on WorkspaceStateChange from the event that caused the transition. Wire
+ReadResource in the Agent gRPC service to read workspace-scoped resources from
+the coordinator.
+
+Note: C6 (GetAllocatable), K4 (Decompose/CancelTask), K5 (GetReadyTasks), and
+K6 (TriggerIntegration) were resolved during phases 2-4 and are no longer open.
 
 ---
 

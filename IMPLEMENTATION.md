@@ -116,7 +116,7 @@ Gaps that block or bruise the Console build, ordered by severity:
 
 ## 4. Runtime productionization (Stream A) — COMPLETE
 
-This workstream closes G1–G8 and delivers the runtime as a versioned, installable artifact. It also completes the spirit of original Phase 29.1 ("public API surface") as a set of upstream changes. **All sub-tasks (§4.1–§4.5, commits A1–A9) landed on `dev` as of 2026-04-12.** A codebase health audit on 2026-04-12 confirmed zero new failures introduced by Stream A; pre-existing CI failures (107 files of fmt drift, 1 test race, 24 clippy warnings) were resolved separately on 2026-04-13.
+This workstream closes G1–G8 and delivers the runtime as a versioned, installable artifact. It also completes the spirit of original Phase 29.1 ("public API surface") as a set of upstream changes. **All sub-tasks (§4.1–§4.5, commits A1–A9) landed on `dev` as of 2026-04-12.** A codebase health audit on 2026-04-12 confirmed zero new failures introduced by Stream A; pre-existing CI failures (107 files of fmt drift, 1 test race, 24 clippy warnings) were resolved separately on 2026-04-13. A subsequent **runtime implementation audit** (2026-04-13 → 2026-04-14) found and resolved 17 additional stub/placeholder gaps across the runtime event loop, gRPC handlers, and coordinator path — all 35 RPC handlers are now fully wired with no `unimplemented!()` or `Default::default()` responses remaining.
 
 ### 4.1 Canonical port map (G1)
 
@@ -388,6 +388,7 @@ All phases below are complete. Line items are pointers; full detail lives in com
 | 27S | Vertical surfacing — enriched `*_VERTICAL` descriptors, manifest generator, runtime manifest loader, `GET /v1/verticals[/{id}]` | **Complete** | 9 new transport + taxonomy tests |
 | **28** | IDE + chat bridge | **Pending** (Stream B) | — |
 | **29.1** | Runtime productionization + public API surface | **Complete** (Stream A, A1–A9) | 9 commits, CI-clean |
+| — | Runtime implementation audit (17 gaps: C1–C8, K1–K6, A1–A3) | **Complete** (5 phases, `c875804`–`4c42173`) | All stubs/placeholders resolved |
 | **29.2** | `wacp-console` Dashboard | **Pending** (separate repo) | — |
 
 ## 10. Open questions and risks

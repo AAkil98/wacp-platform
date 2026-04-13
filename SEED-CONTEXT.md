@@ -42,6 +42,8 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Codebase health audit + CI cleanup (2026-04-12 → 2026-04-13): complete.** `AUDIT-2026-04-12.md` catalogued pre-existing CI debt. Resolved in 5 commits (`6bd0f9c`–`bd4f821`): `cargo fmt --all` (107 files), early-return fix for a cancellation race in `wacp-tools`, and 24 clippy warnings across 8 crates. The `dev` branch is **CI-clean**: `cargo fmt --check --all`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` (1,340 tests) all pass with zero failures.
 
+**Runtime implementation audit (2026-04-13 → 2026-04-14): complete.** Exhaustive search of `wacp-runtime` and `wacp-transport` for stubs, placeholders, empty handlers, and hardcoded values. Found 17 gaps across 3 categories: Console-facing (C1–C8), coordinator (K1–K6), agent-facing (A1–A3). All 17 resolved in 5 phases: Console read path (C1, C2), coordinator write path (K1–K6, C6), agent plumbing (A1, A2), Highway gRPC parity (C4), and remaining gaps (C3, C5, C7, C8, A3). Zero open gaps remain. The runtime event loop, all 35 gRPC RPC handlers, and the REST gateway are fully wired — no stubs, no `unimplemented!()`, no `Default::default()` responses in request handlers.
+
 ## Repository Map
 
 ```
@@ -188,6 +190,7 @@ See `IMPLEMENTATION.md` — now the forward strategy, not a phase-by-phase plan.
 | — | Forward strategy rewrite + protocol split + Apache-2.0 relicense | **Complete** (`1b8d6e5`, `ef20421`, `199dee0`) |
 | **Stream A** | Runtime productionization — ports, CI, release pipeline, OpenAPI, mock binary | **Complete** (A1–A9, `7ed2db0`–`3c24743`) |
 | — | Codebase health audit + CI cleanup | **Complete** (`AUDIT-2026-04-12.md`, `6bd0f9c`–`bd4f821`) |
+| — | Runtime implementation audit (17 gaps: C1–C8, K1–K6, A1–A3) | **Complete** — all resolved in 5 phases (`c875804`–`4c42173`) |
 | **Stream B** | Phase 28 — IDE + chat bridge (parallel, no hard dependency) | **Pending — can start any time** |
 | 29.2 | Dashboard (≡ `wacp-console` sibling repo, separate project) | **Pending** — blocked on Console-side Q2 spec revisions; upstream gaps resolved |
 
@@ -202,13 +205,14 @@ Stream A task list is in `IMPLEMENTATION.md` §8.1 (A1–A9, all done). Stream B
 - Adding an 8th vertical: standard package layout, export `<UPPER>_VERTICAL` from `index.ts`, add to `REGISTRY` + `DEFAULT_LOAD_ORDER` in `packages/wacp-cli/src/ecosystem.ts`, add dep in `packages/wacp-cli/package.json`.
 
 *Repo state (as of end of session 2026-04-13):*
-- `dev` is at `bd4f821` — 20 commits ahead of the Phase 27S baseline. Stream A (A1–A9) + audit cleanup all landed. The branch is CI-clean.
+- `dev` is at `4c42173` — 25+ commits ahead of the Phase 27S baseline. Stream A (A1–A9) + codebase health audit + runtime implementation audit (17/17 gaps resolved) all landed. The branch is CI-clean.
 - `origin/main` on GitHub is still ancient at `7f6a330` (pre-Phase-20). **Deliberately not updated.** If future work should be on `main`, either `git checkout main && git merge dev && git push` or continue on `dev`.
 - Sibling repo **`github.com/Madahub-dev/wacp-protocol`** (public, CC BY-SA 4.0) is live with `main` branch. Contains `PROTOCOL.md`, `TAXONOMY.md`, and 20 protocol specs in `primitives/`, `foundations/`, `mechanisms/`, `topology/`. Local clone at `/home/aakil98/mada/wacp-protocol/`. Cross-references in this repo's `impl/*.md` footers point at its GitHub URLs.
 - Sibling project **`wacp-console`** at `/home/aakil98/mada/wacp-console/` is **uninitialized** (zero commits, no remote). Contents: `SPEC_BUILD.md` (spec map + ADR-001), `TECH_STACK_PROPOSAL.md` (Q1–Q7 all answered), `STATUS.md` (upstream state of affairs as of 2026-04-13), 11 draft specs in `specs/`. Not committed — the user will seed the first commit when ready.
 
 *Where to start work:*
 - **Stream A — complete.** All 9 tasks (A1–A9) done. CI-clean. No remaining runtime productionization work.
+- **Runtime audit — complete.** All 17 stub/placeholder gaps in the runtime and transport layers resolved across 5 phases. No stubs remain in any gRPC handler or event loop arm.
 - **Stream B — ready to start.** Phase 28 (IDE + chat bridge) can begin. Depends only on a reachable runtime, which works locally via `cargo run --bin wacp-runtime` today. `IMPLEMENTATION.md` §8.2 has the task list (B1–B6). Recommended start: B4 (chat bridge scaffolding) — smaller scope, validates the runtime-as-service model.
 - **`wacp-console` — blocked on spec revisions.** The 7 Console-side spec revisions driven by Q2 (multi-user auth in Phase 1) are the critical path: new `wcon-auth` spec + updates to `wcon-architecture` §8, `wcon-data-model` §5, `wcon-api`, `wcon-profiles`, `wcon-sessions`, `wcon-ui`. See `IMPLEMENTATION.md` §5 step 1 and `wacp-console/STATUS.md` for the full breakdown. All upstream gaps are resolved — this is purely Console-side spec maturation. First step: `/glossary` to establish canonical Console terminology.
 - **`dev` → `main` merge** is available whenever the user decides. The branches have diverged significantly (20+ commits). A PR or direct merge-and-push would bring `main` current.

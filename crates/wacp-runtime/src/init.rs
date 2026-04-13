@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -13,7 +14,7 @@ use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
 use wacp_trail::{
     CheckpointStorage, FileCheckpointStorage, FileTrailConfig, FileTrailStorage,
-    InMemoryCheckpointStorage, InMemoryTrailStorage,
+    InMemoryCheckpointStorage, InMemoryTrailStorage, TrailIndex, TrailQuery,
 };
 use wacp_transport::rest_gateway::RuntimeHealth;
 use wacp_transport::{GrpcServerConfig, RestGateway, start_grpc_server};
@@ -35,6 +36,17 @@ pub enum RuntimeError {
     Transport(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Metadata stored alongside each checkpoint for GetCheckpoint lookups.
+struct CheckpointRecord {
+    content_hash: [u8; 32],
+    workspace_id: String,
+    checkpoint_type: String,
+    intent: String,
+    status: i32,
+    confidence: i32,
+    resource_usage: Option<wacp_transport::wacp_v1::ResourceUsage>,
 }
 
 /// The initialized runtime — owns all components.
@@ -63,6 +75,12 @@ pub struct Runtime {
 
     // Checkpoint content-addressable store.
     checkpoint_storage: Arc<dyn CheckpointStorage>,
+
+    // Checkpoint ID -> content hash mapping for GetCheckpoint lookups.
+    checkpoint_index: HashMap<String, CheckpointRecord>,
+
+    // Trail index for historical trail queries.
+    trail_index: TrailIndex,
 
     // Monotonic counters for ID generation.
     next_envelope_id: u64,
@@ -111,7 +129,11 @@ impl Runtime {
             "recovery completed"
         );
 
-        // 4b. Open checkpoint content-addressable store.
+        // 4b. Open trail index for historical queries.
+        let trail_index = TrailIndex::open(&data_dir.join("trail_index.sqlite"))
+            .map_err(|e| RuntimeError::Storage(format!("trail index: {e}")))?;
+
+        // 4c. Open checkpoint content-addressable store.
         let checkpoint_storage: Arc<dyn CheckpointStorage> = Arc::new(
             FileCheckpointStorage::open(data_dir.join("checkpoints"))
                 .map_err(|e| RuntimeError::Storage(e.to_string()))?,
@@ -218,6 +240,8 @@ impl Runtime {
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
             checkpoint_storage,
+            checkpoint_index: HashMap::new(),
+            trail_index,
             next_envelope_id: 0,
             next_checkpoint_id: 0,
             stream_seq: 0,
@@ -232,6 +256,9 @@ impl Runtime {
         let trail = InMemoryTrailStorage::new();
         let _recovered =
             RecoveryEngine::recover(&trail).map_err(|e| RuntimeError::Recovery(e.to_string()))?;
+
+        let trail_index = TrailIndex::open_in_memory()
+            .map_err(|e| RuntimeError::Storage(format!("trail index: {e}")))?;
 
         let permissions = PermissionEngine::new(&taxonomy);
 
@@ -256,6 +283,8 @@ impl Runtime {
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
             checkpoint_storage: Arc::new(InMemoryCheckpointStorage::new()),
+            checkpoint_index: HashMap::new(),
+            trail_index,
             next_envelope_id: 0,
             next_checkpoint_id: 0,
             stream_seq: 0,
@@ -456,21 +485,93 @@ impl Runtime {
 
     /// Emit a trail entry to all active trail stream subscribers.
     fn emit_trail_entry(&mut self, workspace_id: &str, event_type: &str, body: Vec<u8>) {
+        use wacp_trail::IndexEntry;
         use wacp_transport::wacp_v1;
 
         self.stream_seq += 1;
+        let seq = self.stream_seq;
+
+        // Index the entry for historical queries.
+        let index_entry = IndexEntry {
+            sequence_number: seq,
+            timestamp_bytes: [0u8; 10], // no wall-clock yet
+            workspace_id: if workspace_id.is_empty() {
+                None
+            } else {
+                Some(workspace_id.to_string())
+            },
+            actor: "protocol".into(),
+            event_type: event_type.to_string(),
+            segment_id: 0,
+            offset: 0,
+            length: body.len() as u32,
+        };
+        if let Err(e) = self.trail_index.insert(&index_entry) {
+            tracing::warn!(error = %e, "trail index insert failed");
+        }
+
         let entry = Ok(wacp_v1::TrailEntry {
-            id: format!("te-{}", self.stream_seq),
+            id: format!("te-{seq}"),
             timestamp: None,
             workspace_id: workspace_id.to_string(),
             actor: "protocol".into(),
             event_type: event_type.into(),
             body,
-            sequence_number: self.stream_seq,
+            sequence_number: seq,
             chain_hash: Vec::new(),
         });
         self.trail_subs
             .retain(|tx| tx.try_send(entry.clone()).is_ok());
+    }
+
+    /// Query the trail index and build a QueryTrailResponse.
+    fn query_trail_index(
+        &self,
+        workspace_id: Option<&str>,
+        event_type: Option<&str>,
+        actor: Option<&str>,
+        limit: u32,
+        client_request_id: &str,
+    ) -> wacp_transport::wacp_v1::QueryTrailResponse {
+        let query = TrailQuery {
+            workspace_id: workspace_id.map(|s| s.to_string()),
+            event_type: event_type.map(|s| s.to_string()),
+            actor: actor.map(|s| s.to_string()),
+            from_timestamp: None,
+            to_timestamp: None,
+            limit: if limit == 0 { 100 } else { limit },
+        };
+        match self.trail_index.query(&query) {
+            Ok(result) => {
+                let entries = result
+                    .entries
+                    .into_iter()
+                    .map(|ie| wacp_transport::wacp_v1::TrailEntry {
+                        id: format!("te-{}", ie.sequence_number),
+                        timestamp: None,
+                        workspace_id: ie.workspace_id.unwrap_or_default(),
+                        actor: ie.actor,
+                        event_type: ie.event_type,
+                        body: Vec::new(), // index does not store body
+                        sequence_number: ie.sequence_number,
+                        chain_hash: Vec::new(),
+                    })
+                    .collect();
+                wacp_transport::wacp_v1::QueryTrailResponse {
+                    entries,
+                    has_more: result.has_more,
+                    client_request_id: client_request_id.to_string(),
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "trail index query failed");
+                wacp_transport::wacp_v1::QueryTrailResponse {
+                    entries: vec![],
+                    has_more: false,
+                    client_request_id: client_request_id.to_string(),
+                }
+            }
+        }
     }
 
     /// Graceful shutdown — abort all active workspaces, wait for termination.
@@ -598,7 +699,7 @@ impl Runtime {
                 }
             }
             AgentRequest::CreateCheckpoint {
-                workspace_id: _,
+                workspace_id,
                 request,
                 reply,
             } => {
@@ -615,21 +716,46 @@ impl Runtime {
 
                 let cp_id = self.next_checkpoint_id;
                 self.next_checkpoint_id += 1;
+                let checkpoint_id = format!("cp-{cp_id}");
+
+                // Index the checkpoint for later retrieval via GetCheckpoint.
+                self.checkpoint_index.insert(
+                    checkpoint_id.clone(),
+                    CheckpointRecord {
+                        content_hash: hash_bytes,
+                        workspace_id,
+                        checkpoint_type: request.r#type.clone(),
+                        intent: request.intent.clone(),
+                        status: request.status,
+                        confidence: request.confidence,
+                        resource_usage: request.resource_usage,
+                    },
+                );
 
                 let response = wacp_transport::wacp_v1::CreateCheckpointResponse {
-                    checkpoint_id: format!("cp-{cp_id}"),
+                    checkpoint_id,
                     content_hash: hash_hex,
                     timestamp: None,
                     client_request_id: request.client_request_id,
                 };
                 let _ = reply.send(Ok(response));
             }
-            AgentRequest::QueryTrail { reply, .. } => {
-                let response = wacp_transport::wacp_v1::QueryTrailResponse {
-                    entries: vec![],
-                    has_more: false,
-                    client_request_id: String::new(),
-                };
+            AgentRequest::QueryTrail { request, reply, .. } => {
+                let response = self.query_trail_index(
+                    if request.workspace_id.is_empty() {
+                        None
+                    } else {
+                        Some(&request.workspace_id)
+                    },
+                    if request.event_type.is_empty() {
+                        None
+                    } else {
+                        Some(&request.event_type)
+                    },
+                    None,
+                    request.limit,
+                    &request.client_request_id,
+                );
                 let _ = reply.send(Ok(response));
             }
             AgentRequest::SubscribeEnvelopes { .. } => {}
@@ -666,12 +792,26 @@ impl Runtime {
                     "escalation response pending",
                 )));
             }
-            HighwayRequest::QueryTrail { reply, .. } => {
-                let response = wacp_transport::wacp_v1::QueryTrailResponse {
-                    entries: vec![],
-                    has_more: false,
-                    client_request_id: String::new(),
-                };
+            HighwayRequest::QueryTrail { request, reply } => {
+                let response = self.query_trail_index(
+                    if request.workspace_id.is_empty() {
+                        None
+                    } else {
+                        Some(&request.workspace_id)
+                    },
+                    if request.event_type.is_empty() {
+                        None
+                    } else {
+                        Some(&request.event_type)
+                    },
+                    if request.actor.is_empty() {
+                        None
+                    } else {
+                        Some(&request.actor)
+                    },
+                    request.limit,
+                    &request.client_request_id,
+                );
                 let _ = reply.send(Ok(response));
             }
             HighwayRequest::GetWorkspace { request, reply } => {
@@ -680,22 +820,44 @@ impl Runtime {
                     let response = wacp_transport::wacp_v1::WorkspaceView {
                         id: node.id.to_string(),
                         state: node.status as i32,
-                        role: String::new(),
+                        role: node.owner.to_string(),
                         parent: node
                             .parent
                             .as_ref()
                             .map(|p| p.to_string())
                             .unwrap_or_default(),
                         owner: node.owner.to_string(),
-                        originator: String::new(),
+                        originator: match &node.originator {
+                            Originator::System => "system".into(),
+                            Originator::User(uid) => uid.to_string(),
+                        },
                         task_id: node
                             .task_id
                             .as_ref()
                             .map(|t| t.to_string())
                             .unwrap_or_default(),
                         current_usage: None,
-                        budget: None,
-                        checkpoint_count: 0,
+                        budget: Some(wacp_transport::wacp_v1::ResourceBudget {
+                            max_tokens: self.config.resources.default_budget.max_tokens,
+                            max_wall_time_ms: self.config.resources.default_budget.max_wall_time_ms,
+                            max_storage_bytes: self
+                                .config
+                                .resources
+                                .default_budget
+                                .max_storage_bytes,
+                            max_network_bytes: self
+                                .config
+                                .resources
+                                .default_budget
+                                .max_network_bytes,
+                            max_cost_micros: self.config.resources.default_budget.max_cost_micros,
+                            warning_threshold: self.config.resources.warning_threshold,
+                        }),
+                        checkpoint_count: self
+                            .checkpoint_index
+                            .values()
+                            .filter(|r| r.workspace_id == ws_id.as_ref())
+                            .count() as u32,
                         created_at: None,
                         last_activity: None,
                     };
@@ -704,8 +866,42 @@ impl Runtime {
                     let _ = reply.send(Err(tonic::Status::not_found("workspace not found")));
                 }
             }
-            HighwayRequest::GetCheckpoint { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::not_found("checkpoint not found")));
+            HighwayRequest::GetCheckpoint { request, reply } => {
+                let response = match self.checkpoint_index.get(&request.checkpoint_id) {
+                    Some(record) => {
+                        let hash_hex: String =
+                            record.content_hash.iter().map(|b| format!("{b:02x}")).collect();
+                        match self.checkpoint_storage.read(&record.content_hash) {
+                            Ok(Some(payload)) => Ok(wacp_transport::wacp_v1::CheckpointView {
+                                metadata: Some(wacp_transport::wacp_v1::Checkpoint {
+                                    id: request.checkpoint_id,
+                                    workspace_id: record.workspace_id.clone(),
+                                    r#type: record.checkpoint_type.clone(),
+                                    payload: Vec::new(), // payload is in the top-level field
+                                    content_hash: hash_hex,
+                                    intent: record.intent.clone(),
+                                    parent_checkpoint: String::new(),
+                                    status: record.status,
+                                    confidence: record.confidence,
+                                    timestamp: None,
+                                    resource_usage: record.resource_usage,
+                                }),
+                                payload,
+                            }),
+                            Ok(None) => Err(tonic::Status::not_found(
+                                "checkpoint blob missing from store",
+                            )),
+                            Err(e) => Err(tonic::Status::internal(format!(
+                                "checkpoint read error: {e}"
+                            ))),
+                        }
+                    }
+                    None => Err(tonic::Status::not_found(format!(
+                        "checkpoint '{}' not found",
+                        request.checkpoint_id
+                    ))),
+                };
+                let _ = reply.send(response);
             }
             HighwayRequest::ListWorkspaces { parent_id, reply } => {
                 let items: Vec<wacp_transport::WorkspaceSummaryItem> = self

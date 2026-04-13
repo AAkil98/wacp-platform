@@ -5,6 +5,19 @@ use tonic::{Request, Response, Status};
 use crate::proto::wacp_v1;
 use crate::proto::wacp_v1::agent_service_server::AgentService;
 
+/// Metadata key agents set to identify their workspace on each RPC.
+const WORKSPACE_ID_HEADER: &str = "x-workspace-id";
+
+/// Extract workspace_id from gRPC request metadata.
+fn extract_workspace_id<T>(request: &Request<T>) -> String {
+    request
+        .metadata()
+        .get(WORKSPACE_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string()
+}
+
 /// Channel-based agent service implementation.
 /// Each bound agent gets its own pair of channels for envelope/command streaming.
 pub struct AgentServiceImpl {
@@ -80,11 +93,12 @@ impl AgentService for AgentServiceImpl {
         &self,
         request: Request<wacp_v1::SendEnvelopeRequest>,
     ) -> Result<Response<wacp_v1::SendEnvelopeResponse>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let inner = request.into_inner();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         self.coordinator_tx
             .send(AgentRequest::SendEnvelope {
-                workspace_id: String::new(), // TODO: extract from connection metadata
+                workspace_id: ws_id,
                 request: inner,
                 reply: reply_tx,
             })
@@ -101,11 +115,12 @@ impl AgentService for AgentServiceImpl {
         &self,
         request: Request<wacp_v1::EmitSignalRequest>,
     ) -> Result<Response<wacp_v1::EmitSignalResponse>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let inner = request.into_inner();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         self.coordinator_tx
             .send(AgentRequest::EmitSignal {
-                workspace_id: String::new(),
+                workspace_id: ws_id,
                 request: inner,
                 reply: reply_tx,
             })
@@ -122,11 +137,12 @@ impl AgentService for AgentServiceImpl {
         &self,
         request: Request<wacp_v1::CreateCheckpointRequest>,
     ) -> Result<Response<wacp_v1::CreateCheckpointResponse>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let inner = request.into_inner();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         self.coordinator_tx
             .send(AgentRequest::CreateCheckpoint {
-                workspace_id: String::new(),
+                workspace_id: ws_id,
                 request: inner,
                 reply: reply_tx,
             })
@@ -143,11 +159,12 @@ impl AgentService for AgentServiceImpl {
         &self,
         request: Request<wacp_v1::QueryTrailRequest>,
     ) -> Result<Response<wacp_v1::QueryTrailResponse>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let inner = request.into_inner();
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         self.coordinator_tx
             .send(AgentRequest::QueryTrail {
-                workspace_id: String::new(),
+                workspace_id: ws_id,
                 request: inner,
                 reply: reply_tx,
             })
@@ -171,13 +188,14 @@ impl AgentService for AgentServiceImpl {
 
     async fn receive_envelopes(
         &self,
-        _request: Request<wacp_v1::ReceiveEnvelopesRequest>,
+        request: Request<wacp_v1::ReceiveEnvelopesRequest>,
     ) -> Result<Response<Self::ReceiveEnvelopesStream>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let (tx, rx) = mpsc::channel(64);
 
         self.coordinator_tx
             .send(AgentRequest::SubscribeEnvelopes {
-                workspace_id: String::new(),
+                workspace_id: ws_id,
                 tx,
             })
             .await
@@ -190,13 +208,14 @@ impl AgentService for AgentServiceImpl {
 
     async fn receive_commands(
         &self,
-        _request: Request<wacp_v1::ReceiveCommandsRequest>,
+        request: Request<wacp_v1::ReceiveCommandsRequest>,
     ) -> Result<Response<Self::ReceiveCommandsStream>, Status> {
+        let ws_id = extract_workspace_id(&request);
         let (tx, rx) = mpsc::channel(64);
 
         self.coordinator_tx
             .send(AgentRequest::SubscribeCommands {
-                workspace_id: String::new(),
+                workspace_id: ws_id,
                 tx,
             })
             .await

@@ -73,6 +73,10 @@ pub struct Runtime {
     escalation_subs:
         Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::EscalationEvent, tonic::Status>>>,
 
+    // Agent per-workspace subscribers for envelope/command delivery.
+    envelope_subs: HashMap<String, Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Envelope, tonic::Status>>>>,
+    command_subs: HashMap<String, Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Command, tonic::Status>>>>,
+
     // Checkpoint content-addressable store.
     checkpoint_storage: Arc<dyn CheckpointStorage>,
 
@@ -241,6 +245,8 @@ impl Runtime {
             trail_subs: Vec::new(),
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
+            envelope_subs: HashMap::new(),
+            command_subs: HashMap::new(),
             checkpoint_storage,
             checkpoint_index: HashMap::new(),
             trail_index,
@@ -286,6 +292,8 @@ impl Runtime {
             trail_subs: Vec::new(),
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
+            envelope_subs: HashMap::new(),
+            command_subs: HashMap::new(),
             checkpoint_storage: Arc::new(InMemoryCheckpointStorage::new()),
             checkpoint_index: HashMap::new(),
             trail_index,
@@ -580,6 +588,50 @@ impl Runtime {
         }
     }
 
+    /// Push an envelope to any agents subscribed to the target workspace.
+    fn notify_envelope_subs(&mut self, to_workspace: &str, envelope: &Envelope) {
+        if let Some(subs) = self.envelope_subs.get_mut(to_workspace) {
+            let proto_env = Ok(wacp_transport::wacp_v1::Envelope {
+                id: envelope.id.to_string(),
+                from_workspace: envelope.from_workspace.to_string(),
+                to_workspace: envelope.to_workspace.to_string(),
+                r#type: envelope.envelope_type.clone(),
+                payload: envelope.payload.clone(),
+                in_reply_to: envelope
+                    .in_reply_to
+                    .as_ref()
+                    .map(|e| e.to_string())
+                    .unwrap_or_default(),
+                priority: envelope.priority as i32,
+                timestamp: None,
+                origin: envelope.origin as i32,
+            });
+            subs.retain(|tx| tx.try_send(proto_env.clone()).is_ok());
+        }
+    }
+
+    /// Push a command to any agents subscribed to the target workspace.
+    fn notify_command_subs(&mut self, workspace_id: &str, command_type: &str, _payload: Vec<u8>) {
+        use wacp_transport::wacp_v1;
+        if let Some(subs) = self.command_subs.get_mut(workspace_id) {
+            // Wrap the command as a feedback envelope for the oneof.
+            let cmd = Ok(wacp_v1::Command {
+                command: Some(wacp_v1::command::Command::Feedback(wacp_v1::Envelope {
+                    id: String::new(),
+                    from_workspace: String::new(),
+                    to_workspace: workspace_id.to_string(),
+                    r#type: command_type.to_string(),
+                    payload: Vec::new(),
+                    in_reply_to: String::new(),
+                    priority: 0,
+                    timestamp: None,
+                    origin: 0,
+                })),
+            });
+            subs.retain(|tx| tx.try_send(cmd.clone()).is_ok());
+        }
+    }
+
     /// Graceful shutdown — abort all active workspaces, wait for termination.
     pub async fn shutdown(&mut self) {
         tracing::info!("shutting down");
@@ -689,6 +741,9 @@ impl Runtime {
                     state: EnvelopeState::Created,
                 };
 
+                // Notify any agents subscribed to the target workspace.
+                self.notify_envelope_subs(to_ws.as_ref(), &envelope);
+
                 // Route through the coordinator to the target workspace actor.
                 if self.coordinator.route_envelope(&to_ws, envelope).await {
                     let response = wacp_transport::wacp_v1::SendEnvelopeResponse {
@@ -764,8 +819,24 @@ impl Runtime {
                 );
                 let _ = reply.send(Ok(response));
             }
-            AgentRequest::SubscribeEnvelopes { .. } => {}
-            AgentRequest::SubscribeCommands { .. } => {}
+            AgentRequest::SubscribeEnvelopes {
+                workspace_id,
+                tx,
+            } => {
+                self.envelope_subs
+                    .entry(workspace_id)
+                    .or_default()
+                    .push(tx);
+            }
+            AgentRequest::SubscribeCommands {
+                workspace_id,
+                tx,
+            } => {
+                self.command_subs
+                    .entry(workspace_id)
+                    .or_default()
+                    .push(tx);
+            }
         }
     }
 
@@ -1141,6 +1212,11 @@ impl Runtime {
                             .await
                             .is_ok()
                         {
+                            self.notify_command_subs(
+                                &request.workspace_id,
+                                "suspend",
+                                Vec::new(),
+                            );
                             Ok(wacp_transport::wacp_v1::SuspendWorkspaceResponse::default())
                         } else {
                             Err(tonic::Status::unavailable("workspace actor not running"))
@@ -1163,6 +1239,11 @@ impl Runtime {
                             .await
                             .is_ok()
                         {
+                            self.notify_command_subs(
+                                &request.workspace_id,
+                                "resume",
+                                Vec::new(),
+                            );
                             Ok(wacp_transport::wacp_v1::ResumeWorkspaceResponse::default())
                         } else {
                             Err(tonic::Status::unavailable("workspace actor not running"))
@@ -1256,6 +1337,7 @@ impl Runtime {
                     state: EnvelopeState::Created,
                 };
                 let envelope_id = envelope.id.to_string();
+                self.notify_envelope_subs(ws_id.as_ref(), &envelope);
                 if self.coordinator.route_envelope(&ws_id, envelope).await {
                     let response = wacp_transport::wacp_v1::SendDirectiveResponse { envelope_id };
                     let _ = reply.send(Ok(response));
@@ -1287,6 +1369,7 @@ impl Runtime {
                     state: EnvelopeState::Created,
                 };
                 let envelope_id = envelope.id.to_string();
+                self.notify_envelope_subs(ws_id.as_ref(), &envelope);
                 if self.coordinator.route_envelope(&ws_id, envelope).await {
                     let response = wacp_transport::wacp_v1::SendFeedbackResponse { envelope_id };
                     let _ = reply.send(Ok(response));

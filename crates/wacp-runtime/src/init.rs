@@ -898,6 +898,36 @@ impl Runtime {
                     .or_default()
                     .push(tx);
             }
+            AgentRequest::ReadResource {
+                request, reply, ..
+            } => {
+                // Resolve resource_id against checkpoint storage.
+                if let Some(record) = self.checkpoint_index.get(&request.resource_id) {
+                    match self.checkpoint_storage.read(&record.content_hash) {
+                        Ok(Some(data)) => {
+                            let _ = reply.send(Ok(wacp_transport::wacp_v1::ReadResourceResponse {
+                                content: data,
+                                client_request_id: request.client_request_id,
+                            }));
+                        }
+                        Ok(None) => {
+                            let _ = reply.send(Err(tonic::Status::not_found(
+                                "resource content not found in storage",
+                            )));
+                        }
+                        Err(e) => {
+                            let _ = reply.send(Err(tonic::Status::internal(format!(
+                                "storage error: {e}"
+                            ))));
+                        }
+                    }
+                } else {
+                    let _ = reply.send(Err(tonic::Status::not_found(format!(
+                        "resource '{}' not found",
+                        request.resource_id
+                    ))));
+                }
+            }
         }
     }
 

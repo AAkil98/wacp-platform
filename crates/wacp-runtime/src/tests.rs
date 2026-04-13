@@ -313,7 +313,8 @@ async fn e2e_grpc_bind_and_authenticate() {
         .await
         .unwrap();
 
-    assert_eq!(auth_response.get_ref().user_id, "user-admin-token");
+    // C7: user_id is now derived via truncated SHA-256 of the auth token.
+    assert_eq!(auth_response.get_ref().user_id, "user-10a4c7c9fc5206d6");
     assert!(!auth_response.get_ref().capabilities.is_empty());
 
     // Let the runtime finish.

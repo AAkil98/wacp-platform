@@ -483,13 +483,47 @@ async fn agent_svc_query_trail_empty() {
 }
 
 #[tokio::test]
-async fn agent_svc_read_resource_unimplemented() {
-    let (svc, _rx) = agent_svc();
-    let err = svc
-        .read_resource(tonic::Request::new(pb::ReadResourceRequest::default()))
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), tonic::Code::Unimplemented);
+async fn agent_svc_read_resource_forwards_and_returns() {
+    let (svc, mut rx) = agent_svc();
+    let req = pb::ReadResourceRequest {
+        resource_id: "res-1".into(),
+        ..Default::default()
+    };
+    let (result, _) = tokio::join!(svc.read_resource(tonic::Request::new(req)), async {
+        match rx.recv().await.unwrap() {
+            AgentRequest::ReadResource { request, reply, .. } => {
+                assert_eq!(request.resource_id, "res-1");
+                reply
+                    .send(Ok(pb::ReadResourceResponse {
+                        content: b"payload".to_vec(),
+                        client_request_id: request.client_request_id,
+                    }))
+                    .ok();
+            }
+            other => panic!("expected ReadResource, got {other:?}"),
+        }
+    });
+    let resp = result.unwrap().into_inner();
+    assert_eq!(resp.content, b"payload");
+}
+
+#[tokio::test]
+async fn agent_svc_read_resource_error_propagated() {
+    let (svc, mut rx) = agent_svc();
+    let (result, _) = tokio::join!(
+        svc.read_resource(tonic::Request::new(pb::ReadResourceRequest::default())),
+        async {
+            match rx.recv().await.unwrap() {
+                AgentRequest::ReadResource { reply, .. } => {
+                    reply
+                        .send(Err(tonic::Status::not_found("resource not found")))
+                        .ok();
+                }
+                _ => panic!("expected ReadResource"),
+            }
+        }
+    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]

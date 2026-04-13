@@ -60,6 +60,11 @@ pub enum AgentRequest {
         workspace_id: String,
         tx: mpsc::Sender<Result<wacp_v1::Command, Status>>,
     },
+    ReadResource {
+        workspace_id: String,
+        request: wacp_v1::ReadResourceRequest,
+        reply: tokio::sync::oneshot::Sender<Result<wacp_v1::ReadResourceResponse, Status>>,
+    },
 }
 
 impl AgentServiceImpl {
@@ -179,9 +184,24 @@ impl AgentService for AgentServiceImpl {
 
     async fn read_resource(
         &self,
-        _request: Request<wacp_v1::ReadResourceRequest>,
+        request: Request<wacp_v1::ReadResourceRequest>,
     ) -> Result<Response<wacp_v1::ReadResourceResponse>, Status> {
-        Err(Status::unimplemented("read_resource not yet implemented"))
+        let ws_id = extract_workspace_id(&request);
+        let inner = request.into_inner();
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.coordinator_tx
+            .send(AgentRequest::ReadResource {
+                workspace_id: ws_id,
+                request: inner,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| Status::internal("coordinator unavailable"))?;
+
+        reply_rx
+            .await
+            .map_err(|_| Status::internal("coordinator dropped reply"))?
+            .map(Response::new)
     }
 
     type ReceiveEnvelopesStream = ReceiverStream<Result<wacp_v1::Envelope, Status>>;

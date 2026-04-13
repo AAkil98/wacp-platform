@@ -205,6 +205,12 @@ impl E2eHarness {
             }
             AgentRequest::SubscribeEnvelopes { .. } => {}
             AgentRequest::SubscribeCommands { .. } => {}
+            AgentRequest::ReadResource { reply, request, .. } => {
+                let _ = reply.send(Ok(wacp_v1::ReadResourceResponse {
+                    content: vec![],
+                    client_request_id: request.client_request_id,
+                }));
+            }
         }
     }
 

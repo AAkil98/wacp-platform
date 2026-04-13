@@ -32,6 +32,7 @@ pub use messages::{AgentInbound, AgentOutbound, HighwayInbound, HighwayOutbound}
 pub use proto::wacp_v1;
 pub use rest_gateway::{
     GatewayBackend, GatewayError, GatewayState, RestGateway, VerticalRegistry, VerticalSummary,
+    WorkspaceSummaryItem,
 };
 
 /// Transport-level errors.

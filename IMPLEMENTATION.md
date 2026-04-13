@@ -5,7 +5,7 @@ id: wacp-impl
 type: impl
 status: active
 created: 2026-04-01
-revised: 2026-04-11
+revised: 2026-04-13
 authors:
   - Akil Abderrahim
   - Claude Opus 4.6
@@ -33,13 +33,13 @@ This document is forward-looking. For the current-state snapshot — what's buil
 
 ## 1. Where we are
 
-Protocol spec complete (20 protocol specs + `PROTOCOL.md` + `TAXONOMY.md`). Runtime complete through **Phase 27S** — 15 Rust crates, 1,192 runtime tests, all 7 verticals wired end-to-end via `packages/wacp-cli/src/ecosystem.ts`, and a REST/WebSocket transport layer that serves 16 `/v1/*` endpoints plus `/v1/ws`. `wacp-taxonomy::VerticalManifest` is the canonical vertical schema, and `GET /v1/verticals[/{id}]` is the Console-facing discovery path.
+Protocol spec complete (20 protocol specs + `PROTOCOL.md` + `TAXONOMY.md`). Runtime complete through **Phase 27S** — 15 Rust crates, 1,340 runtime tests (Rust), all 7 verticals wired end-to-end via `packages/wacp-cli/src/ecosystem.ts`, and a REST/WebSocket transport layer that serves 16 `/v1/*` endpoints plus `/v1/ws`. `wacp-taxonomy::VerticalManifest` is the canonical vertical schema, and `GET /v1/verticals[/{id}]` is the Console-facing discovery path. **Stream A (A1–A9) is complete** — all runtime productionization tasks have landed on `dev`. The `dev` branch is **CI-clean** as of 2026-04-13: `cargo fmt --check --all`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` all pass with zero failures (see `AUDIT-2026-04-12.md`).
 
 Two external repositories share this forward plan:
 
 | Repo | Purpose | Status |
 |---|---|---|
-| `wacp` (this repo) | Protocol, runtime, middleware, CLI, verticals | Phase 27S complete; Phase 28/29 pending |
+| `wacp` (this repo) | Protocol, runtime, middleware, CLI, verticals | Phase 27S complete; Stream A (29.1) complete; Phase 28/29.2 pending |
 | `wacp-console` (sibling) | User-facing workbench — profile studio, session launcher, live oversight dashboard | 11-spec set drafted, tech-stack proposition drafted, code not started |
 
 `wacp-console` is functionally the **Phase 29 Dashboard** deliverable from the original plan. This strategy treats it as the canonical Dashboard and folds Phase 29.1 (public API surface) back into this repo as runtime work that unblocks Console development.
@@ -97,6 +97,8 @@ The Console can start building today against:
 
 ### 3.3 What's missing — concrete gaps
 
+> **Status (2026-04-13): All 8 gaps resolved.** Stream A commits A1–A9 landed on `dev` between 2026-04-11 and 2026-04-12. The gap table below is retained as historical context; every item is now closed. See §8.1 for the per-task completion ledger.
+
 Gaps that block or bruise the Console build, ordered by severity:
 
 | # | Gap | Impact | Fix |
@@ -110,11 +112,11 @@ Gaps that block or bruise the Console build, ordered by severity:
 | **G7** | **Session-scoped trail streaming is undocumented.** The Console's oversight dashboard needs push-based trail updates per session. `StreamSignals` exists over gRPC and `/v1/ws` is generic, but no named session-trail channel is documented for the Console to subscribe to. | The Console backend reinvents a translation layer from gRPC streams to per-session WebSocket channels, duplicating logic the runtime could provide once. | Document a `subscribe_session_trail` RPC on `/v1/ws` or a scoped SSE endpoint. Implementation is a filter over the existing `HighwayService::stream_signals` (§4.4). |
 | **G8** | **No mock runtime binary.** `wacp-console/TECH_STACK_PROPOSAL.md` §7.3 specifies an in-process Tonic + Axum mock for integration tests. If Console-land builds its own, the mock will drift from the real runtime. | Console E2E ends up maintaining a parallel implementation of the runtime surface. Mock fidelity — an invariant the Console spec set relies on — is on the honor system. | Ship a `wacp-runtime --mock` mode (or a dedicated `wacp-mock-runtime` binary) that starts the full gRPC + REST stack against an in-memory backend seeded with fixture manifests (§4.5). |
 
-**G1–G5 block a clean Console build.** G6–G8 are soft gaps the Console can work around but at higher maintenance cost.
+**G1–G5 block a clean Console build.** G6–G8 are soft gaps the Console can work around but at higher maintenance cost. *(All resolved — see status note above.)*
 
-## 4. Runtime productionization (Stream A)
+## 4. Runtime productionization (Stream A) — COMPLETE
 
-This workstream closes G1–G8 and delivers the runtime as a versioned, installable artifact. It also completes the spirit of original Phase 29.1 ("public API surface") as a set of upstream changes.
+This workstream closes G1–G8 and delivers the runtime as a versioned, installable artifact. It also completes the spirit of original Phase 29.1 ("public API surface") as a set of upstream changes. **All sub-tasks (§4.1–§4.5, commits A1–A9) landed on `dev` as of 2026-04-12.** A codebase health audit on 2026-04-12 confirmed zero new failures introduced by Stream A; pre-existing CI failures (107 files of fmt drift, 1 test race, 24 clippy warnings) were resolved separately on 2026-04-13.
 
 ### 4.1 Canonical port map (G1)
 
@@ -385,7 +387,7 @@ All phases below are complete. Line items are pointers; full detail lives in com
 | 27R | Vertical wiring remediation — multi-vertical ecosystem loader, cross-vertical router, tool dispatch, end-to-end constraint enforcement | **Complete** | 35 cross-vertical tests |
 | 27S | Vertical surfacing — enriched `*_VERTICAL` descriptors, manifest generator, runtime manifest loader, `GET /v1/verticals[/{id}]` | **Complete** | 9 new transport + taxonomy tests |
 | **28** | IDE + chat bridge | **Pending** (Stream B) | — |
-| **29.1** | Runtime productionization + public API surface | **Pending** (Stream A) | — |
+| **29.1** | Runtime productionization + public API surface | **Complete** (Stream A, A1–A9) | 9 commits, CI-clean |
 | **29.2** | `wacp-console` Dashboard | **Pending** (separate repo) | — |
 
 ## 10. Open questions and risks

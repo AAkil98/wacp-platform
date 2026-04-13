@@ -14,6 +14,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
 use crate::TaxonomyError;
 
 // ---------------------------------------------------------------------------
@@ -22,6 +25,7 @@ use crate::TaxonomyError;
 
 /// Data type for context fields and checkpoint fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum FieldType {
     String,
@@ -36,6 +40,7 @@ pub enum FieldType {
 
 /// A typed field in a vertical's session-launch context schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ContextField {
     #[serde(rename = "type")]
     pub field_type: FieldType,
@@ -53,6 +58,7 @@ pub struct ContextField {
 
 /// Discriminant for tool-layer enforcement rules.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolPolicyKind {
     RequiresCheckpoint,
@@ -64,6 +70,7 @@ pub enum ToolPolicyKind {
 /// A tool-layer policy rule — describes how a vertical enforces a pre-condition
 /// before allowing a tool to execute.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ToolPolicy {
     pub kind: ToolPolicyKind,
     pub description: String,
@@ -93,6 +100,7 @@ pub struct ToolPolicy {
 
 /// A field within a vertical-specific checkpoint type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CheckpointField {
     pub name: String,
     #[serde(rename = "type")]
@@ -104,6 +112,7 @@ pub struct CheckpointField {
 
 /// Schema for a vertical-specific checkpoint type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct CheckpointSchema {
     pub description: String,
     pub fields: Vec<CheckpointField>,
@@ -115,6 +124,7 @@ pub struct CheckpointSchema {
 
 /// A quality criterion — serialisable view of a quality dimension (no eval fn).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct QualityCriterion {
     pub id: String,
     pub name: String,
@@ -128,6 +138,7 @@ pub struct QualityCriterion {
 
 /// Declarative task type descriptor with representative detection keywords.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct TaskTypeDescriptor {
     pub id: String,
     pub name: String,
@@ -142,6 +153,7 @@ pub struct TaskTypeDescriptor {
 
 /// Summary of a vertical's workflow.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct WorkflowSummary {
     pub id: String,
     pub name: String,
@@ -152,6 +164,7 @@ pub struct WorkflowSummary {
 
 /// Summary of a vertical's agent profile.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ProfileSummary {
     pub role_id: String,
     pub autonomy: String,
@@ -159,6 +172,7 @@ pub struct ProfileSummary {
 
 /// Summary of a vertical's tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ToolSummary {
     pub name: String,
     pub description: String,
@@ -174,6 +188,7 @@ pub struct ToolSummary {
 /// context schema, tool policies, checkpoint schemas, quality criteria,
 /// task types, and summaries of workflows, profiles, and tools.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct VerticalManifest {
     pub id: String,
     pub name: String,

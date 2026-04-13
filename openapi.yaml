@@ -192,6 +192,10 @@ paths:
       responses:
         '200':
           description: Vertical manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerticalManifest'
         '404':
           description: Not found
           content:
@@ -393,6 +397,60 @@ components:
           type: integer
           format: int64
           minimum: 0
+    CheckpointField:
+      type: object
+      description: A field within a vertical-specific checkpoint type.
+      required:
+      - name
+      - type
+      - description
+      properties:
+        description:
+          type: string
+        enum_values:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/FieldType'
+    CheckpointSchema:
+      type: object
+      description: Schema for a vertical-specific checkpoint type.
+      required:
+      - description
+      - fields
+      properties:
+        description:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckpointField'
+    ContextField:
+      type: object
+      description: A typed field in a vertical's session-launch context schema.
+      required:
+      - type
+      - required
+      - description
+      properties:
+        default: {}
+        description:
+          type: string
+        enum_values:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        required:
+          type: boolean
+        type:
+          $ref: '#/components/schemas/FieldType'
     DispatchBody:
       type: object
       required:
@@ -434,6 +492,14 @@ components:
       properties:
         action:
           type: string
+    FieldType:
+      type: string
+      description: Data type for context fields and checkpoint fields.
+      enum:
+      - string
+      - number
+      - boolean
+      - enum
     GateResponseBody:
       type: object
       required:
@@ -487,6 +553,35 @@ components:
           type: string
         result:
           type: string
+    ProfileSummary:
+      type: object
+      description: Summary of a vertical's agent profile.
+      required:
+      - role_id
+      - autonomy
+      properties:
+        autonomy:
+          type: string
+        role_id:
+          type: string
+    QualityCriterion:
+      type: object
+      description: A quality criterion — serialisable view of a quality dimension (no eval fn).
+      required:
+      - id
+      - name
+      - description
+      - weight
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        weight:
+          type: number
+          format: double
     SubmitGoalBody:
       type: object
       required:
@@ -510,6 +605,92 @@ components:
           format: int32
         task_id:
           type: string
+    TaskTypeDescriptor:
+      type: object
+      description: Declarative task type descriptor with representative detection keywords.
+      required:
+      - id
+      - name
+      - description
+      - workflow_id
+      - keywords
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        name:
+          type: string
+        workflow_id:
+          type: string
+    ToolPolicy:
+      type: object
+      description: |-
+        A tool-layer policy rule — describes how a vertical enforces a pre-condition
+        before allowing a tool to execute.
+      required:
+      - kind
+      - description
+      properties:
+        blocked_classifications:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        budget_field:
+          type:
+          - string
+          - 'null'
+        checkpoint_type:
+          type:
+          - string
+          - 'null'
+        description:
+          type: string
+        expires_after_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        gate_condition:
+          type:
+          - string
+          - 'null'
+        kind:
+          $ref: '#/components/schemas/ToolPolicyKind'
+        matching_field:
+          type:
+          - string
+          - 'null'
+        override_flag:
+          type:
+          - string
+          - 'null'
+    ToolPolicyKind:
+      type: string
+      description: Discriminant for tool-layer enforcement rules.
+      enum:
+      - requires_checkpoint
+      - requires_gate
+      - budget_limited
+      - classification_gated
+    ToolSummary:
+      type: object
+      description: Summary of a vertical's tool.
+      required:
+      - name
+      - description
+      properties:
+        description:
+          type: string
+        name:
+          type: string
     TrailEntryItem:
       type: object
       required:
@@ -523,6 +704,63 @@ components:
           type: string
         workspace_id:
           type: string
+    VerticalManifest:
+      type: object
+      description: |-
+        A complete vertical manifest — loaded from `vertical.yaml`.
+
+        Contains all domain metadata needed to configure and operate a session:
+        context schema, tool policies, checkpoint schemas, quality criteria,
+        task types, and summaries of workflows, profiles, and tools.
+      required:
+      - id
+      - name
+      - defining_constraint
+      properties:
+        checkpoint_types:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CheckpointSchema'
+          propertyNames:
+            type: string
+        context_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ContextField'
+          propertyNames:
+            type: string
+        defining_constraint:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileSummary'
+        quality_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualityCriterion'
+        task_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskTypeDescriptor'
+        tool_policies:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ToolPolicy'
+          propertyNames:
+            type: string
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSummary'
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummary'
     VerticalSummary:
       type: object
       description: Summary of a vertical — returned by `GET /v1/verticals`.
@@ -548,6 +786,30 @@ components:
           minimum: 0
         workflow_count:
           type: integer
+          minimum: 0
+    WorkflowSummary:
+      type: object
+      description: Summary of a vertical's workflow.
+      required:
+      - id
+      - name
+      - description
+      - stage_count
+      - gated_stage_count
+      properties:
+        description:
+          type: string
+        gated_stage_count:
+          type: integer
+          format: int32
+          minimum: 0
+        id:
+          type: string
+        name:
+          type: string
+        stage_count:
+          type: integer
+          format: int32
           minimum: 0
     WorkspaceResponse:
       type: object

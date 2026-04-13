@@ -259,6 +259,9 @@ impl E2eHarness {
                     client_request_id: String::new(),
                 }));
             }
+            HighwayRequest::ListWorkspaces { reply, .. } => {
+                let _ = reply.send(Ok(vec![]));
+            }
         }
     }
 }

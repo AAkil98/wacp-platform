@@ -14,7 +14,7 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 
 **Specification: complete.** 20 protocol specs, 10 implementation specs, 6 ecosystem specs (SWE, DevOps, MLOps, Finance, Healthcare, Analytics, Data Science). Zero unresolved coverage gaps (audit 2026-03-22, gaps resolved 2026-03-24). All three conformance levels (Level 1–3) have implementation guidance.
 
-**Runtime (Phases 0–19 + T1–T5): complete.** 12 Rust crates, 1,192 runtime tests across 3 ecosystems (947 Rust, 181 TypeScript, 64 Python). The runtime binary starts a gRPC server with three services (AgentService, HighwayService, CoordinatorService), manages workspaces, enforces the protocol, and records everything in a hash-chained trail.
+**Runtime (Phases 0–19 + T1–T5): complete.** 12 Rust crates, 1,340 Rust runtime tests + 181 TypeScript + 104 Python. The runtime binary starts a gRPC server with three services (AgentService, HighwayService, CoordinatorService), manages workspaces, enforces the protocol, and records everything in a hash-chained trail.
 
 **Middleware (Phases 20–24): complete.** 7 frameworks implemented — tool framework, LLM adapters, agent SDK v2, coordinator SDK, local SDK, security, transport extensions. See details below.
 
@@ -37,6 +37,10 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 2. **Protocol specs extracted to sibling repo** (commit `ef20421`) — the `protocol/` subtree (22 files, 20 specs + `PROTOCOL.md` + `TAXONOMY.md`) was extracted via `git filter-repo` into a new repo at [`github.com/Madahub-dev/wacp-protocol`](https://github.com/Madahub-dev/wacp-protocol) **licensed CC BY-SA 4.0**. This repo (`Madahub-dev/wacp`) is now uniformly **Apache-2.0**: root `LICENSE` replaced, `NOTICE` file added, 10 TypeScript `package.json` files given explicit `"license": "Apache-2.0"` (they previously declared nothing), 15 markdown cross-references in `impl/*.md` updated to absolute URLs in the sibling repo. Resolves a three-way license drift that predated this session. Local clone of the sibling repo is at `/home/aakil98/mada/wacp-protocol/`.
 
 3. **Console Q1–Q6 folded into `IMPLEMENTATION.md`** (commit `199dee0`) — `wacp-console/TECH_STACK_PROPOSAL.md` §10 Q1–Q7 are all answered. Runtime-side impacts integrated: §3.2 notes Q2/Q3 compatibility (existing auth + TLS are sufficient), §4.2 commits Stream A to `cargo-dist` with 5 channels and Tier 1/Tier 2 matrix matching Console §5.2, §5 flags Q2's 7-Console-side-spec-revision blocker, new §5.1 table records all 7 Q decisions with runtime-side impact for future-session lookup.
+
+**Stream A (runtime productionization, 2026-04-11 → 2026-04-12): complete.** 9 tasks (A1–A9) landed on `dev` in commits `7ed2db0`–`3c24743`. All 8 Console-blocking gaps (G1–G8 in `IMPLEMENTATION.md` §3.3) are resolved: canonical port map, CI matrix expansion, release pipeline, crates.io metadata for `wacp-types` + `wacp-taxonomy`, utoipa OpenAPI annotations + `gen_openapi` binary + CI drift check, `GET /v1/sessions/{id}/workspaces`, `subscribe_session_trail` on `/v1/ws`, and `wacp-mock-runtime` binary with fixture loader.
+
+**Codebase health audit + CI cleanup (2026-04-12 → 2026-04-13): complete.** `AUDIT-2026-04-12.md` catalogued pre-existing CI debt. Resolved in 5 commits (`6bd0f9c`–`bd4f821`): `cargo fmt --all` (107 files), early-return fix for a cancellation race in `wacp-tools`, and 24 clippy warnings across 8 crates. The `dev` branch is **CI-clean**: `cargo fmt --check --all`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` (1,340 tests) all pass with zero failures.
 
 ## Repository Map
 
@@ -182,11 +186,12 @@ See `IMPLEMENTATION.md` — now the forward strategy, not a phase-by-phase plan.
 | 27R | Vertical wiring (multi-vertical ecosystem loader, cross-vertical router, tool dispatch) | **Complete** |
 | 27S | Vertical surfacing + `GET /v1/verticals[/{id}]` REST endpoint | **Complete** |
 | — | Forward strategy rewrite + protocol split + Apache-2.0 relicense | **Complete** (`1b8d6e5`, `ef20421`, `199dee0`) |
-| **Stream A** | Runtime productionization — ports, CI, release pipeline, OpenAPI, mock binary | **A1 complete — resume at task A2** |
-| **Stream B** | Phase 28 — IDE + chat bridge (parallel to Stream A, no hard dependency) | **Pending — can start in parallel** |
-| 29.2 | Dashboard (≡ `wacp-console` sibling repo, separate project) | **Pending** — blocked on Console-side Q2 spec revisions, independent of Stream A |
+| **Stream A** | Runtime productionization — ports, CI, release pipeline, OpenAPI, mock binary | **Complete** (A1–A9, `7ed2db0`–`3c24743`) |
+| — | Codebase health audit + CI cleanup | **Complete** (`AUDIT-2026-04-12.md`, `6bd0f9c`–`bd4f821`) |
+| **Stream B** | Phase 28 — IDE + chat bridge (parallel, no hard dependency) | **Pending — can start any time** |
+| 29.2 | Dashboard (≡ `wacp-console` sibling repo, separate project) | **Pending** — blocked on Console-side Q2 spec revisions; upstream gaps resolved |
 
-Stream A task list is in `IMPLEMENTATION.md` §8.1 (A1–A9). Stream B task list is in §8.2 (B1–B6).
+Stream A task list is in `IMPLEMENTATION.md` §8.1 (A1–A9, all done). Stream B task list is in §8.2 (B1–B6).
 
 **Resumption notes for the next session:**
 
@@ -196,20 +201,22 @@ Stream A task list is in `IMPLEMENTATION.md` §8.1 (A1–A9). Stream B task list
 - Each `*_VERTICAL` descriptor has 6 typed fields from 27S: `defining_constraint`, `context_schema`, `tool_policies`, `checkpoint_types`, `quality_criteria`, `task_types`. Manifest generator (`scripts/generate-manifests.ts`) reads these and writes `ecosystem/{id}/vertical.yaml`. The runtime loads them via `taxonomy.verticals_dir`.
 - Adding an 8th vertical: standard package layout, export `<UPPER>_VERTICAL` from `index.ts`, add to `REGISTRY` + `DEFAULT_LOAD_ORDER` in `packages/wacp-cli/src/ecosystem.ts`, add dep in `packages/wacp-cli/package.json`.
 
-*Repo state (as of end of session 2026-04-11):*
-- `origin/dev` is at `199dee0` (3 session commits: `1b8d6e5`, `ef20421`, `199dee0` on top of the Phase 27S baseline `23395aa`). All pushed to `github.com/Madahub-dev/wacp`.
+*Repo state (as of end of session 2026-04-13):*
+- `dev` is at `bd4f821` — 20 commits ahead of the Phase 27S baseline. Stream A (A1–A9) + audit cleanup all landed. The branch is CI-clean.
 - `origin/main` on GitHub is still ancient at `7f6a330` (pre-Phase-20). **Deliberately not updated.** If future work should be on `main`, either `git checkout main && git merge dev && git push` or continue on `dev`.
 - Sibling repo **`github.com/Madahub-dev/wacp-protocol`** (public, CC BY-SA 4.0) is live with `main` branch. Contains `PROTOCOL.md`, `TAXONOMY.md`, and 20 protocol specs in `primitives/`, `foundations/`, `mechanisms/`, `topology/`. Local clone at `/home/aakil98/mada/wacp-protocol/`. Cross-references in this repo's `impl/*.md` footers point at its GitHub URLs.
-- Sibling project **`wacp-console`** at `/home/aakil98/mada/wacp-console/` is **uninitialized** (zero commits, no remote). Spec set drafted: `SPEC_BUILD.md` + `TECH_STACK_PROPOSAL.md` (all 7 Q answers landed including Q7 resolution note) + draft specs in `specs/`. **Working tree has uncommitted edits** on `TECH_STACK_PROPOSAL.md` Q7 advisory and `SPEC_BUILD.md` "Upstream WACP License Clarification" section reflecting the Q7 resolution. Not committed — the user will seed the first commit when ready.
+- Sibling project **`wacp-console`** at `/home/aakil98/mada/wacp-console/` is **uninitialized** (zero commits, no remote). Contents: `SPEC_BUILD.md` (spec map + ADR-001), `TECH_STACK_PROPOSAL.md` (Q1–Q7 all answered), `STATUS.md` (upstream state of affairs as of 2026-04-13), 11 draft specs in `specs/`. Not committed — the user will seed the first commit when ready.
 
 *Where to start work:*
-- **Stream A — A1 (port alignment) complete.** Canonical port map `agent=9090, highway=9091, coordinator=9092, rest=9093, health=9094, metrics=9095` is enforced across `config.rs`, `grpc_server.rs`, `Dockerfile`, `deploy/wacp-runtime.service`, `runtime-manager.ts`, and all test fixtures. `rest_listen` added to `ServerConfig` (the REST gateway Router exists but is not yet served on its own port — wiring is a future task). **Resume at A2 (CI matrix).**
-- **Stream B — independent.** Phase 28 (IDE + chat bridge) can start whenever. Depends only on a reachable runtime, which works locally via `cargo run --bin wacp-runtime` today. No need to wait for Stream A.
-- **`wacp-console` is blocked** on 7 Console-side spec revisions driven by Q2 (multi-user auth in Phase 1): new `wcon-auth` spec + updates to `wcon-architecture` §8, `wcon-data-model` §5, `wcon-api`, `wcon-profiles`, `wcon-sessions`, `wcon-ui`. See `IMPLEMENTATION.md` §5 step 1 for the full list. This is Console-side work, independent of Stream A — runtime productionization and Console spec work can proceed in parallel.
+- **Stream A — complete.** All 9 tasks (A1–A9) done. CI-clean. No remaining runtime productionization work.
+- **Stream B — ready to start.** Phase 28 (IDE + chat bridge) can begin. Depends only on a reachable runtime, which works locally via `cargo run --bin wacp-runtime` today. `IMPLEMENTATION.md` §8.2 has the task list (B1–B6). Recommended start: B4 (chat bridge scaffolding) — smaller scope, validates the runtime-as-service model.
+- **`wacp-console` — blocked on spec revisions.** The 7 Console-side spec revisions driven by Q2 (multi-user auth in Phase 1) are the critical path: new `wcon-auth` spec + updates to `wcon-architecture` §8, `wcon-data-model` §5, `wcon-api`, `wcon-profiles`, `wcon-sessions`, `wcon-ui`. See `IMPLEMENTATION.md` §5 step 1 and `wacp-console/STATUS.md` for the full breakdown. All upstream gaps are resolved — this is purely Console-side spec maturation. First step: `/glossary` to establish canonical Console terminology.
+- **`dev` → `main` merge** is available whenever the user decides. The branches have diverged significantly (20+ commits). A PR or direct merge-and-push would bring `main` current.
 
 *Other known state (not blocking but worth knowing):*
 - `LAYER-MAPPING.md` is a historical planning doc from early Phase 20 but is still referenced by 11 `impl/*.md` specs via `lineage:` frontmatter and References tables — left in place to avoid breaking cross-refs.
 - 35 Rust source files have `(PROTOCOL.md §X.Y)` prose citations in doc comments. Those were NOT updated in the repo split — they're English prose references, not markdown links, and editing 35 files for cosmetic alignment would be churn. Readers mentally map them to the `wacp-protocol` sibling repo; the `NOTICE` file and README make that pointer explicit.
+- `serde_yaml` 0.9 is in maintenance mode (dtolnay archived the repo). No CVEs, but worth migrating to `serde_yml` when convenient. See `AUDIT-2026-04-12.md` §6.
 
 ---
 

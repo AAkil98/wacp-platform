@@ -37,6 +37,10 @@ pub struct GrpcServerHandles {
     pub agent_request_rx: mpsc::Receiver<AgentRequest>,
     pub highway_request_rx: mpsc::Receiver<HighwayRequest>,
     pub coordinator_request_rx: mpsc::Receiver<CoordinatorRequest>,
+    /// Cloned senders — used by the REST gateway's ChannelBackend to send
+    /// requests through the same channels the gRPC handlers use.
+    pub highway_request_tx: mpsc::Sender<HighwayRequest>,
+    pub coordinator_request_tx: mpsc::Sender<CoordinatorRequest>,
 }
 
 /// Start the gRPC server with agent, highway, and coordinator services.
@@ -47,6 +51,9 @@ pub async fn start_grpc_server(
     let (agent_tx, agent_rx) = mpsc::channel(256);
     let (highway_tx, highway_rx) = mpsc::channel(256);
     let (coordinator_tx, coordinator_rx) = mpsc::channel(256);
+
+    let highway_tx_clone = highway_tx.clone();
+    let coordinator_tx_clone = coordinator_tx.clone();
 
     let agent_service = AgentServiceImpl::new(agent_tx);
     let highway_service = HighwayServiceImpl::new(highway_tx);
@@ -107,5 +114,7 @@ pub async fn start_grpc_server(
         agent_request_rx: agent_rx,
         highway_request_rx: highway_rx,
         coordinator_request_rx: coordinator_rx,
+        highway_request_tx: highway_tx_clone,
+        coordinator_request_tx: coordinator_tx_clone,
     })
 }

@@ -44,6 +44,10 @@ pub enum HighwayRequest {
         request: wacp_v1::GetCheckpointRequest,
         reply: tokio::sync::oneshot::Sender<Result<wacp_v1::CheckpointView, Status>>,
     },
+    ListWorkspaces {
+        parent_id: Option<String>,
+        reply: tokio::sync::oneshot::Sender<Result<Vec<crate::WorkspaceSummaryItem>, Status>>,
+    },
 }
 
 impl HighwayServiceImpl {

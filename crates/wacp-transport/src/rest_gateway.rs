@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use tower_http::cors::{Any, CorsLayer};
 use utoipa::ToSchema;
 use wacp_taxonomy::VerticalManifest;
 
@@ -92,6 +93,12 @@ impl GatewayError {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: msg.into(),
+        }
+    }
+    pub fn from_status(s: tonic::Status) -> Self {
+        Self {
+            status: grpc_to_http_status(s.code() as i32),
+            message: s.message().to_string(),
         }
     }
 }
@@ -235,7 +242,7 @@ pub struct BudgetResponse {
     pub max_cost_micros: u64,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct WorkspaceSummaryItem {
     pub id: String,
     pub parent_id: String,
@@ -278,6 +285,12 @@ impl RestGateway {
             .route("/v1/verticals", get(list_verticals_handler))
             .route("/v1/verticals/{id}", get(get_vertical_handler))
             .layer(Extension(verticals))
+            .layer(
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods(Any)
+                    .allow_headers(Any),
+            )
             .with_state(backend)
     }
 }
@@ -547,10 +560,21 @@ pub async fn respond_gate_handler(
     Path(id): Path<String>,
     Json(body): Json<GateResponseBody>,
 ) -> Result<StatusCode, GatewayError> {
+    let decision = match body.decision.as_str() {
+        "approve" => 1,
+        "reject" => 2,
+        "modify" => 3,
+        _ => {
+            return Err(GatewayError::bad_request(format!(
+                "invalid gate decision: '{}' (expected approve, reject, or modify)",
+                body.decision
+            )));
+        }
+    };
     backend
         .respond_to_gate(wacp_v1::GateResponse {
             gate_id: id,
-            decision: 0, // mapped from body.decision in production
+            decision,
             modifications: body.modification.into_bytes(),
             client_request_id: String::new(),
         })
@@ -569,12 +593,24 @@ pub async fn respond_gate_handler(
 pub async fn respond_escalation_handler(
     State(backend): State<GatewayState>,
     Path(id): Path<String>,
-    Json(_body): Json<EscalationResponseBody>,
+    Json(body): Json<EscalationResponseBody>,
 ) -> Result<StatusCode, GatewayError> {
+    let action = match body.action.as_str() {
+        "abort" => Some(wacp_v1::escalation_response::Action::Abort(true)),
+        "delegate" => Some(wacp_v1::escalation_response::Action::DelegateToCoordinator(
+            true,
+        )),
+        _ => {
+            return Err(GatewayError::bad_request(format!(
+                "invalid escalation action: '{}' (expected abort or delegate)",
+                body.action
+            )));
+        }
+    };
     backend
         .respond_to_escalation(wacp_v1::EscalationResponse {
             escalation_id: id,
-            action: None,
+            action,
             client_request_id: String::new(),
         })
         .await?;
@@ -665,7 +701,7 @@ pub async fn list_verticals_handler(
 #[utoipa::path(get, path = "/v1/verticals/{id}", tag = "verticals",
     params(("id" = String, Path, description = "Vertical ID")),
     responses(
-        (status = 200, description = "Vertical manifest"),
+        (status = 200, description = "Vertical manifest", body = VerticalManifest),
         (status = 404, description = "Not found", body = ErrorResponse),
     )
 )]

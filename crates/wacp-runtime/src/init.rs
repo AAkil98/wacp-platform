@@ -9,7 +9,7 @@ use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
 use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
-use wacp_transport::{GrpcServerConfig, start_grpc_server};
+use wacp_transport::{GrpcServerConfig, RestGateway, start_grpc_server};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
 
@@ -132,6 +132,37 @@ impl Runtime {
             "gRPC endpoints listening"
         );
 
+        // 9. Start REST gateway + WebSocket on the configured address.
+        let rest_addr: SocketAddr = config
+            .server
+            .rest_listen
+            .parse()
+            .map_err(|e| RuntimeError::Transport(format!("invalid REST address: {e}")))?;
+
+        let backend: std::sync::Arc<dyn wacp_transport::GatewayBackend> =
+            crate::channel_backend::ChannelBackend::new(
+                grpc_handles.highway_request_tx,
+                grpc_handles.coordinator_request_tx,
+            );
+        let rest_router = RestGateway::router(backend.clone(), verticals.clone());
+        let ws_router = axum::Router::new()
+            .route(
+                "/v1/ws",
+                axum::routing::get(wacp_transport::websocket::ws_handler),
+            )
+            .with_state(backend);
+        let app = rest_router.merge(ws_router);
+
+        tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::bind(rest_addr)
+                .await
+                .expect("REST gateway bind failed");
+            tracing::info!(addr = %rest_addr, "REST + WebSocket gateway listening");
+            axum::serve(listener, app)
+                .await
+                .expect("REST gateway failed");
+        });
+
         Ok(Runtime {
             config,
             coordinator,
@@ -207,6 +238,17 @@ impl Runtime {
                     }
                 } => {
                     self.handle_highway_request(req).await;
+                }
+
+                // Process coordinator requests (gRPC + REST gateway).
+                Some(req) = async {
+                    if let Some(ref mut rx) = self.coordinator_request_rx {
+                        rx.recv().await
+                    } else {
+                        std::future::pending().await
+                    }
+                } => {
+                    self.handle_coordinator_request(req).await;
                 }
 
                 // Shutdown signal.
@@ -377,6 +419,108 @@ impl Runtime {
             }
             HighwayRequest::GetCheckpoint { reply, .. } => {
                 let _ = reply.send(Err(tonic::Status::not_found("checkpoint not found")));
+            }
+            HighwayRequest::ListWorkspaces { parent_id, reply } => {
+                let items: Vec<wacp_transport::WorkspaceSummaryItem> = self
+                    .coordinator
+                    .tree
+                    .active_workspaces()
+                    .iter()
+                    .filter_map(|ws_id| {
+                        let node = self.coordinator.tree.get(ws_id)?;
+                        let node_parent = node.parent.as_ref().map(|p| p.to_string());
+                        if let Some(ref filter) = parent_id
+                            && node_parent.as_deref() != Some(filter)
+                        {
+                            return None;
+                        }
+                        Some(wacp_transport::WorkspaceSummaryItem {
+                            id: ws_id.to_string(),
+                            parent_id: node_parent.unwrap_or_default(),
+                            state: node.status as i32,
+                            owner: node.owner.to_string(),
+                            task_id: node
+                                .task_id
+                                .as_ref()
+                                .map(|t| t.to_string())
+                                .unwrap_or_default(),
+                        })
+                    })
+                    .collect();
+                let _ = reply.send(Ok(items));
+            }
+        }
+    }
+
+    /// Handle a coordinator gRPC/REST request.
+    async fn handle_coordinator_request(&mut self, req: wacp_transport::CoordinatorRequest) {
+        use wacp_transport::CoordinatorRequest;
+
+        match req {
+            CoordinatorRequest::SubmitGoal { request, reply } => {
+                let goal_id = format!("goal-{}", request.description.len());
+                let response = wacp_transport::wacp_v1::SubmitGoalResponse {
+                    goal_id: goal_id.clone(),
+                    root_workspace_id: "ws-root".into(),
+                };
+                let _ = reply.send(Ok(response));
+            }
+            CoordinatorRequest::GetReadyTasks { reply, .. } => {
+                let response = wacp_transport::wacp_v1::GetReadyTasksResponse { tasks: vec![] };
+                let _ = reply.send(Ok(response));
+            }
+            CoordinatorRequest::Dispatch { request, reply } => {
+                let ws_id = format!("ws-{}", request.task_id);
+                let response = wacp_transport::wacp_v1::DispatchResponse {
+                    workspace_id: ws_id,
+                    task_id: request.task_id,
+                };
+                let _ = reply.send(Ok(response));
+            }
+            CoordinatorRequest::AbortWorkspace { request, reply } => {
+                let ws_id = WorkspaceId::from(request.workspace_id.as_str());
+                self.coordinator.abort_workspace(&ws_id).await;
+                let _ = reply.send(Ok(
+                    wacp_transport::wacp_v1::AbortWorkspaceResponse::default(),
+                ));
+            }
+            CoordinatorRequest::SuspendWorkspace { reply, .. } => {
+                let _ = reply.send(Ok(
+                    wacp_transport::wacp_v1::SuspendWorkspaceResponse::default(),
+                ));
+            }
+            CoordinatorRequest::ResumeWorkspace { reply, .. } => {
+                let _ = reply.send(Ok(
+                    wacp_transport::wacp_v1::ResumeWorkspaceResponse::default(),
+                ));
+            }
+            CoordinatorRequest::Decompose { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::DecomposeResponse::default()));
+            }
+            CoordinatorRequest::CancelTask { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::CancelTaskResponse::default()));
+            }
+            CoordinatorRequest::SendDirective { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::SendDirectiveResponse::default()));
+            }
+            CoordinatorRequest::SendFeedback { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::SendFeedbackResponse::default()));
+            }
+            CoordinatorRequest::TriggerIntegration { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::TriggerIntegrationResponse {
+                    result: "accepted".into(),
+                    detail: String::new(),
+                }));
+            }
+            CoordinatorRequest::GetAllocatable { reply, .. } => {
+                let _ = reply.send(Ok(wacp_transport::wacp_v1::GetAllocatableResponse {
+                    remaining: None,
+                }));
+            }
+            CoordinatorRequest::StreamSignals { .. } => {
+                // Signal streaming is a long-lived stream — the sender is
+                // dropped immediately here, closing the stream. Future work
+                // will wire this to the coordinator's signal bus.
             }
         }
     }

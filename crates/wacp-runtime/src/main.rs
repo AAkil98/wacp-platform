@@ -1,4 +1,5 @@
 mod agent;
+mod channel_backend;
 pub mod config;
 pub mod health;
 mod init;

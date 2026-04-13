@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 wacp-types = { path = "../wacp-types" }
-wacp-taxonomy = { path = "../wacp-taxonomy" }
+wacp-taxonomy = { path = "../wacp-taxonomy", features = ["openapi"] }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tonic = { workspace = true, features = ["tls-ring"] }
@@ -21,6 +21,7 @@ serde_json = { workspace = true }
 utoipa = { version = "5", features = ["axum_extras", "yaml"] }
 futures = { workspace = true }
 tokio-stream = "0.1"
+tower-http = { version = "0.6", features = ["cors"] }
 
 [dev-dependencies]
 tokio = { workspace = true }

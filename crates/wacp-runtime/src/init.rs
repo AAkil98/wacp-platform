@@ -894,8 +894,31 @@ impl Runtime {
 
         match req {
             HighwayRequest::Authenticate { request, reply } => {
+                let token = request.auth_token.trim();
+                if token.is_empty() {
+                    let _ = reply.send(Err(tonic::Status::unauthenticated(
+                        "auth_token is required",
+                    )));
+                    return;
+                }
+                if token.len() < 8 {
+                    let _ = reply.send(Err(tonic::Status::unauthenticated(
+                        "auth_token too short (minimum 8 characters)",
+                    )));
+                    return;
+                }
+
+                // Derive a stable user_id from the token via truncated SHA-256.
+                let mut hasher = Sha256::new();
+                hasher.update(token.as_bytes());
+                let hash = hasher.finalize();
+                let user_id = format!(
+                    "user-{}",
+                    hash[..8].iter().map(|b| format!("{b:02x}")).collect::<String>()
+                );
+
                 let response = wacp_transport::wacp_v1::AuthenticateResponse {
-                    user_id: format!("user-{}", request.auth_token),
+                    user_id,
                     capabilities: vec!["observe".into(), "inject".into(), "gate".into()],
                 };
                 let _ = reply.send(Ok(response));

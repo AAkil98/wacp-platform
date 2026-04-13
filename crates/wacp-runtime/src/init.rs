@@ -442,11 +442,24 @@ impl Runtime {
                 from,
                 to,
             } => {
+                let trigger = match to {
+                    WorkspaceState::Active if *from == WorkspaceState::Idle => "dispatched",
+                    WorkspaceState::Active if *from == WorkspaceState::Suspended => "resumed",
+                    WorkspaceState::Active => "activated",
+                    WorkspaceState::Suspended => "suspended",
+                    WorkspaceState::Blocked => "blocked",
+                    WorkspaceState::Migrating => "migrating",
+                    WorkspaceState::Integrating => "integrating",
+                    WorkspaceState::Conflicted => "conflicted",
+                    WorkspaceState::Closed => "closed",
+                    WorkspaceState::Failed => "failed",
+                    WorkspaceState::Idle => "reset",
+                };
                 let proto_ev = Ok(wacp_v1::WorkspaceStateChange {
                     workspace_id: workspace_id.to_string(),
                     previous: *from as i32,
                     current: *to as i32,
-                    trigger: String::new(),
+                    trigger: trigger.into(),
                     timestamp: None,
                 });
                 self.ws_change_subs

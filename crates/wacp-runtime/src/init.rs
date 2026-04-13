@@ -5,12 +5,16 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
 use std::time::Instant;
 
+use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use wacp_coordinator::Coordinator;
 use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
-use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
+use wacp_trail::{
+    CheckpointStorage, FileCheckpointStorage, FileTrailConfig, FileTrailStorage,
+    InMemoryCheckpointStorage, InMemoryTrailStorage,
+};
 use wacp_transport::rest_gateway::RuntimeHealth;
 use wacp_transport::{GrpcServerConfig, RestGateway, start_grpc_server};
 use wacp_types::*;
@@ -56,6 +60,14 @@ pub struct Runtime {
     gate_subs: Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::GateEvent, tonic::Status>>>,
     escalation_subs:
         Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::EscalationEvent, tonic::Status>>>,
+
+    // Checkpoint content-addressable store.
+    checkpoint_storage: Arc<dyn CheckpointStorage>,
+
+    // Monotonic counters for ID generation.
+    next_envelope_id: u64,
+    next_checkpoint_id: u64,
+    stream_seq: u64,
 }
 
 impl Runtime {
@@ -97,6 +109,12 @@ impl Runtime {
             in_flight_envelopes = recovered.in_flight_envelopes.len(),
             last_sequence = recovered.last_sequence,
             "recovery completed"
+        );
+
+        // 4b. Open checkpoint content-addressable store.
+        let checkpoint_storage: Arc<dyn CheckpointStorage> = Arc::new(
+            FileCheckpointStorage::open(data_dir.join("checkpoints"))
+                .map_err(|e| RuntimeError::Storage(e.to_string()))?,
         );
 
         // 5. Build permission engine from taxonomy.
@@ -199,6 +217,10 @@ impl Runtime {
             trail_subs: Vec::new(),
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
+            checkpoint_storage,
+            next_envelope_id: 0,
+            next_checkpoint_id: 0,
+            stream_seq: 0,
         })
     }
 
@@ -233,6 +255,10 @@ impl Runtime {
             trail_subs: Vec::new(),
             gate_subs: Vec::new(),
             escalation_subs: Vec::new(),
+            checkpoint_storage: Arc::new(InMemoryCheckpointStorage::new()),
+            next_envelope_id: 0,
+            next_checkpoint_id: 0,
+            stream_seq: 0,
         })
     }
 
@@ -310,6 +336,38 @@ impl Runtime {
                 });
                 self.signal_subs
                     .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+
+                // Escalation signals also fan out to escalation subscribers.
+                if signal.signal_type == SignalType::Escalation {
+                    let owner = self
+                        .coordinator
+                        .tree
+                        .get(&signal.workspace_id)
+                        .map(|n| n.owner.to_string())
+                        .unwrap_or_default();
+                    self.stream_seq += 1;
+                    let esc_ev = Ok(wacp_v1::EscalationEvent {
+                        escalation_id: format!("esc-{}", self.stream_seq),
+                        workspace_id: signal.workspace_id.to_string(),
+                        owner,
+                        context: signal.context.clone().unwrap_or_default(),
+                        created_at: None,
+                    });
+                    self.escalation_subs
+                        .retain(|tx| tx.try_send(esc_ev.clone()).is_ok());
+                }
+
+                // All signals are trail-worthy.
+                self.emit_trail_entry(
+                    signal.workspace_id.as_ref(),
+                    "signal",
+                    serde_json::json!({
+                        "signal_type": format!("{:?}", signal.signal_type),
+                        "reason": signal.reason,
+                    })
+                    .to_string()
+                    .into_bytes(),
+                );
             }
             WorkspaceEvent::StateChanged {
                 workspace_id,
@@ -325,9 +383,94 @@ impl Runtime {
                 });
                 self.ws_change_subs
                     .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+
+                self.emit_trail_entry(
+                    workspace_id.as_ref(),
+                    "state_changed",
+                    serde_json::json!({
+                        "from": format!("{from:?}"),
+                        "to": format!("{to:?}"),
+                    })
+                    .to_string()
+                    .into_bytes(),
+                );
             }
-            _ => {}
+            WorkspaceEvent::CheckpointCreated(cp) => {
+                self.emit_trail_entry(
+                    cp.workspace_id.as_ref(),
+                    "checkpoint_created",
+                    serde_json::json!({
+                        "checkpoint_id": cp.id.to_string(),
+                        "checkpoint_type": cp.checkpoint_type,
+                        "content_hash": cp.content_hash,
+                        "intent": cp.intent,
+                        "status": format!("{:?}", cp.status),
+                    })
+                    .to_string()
+                    .into_bytes(),
+                );
+            }
+            WorkspaceEvent::Terminated(archived) => {
+                // Terminal state change for workspace change subscribers.
+                let proto_ev = Ok(wacp_v1::WorkspaceStateChange {
+                    workspace_id: archived.id.to_string(),
+                    previous: 0, // unknown prior state
+                    current: archived.terminal_state as i32,
+                    trigger: "terminated".into(),
+                    timestamp: None,
+                });
+                self.ws_change_subs
+                    .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+
+                self.emit_trail_entry(
+                    archived.id.as_ref(),
+                    "terminated",
+                    serde_json::json!({
+                        "terminal_state": format!("{:?}", archived.terminal_state),
+                        "checkpoints": archived.checkpoints.len(),
+                    })
+                    .to_string()
+                    .into_bytes(),
+                );
+            }
+            WorkspaceEvent::Error {
+                workspace_id,
+                message,
+            } => {
+                self.emit_trail_entry(
+                    workspace_id.as_ref(),
+                    "error",
+                    serde_json::json!({ "message": message })
+                        .to_string()
+                        .into_bytes(),
+                );
+            }
+            WorkspaceEvent::MigrationSnapshot {
+                workspace_id,
+                snapshot: _,
+            } => {
+                self.emit_trail_entry(workspace_id.as_ref(), "migration_snapshot", Vec::new());
+            }
         }
+    }
+
+    /// Emit a trail entry to all active trail stream subscribers.
+    fn emit_trail_entry(&mut self, workspace_id: &str, event_type: &str, body: Vec<u8>) {
+        use wacp_transport::wacp_v1;
+
+        self.stream_seq += 1;
+        let entry = Ok(wacp_v1::TrailEntry {
+            id: format!("te-{}", self.stream_seq),
+            timestamp: None,
+            workspace_id: workspace_id.to_string(),
+            actor: "protocol".into(),
+            event_type: event_type.into(),
+            body,
+            sequence_number: self.stream_seq,
+            chain_hash: Vec::new(),
+        });
+        self.trail_subs
+            .retain(|tx| tx.try_send(entry.clone()).is_ok());
     }
 
     /// Graceful shutdown — abort all active workspaces, wait for termination.
@@ -395,38 +538,89 @@ impl Runtime {
                 };
                 let _ = reply.send(Ok(response));
             }
-            AgentRequest::SendEnvelope { request, reply, .. } => {
-                let envelope_id =
-                    format!("env-{}", self.coordinator.tree.active_workspaces().len());
+            AgentRequest::SendEnvelope {
+                workspace_id,
+                request,
+                reply,
+            } => {
+                let from_ws = WorkspaceId::from(workspace_id.as_str());
                 let to_ws = WorkspaceId::from(request.to_workspace.as_str());
-                if self.coordinator.tree.get(&to_ws).is_some() {
-                    let response = wacp_transport::wacp_v1::SendEnvelopeResponse {
-                        envelope_id,
-                        timestamp: None,
-                        client_request_id: String::new(),
-                    };
-                    let _ = reply.send(Ok(response));
-                } else {
+
+                // Validate target exists in the tree.
+                if self.coordinator.tree.get(&to_ws).is_none() {
                     let _ = reply.send(Err(tonic::Status::not_found(format!(
                         "target workspace '{}' not found",
                         request.to_workspace
                     ))));
+                    return;
+                }
+
+                let env_id = self.next_envelope_id;
+                self.next_envelope_id += 1;
+                let envelope_id = EnvelopeId::from(format!("env-{env_id}"));
+
+                let priority = match request.priority {
+                    2 => EnvelopePriority::Urgent,
+                    3 => EnvelopePriority::Blocking,
+                    _ => EnvelopePriority::Normal,
+                };
+
+                let envelope = Envelope {
+                    id: envelope_id.clone(),
+                    from_workspace: from_ws,
+                    to_workspace: to_ws.clone(),
+                    envelope_type: request.r#type,
+                    payload: request.payload,
+                    in_reply_to: if request.in_reply_to.is_empty() {
+                        None
+                    } else {
+                        Some(EnvelopeId::from(request.in_reply_to.as_str()))
+                    },
+                    timestamp: 0,
+                    priority,
+                    origin: EnvelopeOrigin::Agent,
+                    state: EnvelopeState::Created,
+                };
+
+                // Route through the coordinator to the target workspace actor.
+                if self.coordinator.route_envelope(&to_ws, envelope).await {
+                    let response = wacp_transport::wacp_v1::SendEnvelopeResponse {
+                        envelope_id: envelope_id.to_string(),
+                        timestamp: None,
+                        client_request_id: request.client_request_id,
+                    };
+                    let _ = reply.send(Ok(response));
+                } else {
+                    let _ = reply.send(Err(tonic::Status::unavailable(format!(
+                        "workspace '{}' is not running",
+                        to_ws
+                    ))));
                 }
             }
-            AgentRequest::CreateCheckpoint { request, reply, .. } => {
-                let cp_id = format!("cp-{}", request.r#type);
-                let hash = format!("{:016x}", {
-                    let mut h: u64 = 0;
-                    for b in &request.payload {
-                        h = h.wrapping_mul(31).wrapping_add(*b as u64);
-                    }
-                    h
-                });
+            AgentRequest::CreateCheckpoint {
+                workspace_id: _,
+                request,
+                reply,
+            } => {
+                // SHA-256 content hash.
+                let mut hasher = Sha256::new();
+                hasher.update(&request.payload);
+                let hash_bytes: [u8; 32] = hasher.finalize().into();
+                let hash_hex: String = hash_bytes.iter().map(|b| format!("{b:02x}")).collect();
+
+                // Persist to content-addressable store.
+                if let Err(e) = self.checkpoint_storage.store(&hash_bytes, &request.payload) {
+                    tracing::warn!(error = %e, "checkpoint persistence failed");
+                }
+
+                let cp_id = self.next_checkpoint_id;
+                self.next_checkpoint_id += 1;
+
                 let response = wacp_transport::wacp_v1::CreateCheckpointResponse {
-                    checkpoint_id: cp_id,
-                    content_hash: hash,
+                    checkpoint_id: format!("cp-{cp_id}"),
+                    content_hash: hash_hex,
                     timestamp: None,
-                    client_request_id: String::new(),
+                    client_request_id: request.client_request_id,
                 };
                 let _ = reply.send(Ok(response));
             }

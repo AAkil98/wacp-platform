@@ -215,6 +215,7 @@ impl VerticalManifest {
     /// Parse a `VerticalManifest` from YAML. Unknown fields are tolerated
     /// (`#[serde(default)]` on every collection) for forward-compatibility.
     pub fn load_yaml(yaml: &str) -> Result<Self, TaxonomyError> {
-        serde_yaml_ng::from_str(yaml).map_err(|e| TaxonomyError::ParseError(e.to_string()))
+        serde_yaml_ng::from_str(yaml)
+            .map_err(|e: serde_yaml_ng::Error| TaxonomyError::ParseError(e.to_string()))
     }
 }

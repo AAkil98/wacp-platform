@@ -102,12 +102,12 @@ impl ToolRegistry {
 
         // 4. Call initialize if present
         if let Some(init) = package.initialize {
-            init(tool_config.clone()).await.map_err(|e| {
-                RegistryError::InitializeFailed {
+            init(tool_config.clone())
+                .await
+                .map_err(|e| RegistryError::InitializeFailed {
                     name: name.clone(),
                     error: e,
-                }
-            })?;
+                })?;
         }
 
         // 5. Register
@@ -146,9 +146,10 @@ impl ToolRegistry {
         opts: ExecutionOptions,
     ) -> Result<serde_json::Value, ToolError> {
         // 1. Lookup
-        let tool = self.tools.get(tool_name).ok_or_else(|| {
-            ToolError::validation(format!("tool '{tool_name}' not found"))
-        })?;
+        let tool = self
+            .tools
+            .get(tool_name)
+            .ok_or_else(|| ToolError::validation(format!("tool '{tool_name}' not found")))?;
 
         let capability = tool.descriptor.capability(capability_name).ok_or_else(|| {
             ToolError::validation(format!(
@@ -311,7 +312,12 @@ mod tests {
         reg.register(echo_package("test_tool")).await.unwrap();
 
         let result = reg
-            .execute("test_tool", "run", json!({"x": 1}), ExecutionOptions::default())
+            .execute(
+                "test_tool",
+                "run",
+                json!({"x": 1}),
+                ExecutionOptions::default(),
+            )
             .await
             .unwrap();
         assert_eq!(result, json!({"x": 1}));
@@ -333,7 +339,12 @@ mod tests {
         reg.register(echo_package("test_tool")).await.unwrap();
 
         let err = reg
-            .execute("test_tool", "nonexistent", json!({}), ExecutionOptions::default())
+            .execute(
+                "test_tool",
+                "nonexistent",
+                json!({}),
+                ExecutionOptions::default(),
+            )
             .await
             .unwrap_err();
         assert_eq!(err.code, ToolErrorCode::ValidationFailed);
@@ -403,7 +414,12 @@ mod tests {
         reg.register(pkg).await.unwrap();
 
         let result = reg
-            .execute("configured_tool", "run", json!({}), ExecutionOptions::default())
+            .execute(
+                "configured_tool",
+                "run",
+                json!({}),
+                ExecutionOptions::default(),
+            )
             .await
             .unwrap();
         assert_eq!(result["api_key"], "secret123");
@@ -481,8 +497,8 @@ mod tests {
 
     #[tokio::test]
     async fn circuit_breaker_resets_on_success() {
-        use std::sync::atomic::{AtomicU32, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
 
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count2 = call_count.clone();
@@ -516,18 +532,42 @@ mod tests {
         reg.register(pkg).await.unwrap();
 
         // 2 failures → trips
-        reg.execute("recovering_tool", "run", json!({}), ExecutionOptions::default()).await.unwrap_err();
-        reg.execute("recovering_tool", "run", json!({}), ExecutionOptions::default()).await.unwrap_err();
+        reg.execute(
+            "recovering_tool",
+            "run",
+            json!({}),
+            ExecutionOptions::default(),
+        )
+        .await
+        .unwrap_err();
+        reg.execute(
+            "recovering_tool",
+            "run",
+            json!({}),
+            ExecutionOptions::default(),
+        )
+        .await
+        .unwrap_err();
 
         // Cooldown is 0ms → half-open → probe succeeds → closed
         let result = reg
-            .execute("recovering_tool", "run", json!({}), ExecutionOptions::default())
+            .execute(
+                "recovering_tool",
+                "run",
+                json!({}),
+                ExecutionOptions::default(),
+            )
             .await;
         assert!(result.is_ok());
 
         // Should be closed again → next call succeeds
         let result2 = reg
-            .execute("recovering_tool", "run", json!({}), ExecutionOptions::default())
+            .execute(
+                "recovering_tool",
+                "run",
+                json!({}),
+                ExecutionOptions::default(),
+            )
             .await;
         assert!(result2.is_ok());
     }
@@ -561,7 +601,8 @@ mod tests {
 
         // First call takes the permit
         let handle = tokio::spawn(async move {
-            reg2.execute("slow_tool", "run", json!({}), ExecutionOptions::default()).await
+            reg2.execute("slow_tool", "run", json!({}), ExecutionOptions::default())
+                .await
         });
 
         // Give first task time to acquire permit
@@ -600,7 +641,13 @@ mod tests {
         for i in 0..10 {
             let reg = reg.clone();
             handles.push(tokio::spawn(async move {
-                reg.execute("fast_tool", "run", json!({"i": i}), ExecutionOptions::default()).await
+                reg.execute(
+                    "fast_tool",
+                    "run",
+                    json!({"i": i}),
+                    ExecutionOptions::default(),
+                )
+                .await
             }));
         }
 
@@ -629,12 +676,24 @@ mod tests {
 
         // Unknown capability → ValidationFailed (should NOT count for CB)
         for _ in 0..5 {
-            let _ = reg.execute("validated_tool", "nonexistent", json!({}), ExecutionOptions::default()).await;
+            let _ = reg
+                .execute(
+                    "validated_tool",
+                    "nonexistent",
+                    json!({}),
+                    ExecutionOptions::default(),
+                )
+                .await;
         }
 
         // CB should still be closed → valid call succeeds
         let result = reg
-            .execute("validated_tool", "run", json!({}), ExecutionOptions::default())
+            .execute(
+                "validated_tool",
+                "run",
+                json!({}),
+                ExecutionOptions::default(),
+            )
             .await;
         assert!(result.is_ok());
     }
@@ -658,6 +717,9 @@ mod tests {
         // No config provided → missing required "port"
         let mut reg = ToolRegistry::new(RegistryConfig::default());
         let err = reg.register(pkg).await.unwrap_err();
-        assert!(matches!(err, RegistryError::Package(PackageError::InvalidConfig { .. })));
+        assert!(matches!(
+            err,
+            RegistryError::Package(PackageError::InvalidConfig { .. })
+        ));
     }
 }

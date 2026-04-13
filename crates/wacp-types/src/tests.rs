@@ -616,7 +616,11 @@ fn serde_roundtrip_all_gate_types() {
 
 #[test]
 fn serde_roundtrip_all_port_right_types() {
-    let types = [PortRightType::Send, PortRightType::Receive, PortRightType::SendOnce];
+    let types = [
+        PortRightType::Send,
+        PortRightType::Receive,
+        PortRightType::SendOnce,
+    ];
     for prt in types {
         let right = PortRight {
             right_type: prt,
@@ -686,10 +690,19 @@ fn envelope_state_display() {
         EnvelopeState::Acknowledged,
         EnvelopeState::Rejected,
     ];
-    let names = ["Created", "Validated", "Delivered", "Acknowledged", "Rejected"];
+    let names = [
+        "Created",
+        "Validated",
+        "Delivered",
+        "Acknowledged",
+        "Rejected",
+    ];
     for (variant, expected) in all.iter().zip(names.iter()) {
         let display = format!("{variant:?}");
-        assert_eq!(display, *expected, "EnvelopeState::{expected} Debug mismatch");
+        assert_eq!(
+            display, *expected,
+            "EnvelopeState::{expected} Debug mismatch"
+        );
     }
     assert_eq!(all.len(), 5);
 }

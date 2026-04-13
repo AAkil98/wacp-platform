@@ -6,7 +6,6 @@ use wacp_transport::in_process::InProcessTransport;
 use wacp_transport::messages::{AgentInbound, AgentOutbound};
 use wacp_types::*;
 
-
 #[tokio::test]
 async fn agent_bind_via_transport() {
     let (mut coord, _rx) = make_coordinator();
@@ -23,7 +22,9 @@ async fn agent_bind_via_transport() {
         .unwrap();
 
     let msg = server.recv().await.unwrap();
-    assert!(matches!(msg, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-1")));
+    assert!(
+        matches!(msg, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-1"))
+    );
 
     // Coordinator confirms workspace exists
     assert!(coord.tree.get(&WorkspaceId::from("ws-1")).is_some());
@@ -54,7 +55,11 @@ async fn emit_signal_via_transport() {
 
     let msg = server.recv().await.unwrap();
     match msg {
-        AgentInbound::EmitSignal { signal_type, reason, .. } => {
+        AgentInbound::EmitSignal {
+            signal_type,
+            reason,
+            ..
+        } => {
             assert_eq!(signal_type, SignalType::Ready);
             assert_eq!(reason, Some("starting".into()));
         }
@@ -79,7 +84,12 @@ async fn send_envelope_via_transport() {
 
     let msg = server.recv().await.unwrap();
     match msg {
-        AgentInbound::SendEnvelope { to_workspace, envelope_type, priority, .. } => {
+        AgentInbound::SendEnvelope {
+            to_workspace,
+            envelope_type,
+            priority,
+            ..
+        } => {
             assert_eq!(to_workspace, WorkspaceId::from("ws-target"));
             assert_eq!(envelope_type, "feedback");
             assert_eq!(priority, EnvelopePriority::Urgent);
@@ -110,24 +120,36 @@ async fn multiple_agents_on_separate_transports() {
     c1.send(AgentInbound::Bind {
         workspace_id: WorkspaceId::from("ws-1"),
         auth_token: "t1".into(),
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
 
     c2.send(AgentInbound::Bind {
         workspace_id: WorkspaceId::from("ws-2"),
         auth_token: "t2".into(),
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
 
     c3.send(AgentInbound::Bind {
         workspace_id: WorkspaceId::from("ws-3"),
         auth_token: "t3".into(),
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
 
     // All 3 servers receive their respective bind requests
     let m1 = s1.recv().await.unwrap();
     let m2 = s2.recv().await.unwrap();
     let m3 = s3.recv().await.unwrap();
 
-    assert!(matches!(m1, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-1")));
-    assert!(matches!(m2, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-2")));
-    assert!(matches!(m3, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-3")));
+    assert!(
+        matches!(m1, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-1"))
+    );
+    assert!(
+        matches!(m2, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-2"))
+    );
+    assert!(
+        matches!(m3, AgentInbound::Bind { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-3"))
+    );
 }

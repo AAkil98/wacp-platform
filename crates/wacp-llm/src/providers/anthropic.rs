@@ -76,10 +76,22 @@ pub fn parse_response(body: &serde_json::Value) -> Result<CompletionResult, LlmE
                 }
             }
             "tool_use" => {
-                let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let id = block
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let name = block
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let input = block.get("input").cloned().unwrap_or(json!({}));
-                tool_calls.push(ToolCall { id, name, arguments: input });
+                tool_calls.push(ToolCall {
+                    id,
+                    name,
+                    arguments: input,
+                });
             }
             _ => {}
         }
@@ -89,10 +101,7 @@ pub fn parse_response(body: &serde_json::Value) -> Result<CompletionResult, LlmE
     let pricing = cost::lookup_pricing(&model, ANTHROPIC_PRICING);
     let cost = pricing.map(|p| cost::calculate_cost(&usage, &p));
 
-    let truncated = body
-        .get("stop_reason")
-        .and_then(|v| v.as_str())
-        == Some("max_tokens");
+    let truncated = body.get("stop_reason").and_then(|v| v.as_str()) == Some("max_tokens");
 
     Ok(CompletionResult {
         content: text,
@@ -161,7 +170,11 @@ fn block_to_anthropic(block: &ContentBlock) -> serde_json::Value {
         ContentBlock::ToolUse { id, name, input } => {
             json!({"type": "tool_use", "id": id, "name": name, "input": input})
         }
-        ContentBlock::ToolResult { tool_use_id, content, is_error } => {
+        ContentBlock::ToolResult {
+            tool_use_id,
+            content,
+            is_error,
+        } => {
             json!({"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": is_error})
         }
     }
@@ -213,11 +226,16 @@ mod tests {
 
     #[test]
     fn build_request_basic() {
-        let messages = vec![
-            Message::system("You are helpful."),
-            Message::user("Hello"),
-        ];
-        let body = build_request(&messages, "claude-sonnet-4-20250514", 1024, None, &[], &[], false);
+        let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
+        let body = build_request(
+            &messages,
+            "claude-sonnet-4-20250514",
+            1024,
+            None,
+            &[],
+            &[],
+            false,
+        );
 
         assert_eq!(body["model"], "claude-sonnet-4-20250514");
         assert_eq!(body["max_tokens"], 1024);
@@ -237,7 +255,15 @@ mod tests {
             description: "Read a file".into(),
             input_schema: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
         }];
-        let body = build_request(&[Message::user("read /tmp/x")], "claude-sonnet-4-20250514", 1024, None, &[], &tools, false);
+        let body = build_request(
+            &[Message::user("read /tmp/x")],
+            "claude-sonnet-4-20250514",
+            1024,
+            None,
+            &[],
+            &tools,
+            false,
+        );
 
         let api_tools = body["tools"].as_array().unwrap();
         assert_eq!(api_tools.len(), 1);

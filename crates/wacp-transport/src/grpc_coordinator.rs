@@ -98,8 +98,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::SubmitGoalRequest>,
     ) -> Result<Response<wacp_v1::SubmitGoalResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::SubmitGoal { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::SubmitGoal {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn decompose(
@@ -107,8 +110,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::DecomposeRequest>,
     ) -> Result<Response<wacp_v1::DecomposeResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::Decompose { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::Decompose {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn get_ready_tasks(
@@ -116,8 +122,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::GetReadyTasksRequest>,
     ) -> Result<Response<wacp_v1::GetReadyTasksResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::GetReadyTasks { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::GetReadyTasks {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn cancel_task(
@@ -125,8 +134,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::CancelTaskRequest>,
     ) -> Result<Response<wacp_v1::CancelTaskResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::CancelTask { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::CancelTask {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn dispatch(
@@ -134,8 +146,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::DispatchRequest>,
     ) -> Result<Response<wacp_v1::DispatchResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::Dispatch { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::Dispatch {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn abort_workspace(
@@ -143,8 +158,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::AbortWorkspaceRequest>,
     ) -> Result<Response<wacp_v1::AbortWorkspaceResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::AbortWorkspace { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::AbortWorkspace {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn suspend_workspace(
@@ -152,8 +170,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::SuspendWorkspaceRequest>,
     ) -> Result<Response<wacp_v1::SuspendWorkspaceResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::SuspendWorkspace { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::SuspendWorkspace {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn resume_workspace(
@@ -161,8 +182,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::ResumeWorkspaceRequest>,
     ) -> Result<Response<wacp_v1::ResumeWorkspaceResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::ResumeWorkspace { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::ResumeWorkspace {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn send_directive(
@@ -170,8 +194,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::SendDirectiveRequest>,
     ) -> Result<Response<wacp_v1::SendDirectiveResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::SendDirective { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::SendDirective {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn send_feedback(
@@ -179,8 +206,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::SendFeedbackRequest>,
     ) -> Result<Response<wacp_v1::SendFeedbackResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::SendFeedback { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::SendFeedback {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn trigger_integration(
@@ -188,8 +218,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::TriggerIntegrationRequest>,
     ) -> Result<Response<wacp_v1::TriggerIntegrationResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::TriggerIntegration { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::TriggerIntegration {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     async fn get_allocatable(
@@ -197,8 +230,11 @@ impl CoordinatorService for CoordinatorServiceImpl {
         request: Request<wacp_v1::GetAllocatableRequest>,
     ) -> Result<Response<wacp_v1::GetAllocatableResponse>, Status> {
         let req = request.into_inner();
-        self.send_and_recv(|reply| CoordinatorRequest::GetAllocatable { request: req, reply })
-            .await
+        self.send_and_recv(|reply| CoordinatorRequest::GetAllocatable {
+            request: req,
+            reply,
+        })
+        .await
     }
 
     type StreamSignalsStream = ReceiverStream<Result<wacp_v1::SignalEvent, Status>>;

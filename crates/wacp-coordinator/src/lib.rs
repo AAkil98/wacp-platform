@@ -37,7 +37,7 @@ pub use migration::{
     MigrationFailedEvent, MigrationRequest, MigrationStartedEvent,
 };
 pub use orchestrator::{Coordinator, DispatchRequest, SystemSnapshot};
-pub use ownership::{resolve_originator, resolve_owner, EscalationRouter};
+pub use ownership::{EscalationRouter, resolve_originator, resolve_owner};
 pub use port_rights::{PortRightEntry, PortRightError, PortRightStatus, PortRightsGraph};
 pub use resource::{BudgetCheckResult, BudgetEnforcer, LivenessMonitor, TimeoutTracker};
 pub use scheduling::{DependencyOutput, RetryPolicy, SchedulingOps, TaskContext};

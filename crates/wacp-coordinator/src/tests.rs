@@ -74,8 +74,14 @@ fn tree_root_exists() {
 #[test]
 fn insert_child() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("child", Some("root"), "owner", Originator::System, WorkspaceState::Idle))
-        .unwrap();
+    tree.insert(make_node(
+        "child",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Idle,
+    ))
+    .unwrap();
 
     assert!(tree.get(&ws("child")).is_some());
     assert!(tree.children(&ws("root")).contains(&&ws("child")));
@@ -97,10 +103,22 @@ fn insert_orphan_rejected() {
 #[test]
 fn descendants_recursive() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("A"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("A"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let desc = tree.descendants(&ws("root"));
     assert!(desc.contains(&ws("A")));
@@ -111,10 +129,22 @@ fn descendants_recursive() {
 #[test]
 fn parent_chain() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("A"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("A"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let chain = tree.parent_chain(&ws("B"));
     assert_eq!(chain, vec![ws("A"), ws("root")]);
@@ -123,10 +153,22 @@ fn parent_chain() {
 #[test]
 fn cascade_failure_same_owner() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("A"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("A"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     tree.cascade_failure(&ws("A"));
     assert_eq!(tree.get(&ws("A")).unwrap().status, WorkspaceState::Failed);
@@ -136,10 +178,22 @@ fn cascade_failure_same_owner() {
 #[test]
 fn cascade_reparents_cross_owner() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner1"));
-    tree.insert(make_node("A", Some("root"), "owner1", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("A"), "owner2", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner1",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("A"),
+        "owner2",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let reparented = tree.cascade_failure(&ws("A"));
     assert_eq!(tree.get(&ws("A")).unwrap().status, WorkspaceState::Failed);
@@ -152,10 +206,22 @@ fn cascade_reparents_cross_owner() {
 #[test]
 fn reparent_moves_subtree() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     tree.reparent(&ws("B"), &ws("A"));
     assert_eq!(tree.get(&ws("B")).unwrap().parent, Some(ws("A")));
@@ -166,10 +232,22 @@ fn reparent_moves_subtree() {
 #[test]
 fn active_workspaces() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("root"), "owner", Originator::System, WorkspaceState::Closed))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Closed,
+    ))
+    .unwrap();
 
     let active = tree.active_workspaces();
     assert!(active.contains(&&ws("root")));
@@ -184,7 +262,10 @@ fn active_workspaces() {
 #[test]
 fn root_in_both_indices() {
     let tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    assert!(tree.by_originator(&Originator::System).contains(&ws("root")));
+    assert!(
+        tree.by_originator(&Originator::System)
+            .contains(&ws("root"))
+    );
     assert!(tree.by_owner(&uid("owner")).contains(&ws("root")));
 }
 
@@ -192,8 +273,14 @@ fn root_in_both_indices() {
 fn originator_tracked_on_insert() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
     let user_orig = Originator::User(uid("alice"));
-    tree.insert(make_node("A", Some("root"), "owner", user_orig.clone(), WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        user_orig.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     assert!(tree.by_originator(&user_orig).contains(&ws("A")));
     assert!(!tree.by_originator(&Originator::System).contains(&ws("A")));
@@ -204,8 +291,14 @@ fn originator_index_immutable() {
     // No public method changes originator after insert — verify the field is what was set.
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
     let user_orig = Originator::User(uid("bob"));
-    tree.insert(make_node("A", Some("root"), "owner", user_orig.clone(), WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        user_orig.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     assert_eq!(tree.get(&ws("A")).unwrap().originator, user_orig);
 }
@@ -213,8 +306,14 @@ fn originator_index_immutable() {
 #[test]
 fn owner_tracked_on_insert() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner1"));
-    tree.insert(make_node("A", Some("root"), "owner2", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner2",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     assert!(tree.by_owner(&uid("owner2")).contains(&ws("A")));
     assert!(!tree.by_owner(&uid("owner1")).contains(&ws("A")));
@@ -223,8 +322,14 @@ fn owner_tracked_on_insert() {
 #[test]
 fn transfer_owner_updates_index() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner1"));
-    tree.insert(make_node("A", Some("root"), "owner1", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner1",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let old = tree.transfer_owner(&ws("A"), uid("owner2")).unwrap();
     assert_eq!(old, uid("owner1"));
@@ -243,10 +348,22 @@ fn transfer_owner_same_owner_rejected() {
 #[test]
 fn siblings_basic() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let sibs = tree.siblings(&ws("A"));
     assert_eq!(sibs, vec![ws("B")]);
@@ -264,8 +381,14 @@ fn siblings_root_empty() {
 #[test]
 fn siblings_only_child_empty() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
     assert!(tree.siblings(&ws("A")).is_empty());
 }
 
@@ -274,12 +397,30 @@ fn causal_descendants_filters() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
     let alice = Originator::User(uid("alice"));
     let bob = Originator::User(uid("bob"));
-    tree.insert(make_node("A", Some("root"), "owner", alice.clone(), WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("root"), "owner", bob.clone(), WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("C", Some("A"), "owner", alice.clone(), WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("root"),
+        "owner",
+        bob.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "C",
+        Some("A"),
+        "owner",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let causal = tree.causal_descendants(&ws("root"), &alice);
     assert!(causal.contains(&ws("A")));
@@ -291,8 +432,14 @@ fn causal_descendants_filters() {
 #[test]
 fn causal_descendants_empty() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let causal = tree.causal_descendants(&ws("root"), &Originator::User(uid("nobody")));
     assert!(causal.is_empty());
@@ -301,7 +448,10 @@ fn causal_descendants_empty() {
 #[test]
 fn by_originator_empty_key() {
     let tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    assert!(tree.by_originator(&Originator::User(uid("nonexistent"))).is_empty());
+    assert!(
+        tree.by_originator(&Originator::User(uid("nonexistent")))
+            .is_empty()
+    );
 }
 
 #[test]
@@ -314,10 +464,22 @@ fn by_owner_empty_key() {
 fn cascade_preserves_indices() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner1"));
     let alice = Originator::User(uid("alice"));
-    tree.insert(make_node("A", Some("root"), "owner1", alice.clone(), WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("A"), "owner1", alice.clone(), WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner1",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("A"),
+        "owner1",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     tree.cascade_failure(&ws("A"));
 
@@ -342,15 +504,21 @@ fn empty_graph() {
 #[test]
 fn add_task_no_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
     assert!(graph.get(&tid("t1")).is_some());
 }
 
 #[test]
 fn add_task_with_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Draft))
+        .unwrap();
     assert!(graph.get(&tid("t2")).is_some());
 }
 
@@ -364,7 +532,9 @@ fn add_task_missing_dep() {
 #[test]
 fn ready_tasks_no_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     let ready = graph.ready_tasks();
     assert!(ready.contains(&&tid("t1")));
 }
@@ -372,8 +542,12 @@ fn ready_tasks_no_deps() {
 #[test]
 fn ready_tasks_blocked_by_dep() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     let ready = graph.ready_tasks();
     assert!(!ready.contains(&&tid("t2")));
 }
@@ -381,8 +555,12 @@ fn ready_tasks_blocked_by_dep() {
 #[test]
 fn ready_tasks_dep_integrated() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     let ready = graph.ready_tasks();
     assert!(ready.contains(&&tid("t2")));
 }
@@ -390,7 +568,9 @@ fn ready_tasks_dep_integrated() {
 #[test]
 fn transition_task() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
     let status = graph.transition(&tid("t1"), TaskTrigger::Approve).unwrap();
     assert_eq!(status, TaskStatus::Pending);
     assert_eq!(graph.get(&tid("t1")).unwrap().status, TaskStatus::Pending);
@@ -399,25 +579,39 @@ fn transition_task() {
 #[test]
 fn is_complete_all_integrated() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Integrated)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Integrated))
+        .unwrap();
     assert!(graph.is_complete());
 }
 
 #[test]
 fn is_complete_mixed() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::InProgress))
+        .unwrap();
     assert!(!graph.is_complete());
 }
 
 #[test]
 fn dependents() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t3", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t3", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     let deps = graph.dependents(&tid("t1"));
     assert_eq!(deps.len(), 2);
 }
@@ -429,24 +623,36 @@ fn dependents() {
 #[test]
 fn remaining_deps_set_on_insert() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Draft))
+        .unwrap();
     assert_eq!(graph.remaining_deps(&tid("t3")), Some(2));
 }
 
 #[test]
 fn remaining_deps_zero_for_no_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
     assert_eq!(graph.remaining_deps(&tid("t1")), Some(0));
 }
 
 #[test]
 fn remaining_deps_skips_terminal() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     // t1 is already Integrated → doesn't count.
     assert_eq!(graph.remaining_deps(&tid("t2")), Some(0));
 }
@@ -454,8 +660,12 @@ fn remaining_deps_skips_terminal() {
 #[test]
 fn mark_completed_decrements() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     assert_eq!(graph.remaining_deps(&tid("t2")), Some(1));
 
     graph.mark_completed(&tid("t1"));
@@ -465,8 +675,12 @@ fn mark_completed_decrements() {
 #[test]
 fn mark_completed_returns_newly_ready() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
 
     let newly_ready = graph.mark_completed(&tid("t1"));
     assert!(newly_ready.contains(&tid("t2")));
@@ -475,9 +689,15 @@ fn mark_completed_returns_newly_ready() {
 #[test]
 fn mark_completed_not_ready_if_other_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t3", vec!["t1", "t2"], TaskStatus::Pending))
+        .unwrap();
 
     let newly_ready = graph.mark_completed(&tid("t1"));
     // t3 still has t2 pending.
@@ -488,9 +708,15 @@ fn mark_completed_not_ready_if_other_deps() {
 #[test]
 fn mark_failed_returns_dependents() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t3", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t3", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
 
     let blocked = graph.mark_failed(&tid("t1"));
     assert_eq!(blocked.len(), 2);
@@ -499,18 +725,31 @@ fn mark_failed_returns_dependents() {
 #[test]
 fn bind_sets_both_maps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
 
-    assert_eq!(graph.get(&tid("t1")).unwrap().workspace_ref, Some(ws("ws-1")));
+    assert_eq!(
+        graph.get(&tid("t1")).unwrap().workspace_ref,
+        Some(ws("ws-1"))
+    );
     assert_eq!(graph.task_for_workspace(&ws("ws-1")), Some(&tid("t1")));
-    assert!(graph.get(&tid("t1")).unwrap().workspace_history.contains(&ws("ws-1")));
+    assert!(
+        graph
+            .get(&tid("t1"))
+            .unwrap()
+            .workspace_history
+            .contains(&ws("ws-1"))
+    );
 }
 
 #[test]
 fn bind_duplicate_task_rejected() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
     assert!(matches!(
         graph.bind(&tid("t1"), &ws("ws-2")),
@@ -521,8 +760,12 @@ fn bind_duplicate_task_rejected() {
 #[test]
 fn bind_duplicate_workspace_rejected() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
     assert!(matches!(
         graph.bind(&tid("t2"), &ws("ws-1")),
@@ -533,7 +776,9 @@ fn bind_duplicate_workspace_rejected() {
 #[test]
 fn unbind_clears_both() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
     graph.unbind(&tid("t1"));
 
@@ -544,7 +789,9 @@ fn unbind_clears_both() {
 #[test]
 fn task_for_workspace_lookup() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
     assert_eq!(graph.task_for_workspace(&ws("ws-1")), Some(&tid("t1")));
 }
@@ -552,7 +799,9 @@ fn task_for_workspace_lookup() {
 #[test]
 fn dispatchable_uses_counter() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     let d = graph.dispatchable();
     assert!(d.contains(&&tid("t1")));
 }
@@ -560,7 +809,9 @@ fn dispatchable_uses_counter() {
 #[test]
 fn dispatchable_excludes_non_pending() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
     let d = graph.dispatchable();
     assert!(!d.contains(&&tid("t1")));
 }
@@ -568,8 +819,12 @@ fn dispatchable_excludes_non_pending() {
 #[test]
 fn forward_edges_built_on_insert() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Integrated)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
     let deps = graph.dependents(&tid("t1"));
     assert!(deps.contains(&&tid("t2")));
 }
@@ -644,11 +899,7 @@ fn conflict_detected() {
 #[test]
 fn resolve_coordinator_resolve() {
     let engine = IntegrationEngine;
-    let conflict = engine.detect_conflict(
-        ConflictType::SemanticContradiction,
-        "test",
-        ws("ws-1"),
-    );
+    let conflict = engine.detect_conflict(ConflictType::SemanticContradiction, "test", ws("ws-1"));
     let resolution = engine.resolve_conflict(conflict, ResolutionStrategy::CoordinatorResolve);
     assert_eq!(resolution.outcome, ResolutionOutcome::Resolved);
 }
@@ -901,12 +1152,30 @@ fn resolve_originator_system_parent_inherited() {
 fn causal_impact_active_only() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
     let alice = Originator::User(uid("alice"));
-    tree.insert(make_node("A", Some("root"), "owner", alice.clone(), WorkspaceState::Active))
-        .unwrap();
-    tree.insert(make_node("B", Some("root"), "owner", alice.clone(), WorkspaceState::Closed))
-        .unwrap();
-    tree.insert(make_node("C", Some("root"), "owner", alice.clone(), WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "B",
+        Some("root"),
+        "owner",
+        alice.clone(),
+        WorkspaceState::Closed,
+    ))
+    .unwrap();
+    tree.insert(make_node(
+        "C",
+        Some("root"),
+        "owner",
+        alice.clone(),
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
     let impact = tree.causal_impact(&uid("alice"));
     assert!(impact.contains(&ws("A")));
@@ -930,8 +1199,14 @@ fn is_causal_boundary_root_false() {
 #[test]
 fn is_causal_boundary_same_originator_false() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("A", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
     assert!(!tree.is_causal_boundary(&ws("A")));
 }
 
@@ -939,8 +1214,14 @@ fn is_causal_boundary_same_originator_false() {
 fn is_causal_boundary_different_originator_true() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
     let alice = Originator::User(uid("alice"));
-    tree.insert(make_node("A", Some("root"), "owner", alice, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "A",
+        Some("root"),
+        "owner",
+        alice,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
     // Root is System, A is User(alice) → boundary.
     assert!(tree.is_causal_boundary(&ws("A")));
 }
@@ -994,7 +1275,10 @@ fn consume_send_once() {
 fn consume_non_send_once_rejected() {
     let mut graph = PortRightsGraph::new();
     let id = graph.create(ws("A"), ws("B"), PortRightType::Send);
-    assert!(matches!(graph.consume(&id), Err(PortRightError::NotSendOnce)));
+    assert!(matches!(
+        graph.consume(&id),
+        Err(PortRightError::NotSendOnce)
+    ));
 }
 
 #[test]
@@ -1057,9 +1341,18 @@ fn expire_workspace_both_directions() {
 
     graph.expire_workspace(&ws("A"));
 
-    assert_eq!(graph.get(&id_held).unwrap().status, PortRightStatus::Expired);
-    assert_eq!(graph.get(&id_targeted).unwrap().status, PortRightStatus::Expired);
-    assert_eq!(graph.get(&id_unrelated).unwrap().status, PortRightStatus::Active);
+    assert_eq!(
+        graph.get(&id_held).unwrap().status,
+        PortRightStatus::Expired
+    );
+    assert_eq!(
+        graph.get(&id_targeted).unwrap().status,
+        PortRightStatus::Expired
+    );
+    assert_eq!(
+        graph.get(&id_unrelated).unwrap().status,
+        PortRightStatus::Active
+    );
 }
 
 #[test]
@@ -1142,8 +1435,16 @@ fn create_workspace_updates_all() {
 
     // Port rights: 3 created (parent→child send, child→parent send, child self-receive).
     assert_eq!(topo.port_rights.active_count(), 3);
-    assert!(topo.port_rights.validate_send(&ws("root"), &ws("A")).is_ok());
-    assert!(topo.port_rights.validate_send(&ws("A"), &ws("root")).is_ok());
+    assert!(
+        topo.port_rights
+            .validate_send(&ws("root"), &ws("A"))
+            .is_ok()
+    );
+    assert!(
+        topo.port_rights
+            .validate_send(&ws("A"), &ws("root"))
+            .is_ok()
+    );
 }
 
 #[test]
@@ -1167,8 +1468,16 @@ fn terminate_closed_expires_rights() {
     assert!(effect.reparented.is_empty());
     assert!(effect.rights_expired > 0);
     // All rights involving A should be expired.
-    assert!(topo.port_rights.validate_send(&ws("root"), &ws("A")).is_err());
-    assert!(topo.port_rights.validate_send(&ws("A"), &ws("root")).is_err());
+    assert!(
+        topo.port_rights
+            .validate_send(&ws("root"), &ws("A"))
+            .is_err()
+    );
+    assert!(
+        topo.port_rights
+            .validate_send(&ws("A"), &ws("root"))
+            .is_err()
+    );
 }
 
 #[test]
@@ -1182,7 +1491,10 @@ fn terminate_failed_cascades() {
     let effect = topo.terminate_workspace(&ws("A"), WorkspaceState::Failed);
     // B is same-owner child → failed.
     assert!(effect.failed.contains(&ws("B")));
-    assert_eq!(topo.tree.get(&ws("B")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        topo.tree.get(&ws("B")).unwrap().status,
+        WorkspaceState::Failed
+    );
 }
 
 #[test]
@@ -1203,8 +1515,13 @@ fn terminate_failed_expires_cascaded_rights() {
 #[test]
 fn cascade_updates_escalation_router() {
     let mut topo = TopologySet::new(ws("root"), uid("owner1"));
-    topo.create_workspace(make_create_params("A", "root", "owner1", Originator::System))
-        .unwrap();
+    topo.create_workspace(make_create_params(
+        "A",
+        "root",
+        "owner1",
+        Originator::System,
+    ))
+    .unwrap();
     topo.create_workspace(make_create_params("B", "A", "owner2", Originator::System))
         .unwrap();
 
@@ -1214,7 +1531,10 @@ fn cascade_updates_escalation_router() {
     let effect = topo.terminate_workspace(&ws("A"), WorkspaceState::Failed);
     // B is cross-owner → reparented, not failed.
     assert!(effect.reparented.contains(&ws("B")));
-    assert_eq!(topo.tree.get(&ws("B")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        topo.tree.get(&ws("B")).unwrap().status,
+        WorkspaceState::Active
+    );
     // Escalation still routes B to owner2.
     assert_eq!(topo.escalation.route(&ws("B")), Some(&uid("owner2")));
 }
@@ -1222,8 +1542,13 @@ fn cascade_updates_escalation_router() {
 #[test]
 fn transfer_ownership_updates_both() {
     let mut topo = TopologySet::new(ws("root"), uid("owner1"));
-    topo.create_workspace(make_create_params("A", "root", "owner1", Originator::System))
-        .unwrap();
+    topo.create_workspace(make_create_params(
+        "A",
+        "root",
+        "owner1",
+        Originator::System,
+    ))
+    .unwrap();
 
     let old = topo.transfer_ownership(&ws("A"), uid("owner2")).unwrap();
     assert_eq!(old, uid("owner1"));
@@ -1245,7 +1570,10 @@ fn create_then_terminate_lifecycle() {
 
     // Terminate.
     topo.terminate_workspace(&ws("A"), WorkspaceState::Closed);
-    assert_eq!(topo.tree.get(&ws("A")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(
+        topo.tree.get(&ws("A")).unwrap().status,
+        WorkspaceState::Closed
+    );
     assert_eq!(topo.port_rights.active_count(), 0);
     // Visibility preserved — terminal workspaces remain visible for trail queries.
     assert!(topo.visibility.can_see(&ws("root"), &ws("A")));
@@ -1280,7 +1608,12 @@ fn resolve_approve_removes_gate() {
     let mut ctrl = make_gate_ctrl();
     let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
     let res = ctrl.resolve(&event.gate_id, GateDecision::Approve);
-    assert_eq!(res, Some(GateResolution::Approved { source: "human".into() }));
+    assert_eq!(
+        res,
+        Some(GateResolution::Approved {
+            source: "human".into()
+        })
+    );
     assert!(!ctrl.is_pending(&event.gate_id));
 }
 
@@ -1305,15 +1638,32 @@ fn resolve_already_resolved_returns_none() {
 #[test]
 fn timeout_auto_approve() {
     let mut ctrl = make_gate_ctrl();
-    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, Some(GateFallback::AutoApprove));
+    let event = ctrl.open_gate(
+        tid("t1"),
+        "task1".into(),
+        "desc",
+        None,
+        Some(GateFallback::AutoApprove),
+    );
     let res = ctrl.timeout(&event.gate_id);
-    assert_eq!(res, Some(GateResolution::Approved { source: "timeout_auto_approve".into() }));
+    assert_eq!(
+        res,
+        Some(GateResolution::Approved {
+            source: "timeout_auto_approve".into()
+        })
+    );
 }
 
 #[test]
 fn timeout_cancel() {
     let mut ctrl = make_gate_ctrl();
-    let event = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, Some(GateFallback::Cancel));
+    let event = ctrl.open_gate(
+        tid("t1"),
+        "task1".into(),
+        "desc",
+        None,
+        Some(GateFallback::Cancel),
+    );
     let res = ctrl.timeout(&event.gate_id);
     assert_eq!(res, Some(GateResolution::Rejected));
 }
@@ -1362,7 +1712,9 @@ fn setup_dispatch() -> (Dispatcher, TaskGraph, TopologySet) {
 #[test]
 fn dispatch_single_task() {
     let (mut disp, mut graph, mut topo) = setup_dispatch();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert_eq!(actions.len(), 1);
@@ -1372,8 +1724,12 @@ fn dispatch_single_task() {
 #[test]
 fn dispatch_multiple_tasks() {
     let (mut disp, mut graph, mut topo) = setup_dispatch();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert_eq!(actions.len(), 2);
@@ -1389,8 +1745,12 @@ fn dispatch_respects_capacity() {
     let mut graph = TaskGraph::new();
     let mut topo = TopologySet::new(ws("root"), uid("owner"));
 
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert_eq!(actions.len(), 1);
@@ -1399,8 +1759,12 @@ fn dispatch_respects_capacity() {
 #[test]
 fn dispatch_skips_non_dispatchable() {
     let (mut disp, mut graph, mut topo) = setup_dispatch();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
-    graph.add_task(make_task("t2", vec![], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec![], TaskStatus::InProgress))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert!(actions.is_empty());
@@ -1409,7 +1773,9 @@ fn dispatch_skips_non_dispatchable() {
 #[test]
 fn dispatch_binds_task_to_workspace() {
     let (mut disp, mut graph, mut topo) = setup_dispatch();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     let ws_id = &actions[0].workspace_id;
@@ -1419,7 +1785,9 @@ fn dispatch_binds_task_to_workspace() {
 #[test]
 fn dispatch_creates_workspace_in_topology() {
     let (mut disp, mut graph, mut topo) = setup_dispatch();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     let ws_id = &actions[0].workspace_id;
@@ -1438,7 +1806,9 @@ fn select_parent_root_task() {
 #[test]
 fn select_parent_subtask() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-parent")).unwrap();
 
     let mut child = make_task("t2", vec![], TaskStatus::Pending);
@@ -1500,7 +1870,12 @@ fn has_capacity_at_limit() {
 // Task 10.4 — Context Assembly + Retry + Decomposition
 // ══════════════════════════════════════════
 
-fn make_task_with_checkpoint(id: &str, deps: Vec<&str>, status: TaskStatus, cp: Option<&str>) -> Task {
+fn make_task_with_checkpoint(
+    id: &str,
+    deps: Vec<&str>,
+    status: TaskStatus,
+    cp: Option<&str>,
+) -> Task {
     Task {
         id: tid(id),
         name: id.into(),
@@ -1517,20 +1892,51 @@ fn make_task_with_checkpoint(id: &str, deps: Vec<&str>, status: TaskStatus, cp: 
 #[test]
 fn assemble_context_collects_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task_with_checkpoint("t1", vec![], TaskStatus::Integrated, Some("cp-1"))).unwrap();
-    graph.add_task(make_task_with_checkpoint("t2", vec!["t1"], TaskStatus::Pending, None)).unwrap();
+    graph
+        .add_task(make_task_with_checkpoint(
+            "t1",
+            vec![],
+            TaskStatus::Integrated,
+            Some("cp-1"),
+        ))
+        .unwrap();
+    graph
+        .add_task(make_task_with_checkpoint(
+            "t2",
+            vec!["t1"],
+            TaskStatus::Pending,
+            None,
+        ))
+        .unwrap();
 
     let ctx = SchedulingOps::assemble_context(&graph, &tid("t2"));
     assert_eq!(ctx.dependency_outputs.len(), 1);
     assert_eq!(ctx.dependency_outputs[0].task_id, tid("t1"));
-    assert_eq!(ctx.dependency_outputs[0].checkpoint_ref, CheckpointId::from("cp-1"));
+    assert_eq!(
+        ctx.dependency_outputs[0].checkpoint_ref,
+        CheckpointId::from("cp-1")
+    );
 }
 
 #[test]
 fn assemble_context_skips_no_checkpoint() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task_with_checkpoint("t1", vec![], TaskStatus::Integrated, None)).unwrap();
-    graph.add_task(make_task_with_checkpoint("t2", vec!["t1"], TaskStatus::Pending, None)).unwrap();
+    graph
+        .add_task(make_task_with_checkpoint(
+            "t1",
+            vec![],
+            TaskStatus::Integrated,
+            None,
+        ))
+        .unwrap();
+    graph
+        .add_task(make_task_with_checkpoint(
+            "t2",
+            vec!["t1"],
+            TaskStatus::Pending,
+            None,
+        ))
+        .unwrap();
 
     let ctx = SchedulingOps::assemble_context(&graph, &tid("t2"));
     assert!(ctx.dependency_outputs.is_empty());
@@ -1539,7 +1945,9 @@ fn assemble_context_skips_no_checkpoint() {
 #[test]
 fn assemble_context_empty_no_deps() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
 
     let ctx = SchedulingOps::assemble_context(&graph, &tid("t1"));
     assert!(ctx.dependency_outputs.is_empty());
@@ -1554,7 +1962,10 @@ fn should_retry_within_limit() {
 
 #[test]
 fn should_retry_exceeds_limit() {
-    let policy = RetryPolicy { max_attempts: 1, ..Default::default() };
+    let policy = RetryPolicy {
+        max_attempts: 1,
+        ..Default::default()
+    };
     let mut task = make_task("t1", vec![], TaskStatus::Failed);
     task.workspace_history = vec![ws("ws-old")]; // 1 prior attempt
     assert!(!SchedulingOps::should_retry(&policy, &task, "agent_error"));
@@ -1562,14 +1973,20 @@ fn should_retry_exceeds_limit() {
 
 #[test]
 fn should_retry_timeout_denied() {
-    let policy = RetryPolicy { retry_on_timeout: false, ..Default::default() };
+    let policy = RetryPolicy {
+        retry_on_timeout: false,
+        ..Default::default()
+    };
     let task = make_task("t1", vec![], TaskStatus::Failed);
     assert!(!SchedulingOps::should_retry(&policy, &task, "timeout"));
 }
 
 #[test]
 fn should_retry_agent_allowed() {
-    let policy = RetryPolicy { retry_on_agent_failure: true, ..Default::default() };
+    let policy = RetryPolicy {
+        retry_on_agent_failure: true,
+        ..Default::default()
+    };
     let task = make_task("t1", vec![], TaskStatus::Failed);
     assert!(SchedulingOps::should_retry(&policy, &task, "agent_error"));
 }
@@ -1577,7 +1994,9 @@ fn should_retry_agent_allowed() {
 #[test]
 fn prepare_retry_unbinds() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
 
     // Simulate failure.
@@ -1591,7 +2010,9 @@ fn prepare_retry_unbinds() {
 #[test]
 fn cancel_task_transitions() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
     let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
     assert!(cancelled.contains(&tid("t1")));
     assert_eq!(graph.get(&tid("t1")).unwrap().status, TaskStatus::Cancelled);
@@ -1600,8 +2021,12 @@ fn cancel_task_transitions() {
 #[test]
 fn cancel_cascades_to_pending_dependents() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Pending))
+        .unwrap();
 
     let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
     assert!(cancelled.contains(&tid("t1")));
@@ -1611,8 +2036,12 @@ fn cancel_cascades_to_pending_dependents() {
 #[test]
 fn cancel_does_not_cascade_to_in_progress() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::InProgress)).unwrap();
-    graph.add_task(make_task("t2", vec!["t1"], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::InProgress))
+        .unwrap();
 
     let cancelled = SchedulingOps::cancel_task(&mut graph, &tid("t1"));
     assert!(cancelled.contains(&tid("t1")));
@@ -1622,13 +2051,18 @@ fn cancel_does_not_cascade_to_in_progress() {
 #[test]
 fn add_subtasks_sets_parent() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("parent", vec![], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("parent", vec![], TaskStatus::InProgress))
+        .unwrap();
 
     let sub = make_task("sub1", vec![], TaskStatus::Draft);
     let ids = SchedulingOps::add_subtasks(&mut graph, &tid("parent"), vec![sub]).unwrap();
 
     assert_eq!(ids.len(), 1);
-    assert_eq!(graph.get(&tid("sub1")).unwrap().parent_task, Some(tid("parent")));
+    assert_eq!(
+        graph.get(&tid("sub1")).unwrap().parent_task,
+        Some(tid("parent"))
+    );
 }
 
 #[test]
@@ -1642,7 +2076,9 @@ fn add_subtasks_validates_parent() {
 #[test]
 fn add_subtasks_in_graph() {
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("parent", vec![], TaskStatus::InProgress)).unwrap();
+    graph
+        .add_task(make_task("parent", vec![], TaskStatus::InProgress))
+        .unwrap();
 
     let sub1 = make_task("sub1", vec![], TaskStatus::Draft);
     let sub2 = make_task("sub2", vec![], TaskStatus::Draft);
@@ -1735,9 +2171,11 @@ fn find_final_checkpoint_found() {
 
 #[test]
 fn find_final_checkpoint_none() {
-    let cps = vec![
-        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
-    ];
+    let cps = vec![make_checkpoint(
+        "cp-1",
+        CheckpointStatus::Provisional,
+        Confidence::Medium,
+    )];
     assert!(IntegrationPipeline::find_final_checkpoint(&cps).is_none());
 }
 
@@ -1763,7 +2201,9 @@ fn decide_high_confidence_accepts() {
     let decision = IntegrationPipeline::decide(&cp);
     assert_eq!(
         decision,
-        IntegrationDecision::Accept { strategy: MergeStrategy::Direct }
+        IntegrationDecision::Accept {
+            strategy: MergeStrategy::Direct
+        }
     );
 }
 
@@ -1790,15 +2230,26 @@ fn decide_medium_accepts_layered() {
     let decision = IntegrationPipeline::decide(&cp);
     assert_eq!(
         decision,
-        IntegrationDecision::Accept { strategy: MergeStrategy::Layered }
+        IntegrationDecision::Accept {
+            strategy: MergeStrategy::Layered
+        }
     );
 }
 
 #[test]
 fn select_strategy_mapping() {
-    assert_eq!(IntegrationPipeline::select_strategy(Confidence::High), MergeStrategy::Direct);
-    assert_eq!(IntegrationPipeline::select_strategy(Confidence::Medium), MergeStrategy::Layered);
-    assert_eq!(IntegrationPipeline::select_strategy(Confidence::Low), MergeStrategy::Evaluated);
+    assert_eq!(
+        IntegrationPipeline::select_strategy(Confidence::High),
+        MergeStrategy::Direct
+    );
+    assert_eq!(
+        IntegrationPipeline::select_strategy(Confidence::Medium),
+        MergeStrategy::Layered
+    );
+    assert_eq!(
+        IntegrationPipeline::select_strategy(Confidence::Low),
+        MergeStrategy::Evaluated
+    );
 }
 
 // ══════════════════════════════════════════
@@ -1823,13 +2274,19 @@ fn make_merge_ctx(source_res: Vec<&str>, parent_res: Vec<&str>) -> MergeContext 
 #[test]
 fn direct_no_conflicts() {
     let ctx = make_merge_ctx(vec!["a", "b"], vec!["a", "b"]); // overlap doesn't matter
-    assert!(matches!(MergeExecutor::merge_direct(&ctx), MergeResult::Success));
+    assert!(matches!(
+        MergeExecutor::merge_direct(&ctx),
+        MergeResult::Success
+    ));
 }
 
 #[test]
 fn layered_no_overlap() {
     let ctx = make_merge_ctx(vec!["a", "b"], vec!["c", "d"]);
-    assert!(matches!(MergeExecutor::merge_layered(&ctx), MergeResult::Success));
+    assert!(matches!(
+        MergeExecutor::merge_layered(&ctx),
+        MergeResult::Success
+    ));
 }
 
 #[test]
@@ -1860,18 +2317,30 @@ fn evaluated_detects_overlap() {
 #[test]
 fn evaluated_no_conflicts() {
     let ctx = make_merge_ctx(vec!["a"], vec!["b"]);
-    assert!(matches!(MergeExecutor::merge_evaluated(&ctx), MergeResult::Success));
+    assert!(matches!(
+        MergeExecutor::merge_evaluated(&ctx),
+        MergeResult::Success
+    ));
 }
 
 #[test]
 fn execute_dispatches_correctly() {
     let overlap_ctx = make_merge_ctx(vec!["a"], vec!["a"]);
     // Direct: succeeds despite overlap.
-    assert!(matches!(MergeExecutor::execute(MergeStrategy::Direct, &overlap_ctx), MergeResult::Success));
+    assert!(matches!(
+        MergeExecutor::execute(MergeStrategy::Direct, &overlap_ctx),
+        MergeResult::Success
+    ));
     // Layered: detects overlap.
-    assert!(matches!(MergeExecutor::execute(MergeStrategy::Layered, &overlap_ctx), MergeResult::Conflicts(_)));
+    assert!(matches!(
+        MergeExecutor::execute(MergeStrategy::Layered, &overlap_ctx),
+        MergeResult::Conflicts(_)
+    ));
     // Evaluated: detects overlap.
-    assert!(matches!(MergeExecutor::execute(MergeStrategy::Evaluated, &overlap_ctx), MergeResult::Conflicts(_)));
+    assert!(matches!(
+        MergeExecutor::execute(MergeStrategy::Evaluated, &overlap_ctx),
+        MergeResult::Conflicts(_)
+    ));
 }
 
 // ══════════════════════════════════════════
@@ -1950,9 +2419,9 @@ fn resolve_all_coordinator_only() {
 #[test]
 fn resolve_all_stops_on_escalation() {
     let conflicts = vec![
-        make_conflict(ConflictType::ContentOverlap),         // coordinator
-        make_conflict(ConflictType::SemanticContradiction),   // escalate → stop
-        make_conflict(ConflictType::ContentOverlap),          // never reached
+        make_conflict(ConflictType::ContentOverlap), // coordinator
+        make_conflict(ConflictType::SemanticContradiction), // escalate → stop
+        make_conflict(ConflictType::ContentOverlap), // never reached
     ];
     let result = ConflictResolver::resolve_all(conflicts);
     assert!(matches!(result, ConflictResolutionResult::Pending(r) if r.len() == 2));
@@ -1961,9 +2430,9 @@ fn resolve_all_stops_on_escalation() {
 #[test]
 fn resolve_all_stops_on_rework() {
     let conflicts = vec![
-        make_conflict(ConflictType::ContentOverlap),         // coordinator
-        make_conflict(ConflictType::DependencyViolation),    // rework → stop
-        make_conflict(ConflictType::ContentOverlap),          // never reached
+        make_conflict(ConflictType::ContentOverlap), // coordinator
+        make_conflict(ConflictType::DependencyViolation), // rework → stop
+        make_conflict(ConflictType::ContentOverlap), // never reached
     ];
     let result = ConflictResolver::resolve_all(conflicts);
     assert!(matches!(result, ConflictResolutionResult::Rework(r) if r.len() == 2));
@@ -1985,9 +2454,11 @@ fn salvage_select_prefers_final() {
 
 #[test]
 fn salvage_select_falls_back_to_provisional() {
-    let cps = vec![
-        make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Medium),
-    ];
+    let cps = vec![make_checkpoint(
+        "cp-1",
+        CheckpointStatus::Provisional,
+        Confidence::Medium,
+    )];
     let cp = SalvageIntegration::select_checkpoint(&cps).unwrap();
     assert_eq!(cp.checkpoint_id, CheckpointId::from("cp-1"));
 }
@@ -2013,19 +2484,29 @@ fn salvage_confidence_guardrail() {
 fn salvage_uses_evaluated_strategy() {
     // Clean context → success, but via evaluated path.
     let ctx = make_merge_ctx(vec!["a"], vec!["b"]);
-    assert!(matches!(SalvageIntegration::execute(&ctx), MergeResult::Success));
+    assert!(matches!(
+        SalvageIntegration::execute(&ctx),
+        MergeResult::Success
+    ));
 }
 
 #[test]
 fn salvage_detects_conflicts() {
     // Overlap → evaluated detects it.
     let ctx = make_merge_ctx(vec!["a"], vec!["a"]);
-    assert!(matches!(SalvageIntegration::execute(&ctx), MergeResult::Conflicts(_)));
+    assert!(matches!(
+        SalvageIntegration::execute(&ctx),
+        MergeResult::Conflicts(_)
+    ));
 }
 
 #[test]
 fn salvage_is_applicable() {
-    let cps = vec![make_checkpoint("cp-1", CheckpointStatus::Provisional, Confidence::Low)];
+    let cps = vec![make_checkpoint(
+        "cp-1",
+        CheckpointStatus::Provisional,
+        Confidence::Low,
+    )];
     assert!(SalvageIntegration::is_applicable(&cps));
     assert!(!SalvageIntegration::is_applicable(&[]));
 }
@@ -2065,7 +2546,7 @@ fn timeout_resumes_after_pause() {
     t.register(&ws("A"), 10_000);
     t.on_state_change(&ws("A"), WorkspaceState::Active, 100);
     t.on_state_change(&ws("A"), WorkspaceState::Suspended, 300); // 200ms
-    t.on_state_change(&ws("A"), WorkspaceState::Active, 500);    // resume
+    t.on_state_change(&ws("A"), WorkspaceState::Active, 500); // resume
     assert_eq!(t.elapsed_ms(&ws("A"), 700), 400); // 200 + 200
 }
 
@@ -2114,14 +2595,26 @@ fn timeout_extend_additive() {
 
 #[test]
 fn budget_ok_within_limits() {
-    let usage = ResourceUsage { tokens: 50, ..Default::default() };
-    let budget = ResourceBudget { max_tokens: Some(100), ..Default::default() };
-    assert_eq!(BudgetEnforcer::check(&usage, &budget), BudgetCheckResult::Ok);
+    let usage = ResourceUsage {
+        tokens: 50,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        ..Default::default()
+    };
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
 }
 
 #[test]
 fn budget_warning_at_threshold() {
-    let usage = ResourceUsage { tokens: 85, ..Default::default() };
+    let usage = ResourceUsage {
+        tokens: 85,
+        ..Default::default()
+    };
     let budget = ResourceBudget {
         max_tokens: Some(100),
         warning_threshold: 0.8,
@@ -2135,8 +2628,14 @@ fn budget_warning_at_threshold() {
 
 #[test]
 fn budget_exceeded_at_limit() {
-    let usage = ResourceUsage { tokens: 100, ..Default::default() };
-    let budget = ResourceBudget { max_tokens: Some(100), ..Default::default() };
+    let usage = ResourceUsage {
+        tokens: 100,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        ..Default::default()
+    };
     match BudgetEnforcer::check(&usage, &budget) {
         BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"tokens".to_string())),
         other => panic!("expected Exceeded, got {other:?}"),
@@ -2145,9 +2644,15 @@ fn budget_exceeded_at_limit() {
 
 #[test]
 fn budget_unlimited_never_warns() {
-    let usage = ResourceUsage { tokens: 999_999, ..Default::default() };
+    let usage = ResourceUsage {
+        tokens: 999_999,
+        ..Default::default()
+    };
     let budget = ResourceBudget::default(); // all None
-    assert_eq!(BudgetEnforcer::check(&usage, &budget), BudgetCheckResult::Ok);
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
 }
 
 #[test]
@@ -2258,7 +2763,9 @@ fn setup_handler() -> (
     .unwrap();
 
     let mut graph = TaskGraph::new();
-    graph.add_task(make_task("t1", vec![], TaskStatus::Pending)).unwrap();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
     graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
 
     let gate = GateController::new(30_000, GateFallback::AutoApprove);
@@ -2275,7 +2782,15 @@ fn handler_bind_returns_state() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_bind(&ws("ws-1"), None).unwrap();
@@ -2289,7 +2804,15 @@ fn handler_bind_not_found() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     assert!(h.handle_bind(&ws("nonexistent"), None).is_err());
@@ -2300,12 +2823,24 @@ fn handler_send_envelope_validates_rights() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     // root → ws-1 has a send right (created by TopologySet::create_workspace).
     let result = h.handle_send_envelope(
-        &ws("root"), &ws("ws-1"), "directive", b"payload", EnvelopePriority::Normal,
+        &ws("root"),
+        &ws("ws-1"),
+        "directive",
+        b"payload",
+        EnvelopePriority::Normal,
     );
     assert!(result.is_ok());
 }
@@ -2323,15 +2858,28 @@ fn handler_send_envelope_no_right() {
         originator: Originator::System,
         status: WorkspaceState::Active,
         task_id: None,
-    }).unwrap();
+    })
+    .unwrap();
 
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     // ws-2 → ws-1 has no send right.
     let result = h.handle_send_envelope(
-        &ws("ws-2"), &ws("ws-1"), "feedback", b"payload", EnvelopePriority::Normal,
+        &ws("ws-2"),
+        &ws("ws-1"),
+        "feedback",
+        b"payload",
+        EnvelopePriority::Normal,
     );
     assert!(result.is_err());
 }
@@ -2341,7 +2889,15 @@ fn handler_emit_signal_accepted() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_emit_signal(&ws("ws-1"), SignalType::Started, None);
@@ -2353,10 +2909,21 @@ fn handler_emit_signal_unknown_workspace() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
-    assert!(h.handle_emit_signal(&ws("nonexistent"), SignalType::Started, None).is_err());
+    assert!(
+        h.handle_emit_signal(&ws("nonexistent"), SignalType::Started, None)
+            .is_err()
+    );
 }
 
 #[test]
@@ -2364,11 +2931,24 @@ fn handler_create_checkpoint_returns_id() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_create_checkpoint(
-        &ws("ws-1"), "artifact", b"content", "test", CheckpointStatus::Final, Confidence::High,
+        &ws("ws-1"),
+        "artifact",
+        b"content",
+        "test",
+        CheckpointStatus::Final,
+        Confidence::High,
     );
     assert!(result.is_ok());
     let r = result.unwrap();
@@ -2380,7 +2960,15 @@ fn handler_get_workspace_view() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let view = h.handle_get_workspace(&ws("ws-1")).unwrap();
@@ -2394,7 +2982,15 @@ fn handler_get_task_graph_snapshot() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let snapshot = h.handle_get_task_graph();
@@ -2407,11 +3003,22 @@ fn handler_inject_envelope_succeeds() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_inject_envelope(
-        &ws("ws-1"), "directive", b"injected", EnvelopePriority::Urgent,
+        &ws("ws-1"),
+        "directive",
+        b"injected",
+        EnvelopePriority::Urgent,
     );
     assert!(result.is_ok());
 }
@@ -2421,10 +3028,21 @@ fn handler_inject_envelope_not_found() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
-    assert!(h.handle_inject_envelope(&ws("nope"), "directive", b"x", EnvelopePriority::Normal).is_err());
+    assert!(
+        h.handle_inject_envelope(&ws("nope"), "directive", b"x", EnvelopePriority::Normal)
+            .is_err()
+    );
 }
 
 #[test]
@@ -2437,10 +3055,20 @@ fn handler_gate_response_resolves() {
     let gate_id = event.gate_id;
 
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
-    let result = h.handle_gate_response(&gate_id, GateDecision::Approve).unwrap();
+    let result = h
+        .handle_gate_response(&gate_id, GateDecision::Approve)
+        .unwrap();
     assert!(result.is_some());
 }
 
@@ -2449,10 +3077,20 @@ fn handler_gate_response_unknown_returns_none() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
-    let result = h.handle_gate_response(&GateId::from("gate-999"), GateDecision::Approve).unwrap();
+    let result = h
+        .handle_gate_response(&GateId::from("gate-999"), GateDecision::Approve)
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -2491,7 +3129,10 @@ fn event_bus_drain() {
 
 #[test]
 fn event_bus_subscriber_called() {
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     let count = Arc::new(AtomicUsize::new(0));
     let count_clone = count.clone();
 
@@ -2516,13 +3157,18 @@ fn event_bus_subscriber_called() {
 
 #[test]
 fn event_bus_multiple_subscribers() {
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     let count = Arc::new(AtomicUsize::new(0));
 
     let mut bus = EventBus::new(false);
     for _ in 0..3 {
         let c = count.clone();
-        bus.subscribe(Box::new(move |_| { c.fetch_add(1, Ordering::SeqCst); }));
+        bus.subscribe(Box::new(move |_| {
+            c.fetch_add(1, Ordering::SeqCst);
+        }));
     }
 
     bus.emit(CoordinatorEvent::GateOpened(GateEvent {
@@ -2576,7 +3222,12 @@ fn make_migration_request(ws_id: &str, agent_type: &str) -> MigrationRequest {
 fn migration_start_active_workspace() {
     let mut mc = MigrationCoordinator::new(60_000);
     let ctx = mc
-        .start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000)
+        .start(
+            make_migration_request("ws-1", "gpt-5"),
+            WorkspaceState::Active,
+            "gpt-4".into(),
+            1000,
+        )
         .unwrap();
     assert_eq!(ctx.workspace_id, ws("ws-1"));
     assert_eq!(ctx.pre_migration_state, WorkspaceState::Active);
@@ -2590,7 +3241,12 @@ fn migration_start_active_workspace() {
 fn migration_start_blocked_workspace() {
     let mut mc = MigrationCoordinator::new(60_000);
     let ctx = mc
-        .start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Blocked, "gpt-4".into(), 1000)
+        .start(
+            make_migration_request("ws-1", "gpt-5"),
+            WorkspaceState::Blocked,
+            "gpt-4".into(),
+            1000,
+        )
         .unwrap();
     assert_eq!(ctx.pre_migration_state, WorkspaceState::Blocked);
 }
@@ -2599,7 +3255,12 @@ fn migration_start_blocked_workspace() {
 fn migration_start_invalid_state_idle() {
     let mut mc = MigrationCoordinator::new(60_000);
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Idle, "a".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "x"),
+            WorkspaceState::Idle,
+            "a".into(),
+            0
+        ),
         Err(MigrationError::InvalidState(WorkspaceState::Idle))
     ));
 }
@@ -2608,7 +3269,12 @@ fn migration_start_invalid_state_idle() {
 fn migration_start_invalid_state_suspended() {
     let mut mc = MigrationCoordinator::new(60_000);
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Suspended, "a".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "x"),
+            WorkspaceState::Suspended,
+            "a".into(),
+            0
+        ),
         Err(MigrationError::InvalidState(WorkspaceState::Suspended))
     ));
 }
@@ -2617,7 +3283,12 @@ fn migration_start_invalid_state_suspended() {
 fn migration_start_invalid_state_migrating() {
     let mut mc = MigrationCoordinator::new(60_000);
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Migrating, "a".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "x"),
+            WorkspaceState::Migrating,
+            "a".into(),
+            0
+        ),
         Err(MigrationError::InvalidState(WorkspaceState::Migrating))
     ));
 }
@@ -2626,11 +3297,21 @@ fn migration_start_invalid_state_migrating() {
 fn migration_start_invalid_state_terminal() {
     let mut mc = MigrationCoordinator::new(60_000);
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Closed, "a".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "x"),
+            WorkspaceState::Closed,
+            "a".into(),
+            0
+        ),
         Err(MigrationError::InvalidState(WorkspaceState::Closed))
     ));
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "x"), WorkspaceState::Failed, "a".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "x"),
+            WorkspaceState::Failed,
+            "a".into(),
+            0
+        ),
         Err(MigrationError::InvalidState(WorkspaceState::Failed))
     ));
 }
@@ -2638,9 +3319,20 @@ fn migration_start_invalid_state_terminal() {
 #[test]
 fn migration_start_already_migrating() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        0,
+    )
+    .unwrap();
     assert!(matches!(
-        mc.start(make_migration_request("ws-1", "gpt-6"), WorkspaceState::Active, "gpt-4".into(), 0),
+        mc.start(
+            make_migration_request("ws-1", "gpt-6"),
+            WorkspaceState::Active,
+            "gpt-4".into(),
+            0
+        ),
         Err(MigrationError::AlreadyMigrating(_))
     ));
 }
@@ -2648,7 +3340,13 @@ fn migration_start_already_migrating() {
 #[test]
 fn migration_set_snapshot() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        0,
+    )
+    .unwrap();
 
     let snap = wacp_workspace::MigrationSnapshot {
         inbox: vec![],
@@ -2682,7 +3380,13 @@ fn migration_set_snapshot_not_migrating() {
 #[test]
 fn migration_set_snapshot_already_set() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        0,
+    )
+    .unwrap();
 
     let snap = || wacp_workspace::MigrationSnapshot {
         inbox: vec![],
@@ -2702,7 +3406,13 @@ fn migration_set_snapshot_already_set() {
 #[test]
 fn migration_complete_returns_context() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        100,
+    )
+    .unwrap();
     let ctx = mc.complete("ws-1").unwrap();
     assert_eq!(ctx.workspace_id, ws("ws-1"));
     assert_eq!(ctx.old_agent, "gpt-4");
@@ -2712,13 +3422,22 @@ fn migration_complete_returns_context() {
 #[test]
 fn migration_complete_not_migrating() {
     let mut mc = MigrationCoordinator::new(60_000);
-    assert!(matches!(mc.complete("ws-1"), Err(MigrationError::NotMigrating(_))));
+    assert!(matches!(
+        mc.complete("ws-1"),
+        Err(MigrationError::NotMigrating(_))
+    ));
 }
 
 #[test]
 fn migration_fail_returns_context() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        100,
+    )
+    .unwrap();
     let ctx = mc.fail("ws-1", "bind timeout".into(), 6).unwrap();
     assert_eq!(ctx.workspace_id, ws("ws-1"));
     assert!(!mc.is_migrating("ws-1"));
@@ -2727,7 +3446,13 @@ fn migration_fail_returns_context() {
 #[test]
 fn migration_check_timeouts_expired() {
     let mut mc = MigrationCoordinator::new(1000); // 1s timeout
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 100).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        100,
+    )
+    .unwrap();
 
     assert!(mc.check_timeouts(500).is_empty()); // within timeout
     let expired = mc.check_timeouts(1100); // past timeout
@@ -2738,15 +3463,33 @@ fn migration_check_timeouts_expired() {
 #[test]
 fn migration_check_timeouts_not_expired() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        1000,
+    )
+    .unwrap();
     assert!(mc.check_timeouts(50_000).is_empty());
 }
 
 #[test]
 fn migration_parallel_different_workspaces() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "a".into(), 0).unwrap();
-    mc.start(make_migration_request("ws-2", "gpt-5"), WorkspaceState::Blocked, "b".into(), 0).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "a".into(),
+        0,
+    )
+    .unwrap();
+    mc.start(
+        make_migration_request("ws-2", "gpt-5"),
+        WorkspaceState::Blocked,
+        "b".into(),
+        0,
+    )
+    .unwrap();
     assert_eq!(mc.active_count(), 2);
     assert!(mc.is_migrating("ws-1"));
     assert!(mc.is_migrating("ws-2"));
@@ -2755,7 +3498,13 @@ fn migration_parallel_different_workspaces() {
 #[test]
 fn migration_expected_agent() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 0).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        0,
+    )
+    .unwrap();
     assert_eq!(mc.expected_agent("ws-1").unwrap().agent_type, "gpt-5");
     assert!(mc.expected_agent("ws-2").is_none());
 }
@@ -2764,20 +3513,40 @@ fn migration_expected_agent() {
 
 #[test]
 fn handler_bind_migrating_correct_agent() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
-        setup_handler();
+    let (
+        mut topo,
+        mut graph,
+        mut gate,
+        queue,
+        timeout,
+        liveness,
+        mut migration,
+        mut env_id,
+        mut cp_id,
+    ) = setup_handler();
 
     // Put ws-1 in Migrating state and register a migration.
-    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
-    migration.start(
-        make_migration_request("ws-1", "new-agent"),
-        WorkspaceState::Active,
-        "old-agent".into(),
-        0,
-    ).unwrap();
+    topo.tree
+        .update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration
+        .start(
+            make_migration_request("ws-1", "new-agent"),
+            WorkspaceState::Active,
+            "old-agent".into(),
+            0,
+        )
+        .unwrap();
 
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_bind(&ws("ws-1"), Some("new-agent"));
@@ -2787,19 +3556,39 @@ fn handler_bind_migrating_correct_agent() {
 
 #[test]
 fn handler_bind_migrating_wrong_agent() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
-        setup_handler();
+    let (
+        mut topo,
+        mut graph,
+        mut gate,
+        queue,
+        timeout,
+        liveness,
+        mut migration,
+        mut env_id,
+        mut cp_id,
+    ) = setup_handler();
 
-    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
-    migration.start(
-        make_migration_request("ws-1", "new-agent"),
-        WorkspaceState::Active,
-        "old-agent".into(),
-        0,
-    ).unwrap();
+    topo.tree
+        .update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration
+        .start(
+            make_migration_request("ws-1", "new-agent"),
+            WorkspaceState::Active,
+            "old-agent".into(),
+            0,
+        )
+        .unwrap();
 
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_bind(&ws("ws-1"), Some("wrong-agent"));
@@ -2808,19 +3597,39 @@ fn handler_bind_migrating_wrong_agent() {
 
 #[test]
 fn handler_bind_migrating_no_identity() {
-    let (mut topo, mut graph, mut gate, queue, timeout, liveness, mut migration, mut env_id, mut cp_id) =
-        setup_handler();
+    let (
+        mut topo,
+        mut graph,
+        mut gate,
+        queue,
+        timeout,
+        liveness,
+        mut migration,
+        mut env_id,
+        mut cp_id,
+    ) = setup_handler();
 
-    topo.tree.update_status(&ws("ws-1"), WorkspaceState::Migrating);
-    migration.start(
-        make_migration_request("ws-1", "new-agent"),
-        WorkspaceState::Active,
-        "old-agent".into(),
-        0,
-    ).unwrap();
+    topo.tree
+        .update_status(&ws("ws-1"), WorkspaceState::Migrating);
+    migration
+        .start(
+            make_migration_request("ws-1", "new-agent"),
+            WorkspaceState::Active,
+            "old-agent".into(),
+            0,
+        )
+        .unwrap();
 
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_bind(&ws("ws-1"), None);
@@ -2832,7 +3641,15 @@ fn handler_bind_normal_workspace_no_identity_check() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     // Non-migrating workspace — identity is not checked
@@ -2845,7 +3662,13 @@ fn handler_bind_normal_workspace_no_identity_check() {
 #[test]
 fn trail_event_started() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        1000,
+    )
+    .unwrap();
     let ctx = mc.get("ws-1").unwrap();
     let event = MigrationCoordinator::started_event(ctx);
     assert_eq!(event.workspace_id, ws("ws-1"));
@@ -2858,7 +3681,13 @@ fn trail_event_started() {
 #[test]
 fn trail_event_completed() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        1000,
+    )
+    .unwrap();
     let ctx = mc.get("ws-1").unwrap();
     let event = MigrationCoordinator::completed_event(ctx, 3500);
     assert_eq!(event.duration_ms, 2500);
@@ -2868,7 +3697,13 @@ fn trail_event_completed() {
 #[test]
 fn trail_event_failed() {
     let mut mc = MigrationCoordinator::new(60_000);
-    mc.start(make_migration_request("ws-1", "gpt-5"), WorkspaceState::Active, "gpt-4".into(), 1000).unwrap();
+    mc.start(
+        make_migration_request("ws-1", "gpt-5"),
+        WorkspaceState::Active,
+        "gpt-4".into(),
+        1000,
+    )
+    .unwrap();
     let ctx = mc.get("ws-1").unwrap();
     let event = MigrationCoordinator::failed_event(ctx, "bind timeout", 6, 5000);
     assert_eq!(event.error, "bind timeout");
@@ -3076,15 +3911,12 @@ async fn drain_events(
 
 /// Find last state for a workspace in an event list.
 fn last_state(events: &[WorkspaceEvent], ws_id: &str) -> Option<WorkspaceState> {
-    events
-        .iter()
-        .rev()
-        .find_map(|e| match e {
-            WorkspaceEvent::StateChanged {
-                workspace_id, to, ..
-            } if workspace_id.as_ref() == ws_id => Some(*to),
-            _ => None,
-        })
+    events.iter().rev().find_map(|e| match e {
+        WorkspaceEvent::StateChanged {
+            workspace_id, to, ..
+        } if workspace_id.as_ref() == ws_id => Some(*to),
+        _ => None,
+    })
 }
 
 // ── 17.1: Full lifecycle ──
@@ -3092,175 +3924,335 @@ fn last_state(events: &[WorkspaceEvent], ws_id: &str) -> Option<WorkspaceState> 
 #[tokio::test]
 async fn e2e_single_worker_lifecycle() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     // Dispatch workspace.
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"),
-        parent: Some(ws("root")),
-        children: vec![],
-        owner: uid("system"),
-        originator: Originator::System,
-        status: WorkspaceState::Idle,
-        task_id: None,
-    }).unwrap();
-
-    // Step 1: Deliver directive → Idle → Active
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(
-        e2e_envelope("dir-1", "root", "ws-1"),
-    )).await.unwrap();
-
-    let events = drain_events(&mut coord, &mut event_rx, 3).await;
-    assert_eq!(last_state(&events, "ws-1"), Some(WorkspaceState::Active));
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
-
-    // Step 2: Agent creates checkpoint
-    handle.agent_tx.send(AgentMessage::CreateCheckpoint {
-        checkpoint_type: "artifact".into(),
-        payload: b"output".to_vec(),
-        content_hash: "hash-1".into(),
-        intent: "first draft".into(),
-        status: CheckpointStatus::Final,
-        confidence: Confidence::High,
-        resource_usage: None,
-    }).await.unwrap();
-
-    let events = drain_events(&mut coord, &mut event_rx, 5).await;
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::CheckpointCreated(_))));
-
-    // Step 3: Agent signals Complete → Active → Integrating
-    handle.agent_tx.send(AgentMessage::EmitSignal {
-        signal_type: SignalType::Complete,
-        reason: Some("done".into()),
-        context: None,
-    }).await.unwrap();
-
-    let events = drain_events(&mut coord, &mut event_rx, 5).await;
-    assert_eq!(last_state(&events, "ws-1"), Some(WorkspaceState::Integrating));
-
-    // Step 4: Coordinator completes integration → Integrating → Closed
-    handle.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
-
-    let events = drain_events(&mut coord, &mut event_rx, 5).await;
-    // Should see Closed then Terminated
-    assert!(events.iter().any(|e| matches!(e,
-        WorkspaceEvent::StateChanged { to: WorkspaceState::Closed, .. }
-    )));
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
-}
-
-#[tokio::test]
-async fn e2e_multi_worker_parallel() {
-    let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
-
-    // Dispatch two workspaces.
-    let h1 = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    let h2 = WorkspaceActor::spawn(e2e_config("ws-2", "root", "system"), event_tx.clone());
-    for id in ["ws-1", "ws-2"] {
-        coord.tree.insert(crate::tree::WorkspaceNode {
-            id: ws(id),
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
             parent: Some(ws("root")),
             children: vec![],
             owner: uid("system"),
             originator: Originator::System,
             status: WorkspaceState::Idle,
             task_id: None,
-        }).unwrap();
+        })
+        .unwrap();
+
+    // Step 1: Deliver directive → Idle → Active
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "dir-1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 3).await;
+    assert_eq!(last_state(&events, "ws-1"), Some(WorkspaceState::Active));
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Active
+    );
+
+    // Step 2: Agent creates checkpoint
+    handle
+        .agent_tx
+        .send(AgentMessage::CreateCheckpoint {
+            checkpoint_type: "artifact".into(),
+            payload: b"output".to_vec(),
+            content_hash: "hash-1".into(),
+            intent: "first draft".into(),
+            status: CheckpointStatus::Final,
+            confidence: Confidence::High,
+            resource_usage: None,
+        })
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::CheckpointCreated(_)))
+    );
+
+    // Step 3: Agent signals Complete → Active → Integrating
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: Some("done".into()),
+            context: None,
+        })
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    assert_eq!(
+        last_state(&events, "ws-1"),
+        Some(WorkspaceState::Integrating)
+    );
+
+    // Step 4: Coordinator completes integration → Integrating → Closed
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
+
+    let events = drain_events(&mut coord, &mut event_rx, 5).await;
+    // Should see Closed then Terminated
+    assert!(events.iter().any(|e| matches!(
+        e,
+        WorkspaceEvent::StateChanged {
+            to: WorkspaceState::Closed,
+            ..
+        }
+    )));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::Terminated(_)))
+    );
+}
+
+#[tokio::test]
+async fn e2e_multi_worker_parallel() {
+    let (event_tx, mut event_rx) = mpsc::channel(256);
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+
+    // Dispatch two workspaces.
+    let h1 = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
+    let h2 = WorkspaceActor::spawn(e2e_config("ws-2", "root", "system"), event_tx.clone());
+    for id in ["ws-1", "ws-2"] {
+        coord
+            .tree
+            .insert(crate::tree::WorkspaceNode {
+                id: ws(id),
+                parent: Some(ws("root")),
+                children: vec![],
+                owner: uid("system"),
+                originator: Originator::System,
+                status: WorkspaceState::Idle,
+                task_id: None,
+            })
+            .unwrap();
     }
 
     // Activate both.
-    h1.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
-    h2.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d2", "root", "ws-2"))).await.unwrap();
+    h1.coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
+    h2.coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d2", "root", "ws-2",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 10).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
-    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Active
+    );
+    assert_eq!(
+        coord.tree.get(&ws("ws-2")).unwrap().status,
+        WorkspaceState::Active
+    );
 
     // Both agents complete.
-    h1.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
-    h2.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    h1.agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
+    h2.agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 10).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Integrating);
-    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Integrating);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Integrating
+    );
+    assert_eq!(
+        coord.tree.get(&ws("ws-2")).unwrap().status,
+        WorkspaceState::Integrating
+    );
 
     // Integration succeeds for both.
-    h1.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
-    h2.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    h1.coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
+    h2.coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 10).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Closed);
-    assert_eq!(coord.tree.get(&ws("ws-2")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Closed
+    );
+    assert_eq!(
+        coord.tree.get(&ws("ws-2")).unwrap().status,
+        WorkspaceState::Closed
+    );
 }
 
 #[tokio::test]
 async fn e2e_delegation_subtask() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     // Parent workspace.
     let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-parent"),
-        parent: Some(ws("root")),
-        children: vec![],
-        owner: uid("system"),
-        originator: Originator::System,
-        status: WorkspaceState::Idle,
-        task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-parent"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate parent.
-    parent.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d-p", "root", "ws-parent"))).await.unwrap();
+    parent
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d-p",
+            "root",
+            "ws-parent",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
 
     // Parent "delegates" — coordinator creates subtask workspace.
-    let child = WorkspaceActor::spawn(e2e_config("ws-child", "ws-parent", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-child"),
-        parent: Some(ws("ws-parent")),
-        children: vec![],
-        owner: uid("system"),
-        originator: Originator::System,
-        status: WorkspaceState::Idle,
-        task_id: None,
-    }).unwrap();
+    let child = WorkspaceActor::spawn(
+        e2e_config("ws-child", "ws-parent", "system"),
+        event_tx.clone(),
+    );
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-child"),
+            parent: Some(ws("ws-parent")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate child.
-    child.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d-c", "ws-parent", "ws-child"))).await.unwrap();
+    child
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d-c",
+            "ws-parent",
+            "ws-child",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
 
     // Child completes and integrates.
-    child.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    child
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    child.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    child
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
 
     // Child is Closed, parent is still Active.
-    assert_eq!(coord.tree.get(&ws("ws-child")).unwrap().status, WorkspaceState::Closed);
-    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        coord.tree.get(&ws("ws-child")).unwrap().status,
+        WorkspaceState::Closed
+    );
+    assert_eq!(
+        coord.tree.get(&ws("ws-parent")).unwrap().status,
+        WorkspaceState::Active
+    );
 }
 
 #[tokio::test]
 async fn e2e_workspace_survives_full_cycle() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
-        owner: uid("system"), originator: Originator::System,
-        status: WorkspaceState::Idle, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate → Complete → Integrate → Close
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    handle.coordinator_tx.send(CoordinatorCommand::IntegrationSucceeded).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationSucceeded)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
 
     // Tree node persists with terminal status.
@@ -3284,18 +4276,31 @@ async fn e2e_timeout_expiry() {
     // Coordinator would abort — test the workspace actor side.
     let (event_tx, mut event_rx) = mpsc::channel(64);
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx);
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
     // Drain activation event.
     while event_rx.try_recv().is_ok() {}
 
-    handle.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
     let mut got_failed = false;
     for _ in 0..5 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
         {
-            if to == WorkspaceState::Failed { got_failed = true; break; }
+            if to == WorkspaceState::Failed {
+                got_failed = true;
+                break;
+            }
         }
     }
     assert!(got_failed);
@@ -3303,10 +4308,19 @@ async fn e2e_timeout_expiry() {
 
 #[tokio::test]
 async fn e2e_budget_exceeded() {
-    let usage = ResourceUsage { tokens: 1000, wall_time_ms: 0, storage_bytes: 0, network_bytes: 0, cost_micros: 0 };
+    let usage = ResourceUsage {
+        tokens: 1000,
+        wall_time_ms: 0,
+        storage_bytes: 0,
+        network_bytes: 0,
+        cost_micros: 0,
+    };
     let budget = ResourceBudget {
         max_tokens: Some(500),
-        max_wall_time_ms: None, max_storage_bytes: None, max_network_bytes: None, max_cost_micros: None,
+        max_wall_time_ms: None,
+        max_storage_bytes: None,
+        max_network_bytes: None,
+        max_cost_micros: None,
         warning_threshold: 0.8,
     };
     let result = BudgetEnforcer::check(&usage, &budget);
@@ -3315,17 +4329,30 @@ async fn e2e_budget_exceeded() {
     // Coordinator would abort — same as timeout.
     let (event_tx, mut event_rx) = mpsc::channel(64);
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx);
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
     while event_rx.try_recv().is_ok() {}
 
-    handle.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
     let mut got_failed = false;
     for _ in 0..5 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
         {
-            if to == WorkspaceState::Failed { got_failed = true; break; }
+            if to == WorkspaceState::Failed {
+                got_failed = true;
+                break;
+            }
         }
     }
     assert!(got_failed);
@@ -3334,60 +4361,112 @@ async fn e2e_budget_exceeded() {
 #[tokio::test]
 async fn e2e_failure_cascade_same_owner() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     // Parent + same-owner child.
-    let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-parent"), parent: Some(ws("root")), children: vec![],
-        owner: uid("owner-a"), originator: Originator::System,
-        status: WorkspaceState::Active, task_id: None,
-    }).unwrap();
+    let parent =
+        WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-parent"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("owner-a"),
+            originator: Originator::System,
+            status: WorkspaceState::Active,
+            task_id: None,
+        })
+        .unwrap();
 
-    let _child = WorkspaceActor::spawn(e2e_config("ws-child", "ws-parent", "owner-a"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-child"), parent: Some(ws("ws-parent")), children: vec![],
-        owner: uid("owner-a"), originator: Originator::System,
-        status: WorkspaceState::Active, task_id: None,
-    }).unwrap();
+    let _child = WorkspaceActor::spawn(
+        e2e_config("ws-child", "ws-parent", "owner-a"),
+        event_tx.clone(),
+    );
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-child"),
+            parent: Some(ws("ws-parent")),
+            children: vec![],
+            owner: uid("owner-a"),
+            originator: Originator::System,
+            status: WorkspaceState::Active,
+            task_id: None,
+        })
+        .unwrap();
 
     // Parent fails.
-    parent.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    parent
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 10).await;
 
     // Both should be Failed (cascade).
-    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Failed);
-    assert_eq!(coord.tree.get(&ws("ws-child")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-parent")).unwrap().status,
+        WorkspaceState::Failed
+    );
+    assert_eq!(
+        coord.tree.get(&ws("ws-child")).unwrap().status,
+        WorkspaceState::Failed
+    );
 }
 
 #[tokio::test]
 async fn e2e_failure_cascade_cross_owner() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     // Parent owned by A, child owned by B.
-    let parent = WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-parent"), parent: Some(ws("root")), children: vec![],
-        owner: uid("owner-a"), originator: Originator::System,
-        status: WorkspaceState::Active, task_id: None,
-    }).unwrap();
+    let parent =
+        WorkspaceActor::spawn(e2e_config("ws-parent", "root", "owner-a"), event_tx.clone());
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-parent"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("owner-a"),
+            originator: Originator::System,
+            status: WorkspaceState::Active,
+            task_id: None,
+        })
+        .unwrap();
 
     let mut child_config = e2e_config("ws-child", "ws-parent", "owner-b");
     child_config.owner = uid("owner-b");
     let _child = WorkspaceActor::spawn(child_config, event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-child"), parent: Some(ws("ws-parent")), children: vec![],
-        owner: uid("owner-b"), originator: Originator::System,
-        status: WorkspaceState::Active, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-child"),
+            parent: Some(ws("ws-parent")),
+            children: vec![],
+            owner: uid("owner-b"),
+            originator: Originator::System,
+            status: WorkspaceState::Active,
+            task_id: None,
+        })
+        .unwrap();
 
     // Parent fails.
-    parent.coordinator_tx.send(CoordinatorCommand::Abort).await.unwrap();
+    parent
+        .coordinator_tx
+        .send(CoordinatorCommand::Abort)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 10).await;
 
     // Parent Failed, child reparented to root (still Active in tree).
-    assert_eq!(coord.tree.get(&ws("ws-parent")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-parent")).unwrap().status,
+        WorkspaceState::Failed
+    );
     let child_node = coord.tree.get(&ws("ws-child")).unwrap();
     assert_eq!(child_node.parent.as_ref().unwrap().as_ref(), "root");
     // Cross-owner child is NOT failed — it's reparented.
@@ -3397,79 +4476,180 @@ async fn e2e_failure_cascade_cross_owner() {
 #[tokio::test]
 async fn e2e_conflict_to_resolution() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
-        owner: uid("system"), originator: Originator::System,
-        status: WorkspaceState::Idle, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate → Complete → Integrating
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Integrating);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Integrating
+    );
 
     // Conflict detected → Conflicted
-    handle.coordinator_tx.send(CoordinatorCommand::ConflictDetected).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictDetected)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Conflicted);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Conflicted
+    );
 
     // Conflict resolved → Closed
-    handle.coordinator_tx.send(CoordinatorCommand::ConflictResolved).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictResolved)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Closed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Closed
+    );
 }
 
 #[tokio::test]
 async fn e2e_conflict_unresolvable() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
-        owner: uid("system"), originator: Originator::System,
-        status: WorkspaceState::Idle, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate → Complete → Integrating → Conflict → Unresolvable → Failed
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    handle.coordinator_tx.send(CoordinatorCommand::ConflictDetected).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictDetected)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    handle.coordinator_tx.send(CoordinatorCommand::ConflictUnresolvable).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::ConflictUnresolvable)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Failed
+    );
 }
 
 #[tokio::test]
 async fn e2e_integration_failure() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
-        owner: uid("system"), originator: Originator::System,
-        status: WorkspaceState::Idle, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate → Complete → Integrating → IntegrationFailed → Failed
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    handle.agent_tx.send(AgentMessage::EmitSignal { signal_type: SignalType::Complete, reason: None, context: None }).await.unwrap();
+    handle
+        .agent_tx
+        .send(AgentMessage::EmitSignal {
+            signal_type: SignalType::Complete,
+            reason: None,
+            context: None,
+        })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
-    handle.coordinator_tx.send(CoordinatorCommand::IntegrationFailed).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::IntegrationFailed)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Failed
+    );
 }
 
 // ── 17.3: Highway integration ──
@@ -3477,19 +4657,34 @@ async fn e2e_integration_failure() {
 #[test]
 fn e2e_gate_approval_flow() {
     let mut gate = GateController::new(30_000, GateFallback::AutoApprove);
-    let event = gate.open_gate(tid("t1"), "task_approval".into(), "approve task", None, None);
+    let event = gate.open_gate(
+        tid("t1"),
+        "task_approval".into(),
+        "approve task",
+        None,
+        None,
+    );
     assert!(gate.pending_for_task(&tid("t1")).is_some());
 
     let resolution = gate.resolve(&event.gate_id, GateDecision::Approve);
     assert!(resolution.is_some());
-    assert!(matches!(resolution.unwrap(), GateResolution::Approved { .. }));
+    assert!(matches!(
+        resolution.unwrap(),
+        GateResolution::Approved { .. }
+    ));
     assert!(gate.pending_for_task(&tid("t1")).is_none());
 }
 
 #[test]
 fn e2e_gate_rejection() {
     let mut gate = GateController::new(30_000, GateFallback::AutoApprove);
-    let event = gate.open_gate(tid("t1"), "task_approval".into(), "approve task", None, None);
+    let event = gate.open_gate(
+        tid("t1"),
+        "task_approval".into(),
+        "approve task",
+        None,
+        None,
+    );
 
     let resolution = gate.resolve(&event.gate_id, GateDecision::Reject);
     assert!(resolution.is_some());
@@ -3501,11 +4696,22 @@ fn e2e_envelope_injection() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_inject_envelope(
-        &ws("ws-1"), "directive", b"injected payload", EnvelopePriority::Urgent,
+        &ws("ws-1"),
+        "directive",
+        b"injected payload",
+        EnvelopePriority::Urgent,
     );
     assert!(result.is_ok());
     let envelope_id = result.unwrap().envelope_id;
@@ -3515,42 +4721,87 @@ fn e2e_envelope_injection() {
 #[tokio::test]
 async fn e2e_migration_full_lifecycle() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     let handle = WorkspaceActor::spawn(e2e_config("ws-1", "root", "system"), event_tx.clone());
-    coord.tree.insert(crate::tree::WorkspaceNode {
-        id: ws("ws-1"), parent: Some(ws("root")), children: vec![],
-        owner: uid("system"), originator: Originator::System,
-        status: WorkspaceState::Idle, task_id: None,
-    }).unwrap();
+    coord
+        .tree
+        .insert(crate::tree::WorkspaceNode {
+            id: ws("ws-1"),
+            parent: Some(ws("root")),
+            children: vec![],
+            owner: uid("system"),
+            originator: Originator::System,
+            status: WorkspaceState::Idle,
+            task_id: None,
+        })
+        .unwrap();
 
     // Activate.
-    handle.coordinator_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Active
+    );
 
     // Start migration.
-    coord.migration.start(
-        MigrationRequest { workspace_id: ws("ws-1"), new_agent: AgentRef { agent_type: "gpt-5".into(), config: None }, reason: "upgrade".into() },
-        WorkspaceState::Active,
-        "gpt-4".into(),
-        1000,
-    ).unwrap();
+    coord
+        .migration
+        .start(
+            MigrationRequest {
+                workspace_id: ws("ws-1"),
+                new_agent: AgentRef {
+                    agent_type: "gpt-5".into(),
+                    config: None,
+                },
+                reason: "upgrade".into(),
+            },
+            WorkspaceState::Active,
+            "gpt-4".into(),
+            1000,
+        )
+        .unwrap();
 
     // Send MigrateBegin → workspace transitions to Migrating + emits snapshot.
-    handle.coordinator_tx.send(CoordinatorCommand::MigrateBegin).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
     let events = drain_events(&mut coord, &mut event_rx, 5).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Migrating);
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::MigrationSnapshot { .. })));
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Migrating
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::MigrationSnapshot { .. }))
+    );
     // Snapshot should have been stored.
     assert!(coord.migration.get("ws-1").unwrap().snapshot.is_some());
 
     // Complete migration → Active.
     let ctx = coord.migration.get("ws-1").unwrap();
     let restore_blocked = ctx.pre_migration_state == WorkspaceState::Blocked;
-    handle.coordinator_tx.send(CoordinatorCommand::MigrationComplete { restore_blocked }).await.unwrap();
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::MigrationComplete { restore_blocked })
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Active
+    );
 
     // Clean up migration context.
     coord.migration.complete("ws-1").unwrap();
@@ -3560,7 +4811,8 @@ async fn e2e_migration_full_lifecycle() {
 #[tokio::test]
 async fn e2e_migration_timeout() {
     let (event_tx, mut event_rx) = mpsc::channel(256);
-    let mut coord = crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
+    let mut coord =
+        crate::orchestrator::Coordinator::new(ws("root"), uid("system"), event_tx.clone());
 
     // Use dispatch() so the coordinator has the workspace handle for fail_migration.
     coord.dispatch(crate::orchestrator::DispatchRequest {
@@ -3570,19 +4822,37 @@ async fn e2e_migration_timeout() {
 
     // Activate via the coordinator's stored handle.
     let coord_tx = coord.handle(&ws("ws-1")).unwrap().coordinator_tx.clone();
-    coord_tx.send(CoordinatorCommand::DeliverEnvelope(e2e_envelope("d1", "root", "ws-1"))).await.unwrap();
+    coord_tx
+        .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+            "d1", "root", "ws-1",
+        )))
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 3).await;
 
     // Start migration with short timeout.
     coord.migration = MigrationCoordinator::new(100); // 100ms
-    coord.migration.start(
-        MigrationRequest { workspace_id: ws("ws-1"), new_agent: AgentRef { agent_type: "gpt-5".into(), config: None }, reason: "test".into() },
-        WorkspaceState::Active,
-        "gpt-4".into(),
-        0,
-    ).unwrap();
+    coord
+        .migration
+        .start(
+            MigrationRequest {
+                workspace_id: ws("ws-1"),
+                new_agent: AgentRef {
+                    agent_type: "gpt-5".into(),
+                    config: None,
+                },
+                reason: "test".into(),
+            },
+            WorkspaceState::Active,
+            "gpt-4".into(),
+            0,
+        )
+        .unwrap();
 
-    coord_tx.send(CoordinatorCommand::MigrateBegin).await.unwrap();
+    coord_tx
+        .send(CoordinatorCommand::MigrateBegin)
+        .await
+        .unwrap();
     drain_events(&mut coord, &mut event_rx, 5).await;
 
     // Check timeout.
@@ -3593,7 +4863,10 @@ async fn e2e_migration_timeout() {
     coord.fail_migration(&ws("ws-1"), "timeout".into(), 6).await;
     drain_events(&mut coord, &mut event_rx, 5).await;
 
-    assert_eq!(coord.tree.get(&ws("ws-1")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        coord.tree.get(&ws("ws-1")).unwrap().status,
+        WorkspaceState::Failed
+    );
     assert!(!coord.migration.is_migrating("ws-1"));
 }
 
@@ -3608,7 +4881,15 @@ fn handler_create_checkpoint_nonexistent_workspace() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_create_checkpoint(
@@ -3627,11 +4908,23 @@ fn handler_send_envelope_from_nonexistent() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_send_envelope(
-        &ws("ghost"), &ws("ws-1"), "directive", b"", EnvelopePriority::Normal,
+        &ws("ghost"),
+        &ws("ws-1"),
+        "directive",
+        b"",
+        EnvelopePriority::Normal,
     );
     assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
 }
@@ -3641,11 +4934,23 @@ fn handler_send_envelope_to_nonexistent() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_send_envelope(
-        &ws("root"), &ws("ghost"), "directive", b"", EnvelopePriority::Normal,
+        &ws("root"),
+        &ws("ghost"),
+        "directive",
+        b"",
+        EnvelopePriority::Normal,
     );
     assert!(matches!(result, Err(HandlerError::WorkspaceNotFound(_))));
 }
@@ -3663,11 +4968,23 @@ fn handler_send_envelope_with_revoked_right() {
     topo.port_rights.revoke(&right_id).unwrap();
 
     let mut h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_send_envelope(
-        &ws("root"), &ws("ws-1"), "directive", b"", EnvelopePriority::Normal,
+        &ws("root"),
+        &ws("ws-1"),
+        "directive",
+        b"",
+        EnvelopePriority::Normal,
     );
     assert!(matches!(result, Err(HandlerError::NoSendRight(_))));
 }
@@ -3677,7 +4994,15 @@ fn handler_get_workspace_not_found() {
     let (mut topo, mut graph, mut gate, queue, timeout, liveness, migration, mut env_id, mut cp_id) =
         setup_handler();
     let h = RequestHandler::new(
-        &mut topo, &mut graph, &mut gate, &queue, &timeout, &liveness, &migration, &mut env_id, &mut cp_id,
+        &mut topo,
+        &mut graph,
+        &mut gate,
+        &queue,
+        &timeout,
+        &liveness,
+        &migration,
+        &mut env_id,
+        &mut cp_id,
     );
 
     let result = h.handle_get_workspace(&ws("nonexistent"));
@@ -3714,10 +5039,22 @@ fn topology_create_workspace_duplicate_id() {
 #[test]
 fn tree_insert_duplicate_node() {
     let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
-    tree.insert(make_node("child", Some("root"), "owner", Originator::System, WorkspaceState::Active))
-        .unwrap();
+    tree.insert(make_node(
+        "child",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ))
+    .unwrap();
 
-    let err = tree.insert(make_node("child", Some("root"), "owner", Originator::System, WorkspaceState::Active));
+    let err = tree.insert(make_node(
+        "child",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Active,
+    ));
     assert!(matches!(err, Err(TreeError::DuplicateNode(_))));
 }
 
@@ -3744,13 +5081,25 @@ fn topology_cascade_deep_tree_same_owner() {
     let effect = topo.terminate_workspace(&ws("L1"), WorkspaceState::Failed);
 
     // L2 and L3 should be in the failed list.
-    assert!(effect.failed.contains(&ws("L2")) || effect.failed.contains(&ws("L3")),
-        "deep cascade should fail descendants: {:?}", effect.failed);
+    assert!(
+        effect.failed.contains(&ws("L2")) || effect.failed.contains(&ws("L3")),
+        "deep cascade should fail descendants: {:?}",
+        effect.failed
+    );
 
     // Verify all are marked Failed in the tree.
-    assert_eq!(topo.tree.get(&ws("L1")).unwrap().status, WorkspaceState::Failed);
-    assert_eq!(topo.tree.get(&ws("L2")).unwrap().status, WorkspaceState::Failed);
-    assert_eq!(topo.tree.get(&ws("L3")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        topo.tree.get(&ws("L1")).unwrap().status,
+        WorkspaceState::Failed
+    );
+    assert_eq!(
+        topo.tree.get(&ws("L2")).unwrap().status,
+        WorkspaceState::Failed
+    );
+    assert_eq!(
+        topo.tree.get(&ws("L3")).unwrap().status,
+        WorkspaceState::Failed
+    );
 
     // Port rights should be expired.
     assert!(effect.rights_expired > 0);
@@ -3768,7 +5117,8 @@ fn topology_cascade_deep_tree_cross_owner_stops() {
         originator: Originator::System,
         status: WorkspaceState::Active,
         task_id: None,
-    }).unwrap();
+    })
+    .unwrap();
 
     topo.create_workspace(CreateWorkspaceParams {
         id: ws("child-B"),
@@ -3777,7 +5127,8 @@ fn topology_cascade_deep_tree_cross_owner_stops() {
         originator: Originator::System,
         status: WorkspaceState::Active,
         task_id: None,
-    }).unwrap();
+    })
+    .unwrap();
 
     topo.create_workspace(CreateWorkspaceParams {
         id: ws("grandchild-B"),
@@ -3786,17 +5137,30 @@ fn topology_cascade_deep_tree_cross_owner_stops() {
         originator: Originator::System,
         status: WorkspaceState::Active,
         task_id: None,
-    }).unwrap();
+    })
+    .unwrap();
 
     // Fail child-A → cascade stops at child-B (different owner), reparents it.
     let effect = topo.terminate_workspace(&ws("child-A"), WorkspaceState::Failed);
 
-    assert_eq!(topo.tree.get(&ws("child-A")).unwrap().status, WorkspaceState::Failed);
+    assert_eq!(
+        topo.tree.get(&ws("child-A")).unwrap().status,
+        WorkspaceState::Failed
+    );
     // child-B is reparented, not failed.
-    assert_eq!(topo.tree.get(&ws("child-B")).unwrap().status, WorkspaceState::Active);
-    assert!(!effect.reparented.is_empty(), "child-B should be reparented");
+    assert_eq!(
+        topo.tree.get(&ws("child-B")).unwrap().status,
+        WorkspaceState::Active
+    );
+    assert!(
+        !effect.reparented.is_empty(),
+        "child-B should be reparented"
+    );
     // grandchild-B also stays active.
-    assert_eq!(topo.tree.get(&ws("grandchild-B")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        topo.tree.get(&ws("grandchild-B")).unwrap().status,
+        WorkspaceState::Active
+    );
 }
 
 // --- Port rights: transfer/consume expired ---
@@ -3873,7 +5237,10 @@ fn migration_start_rejects_idle_state() {
         "old-agent".into(),
         0,
     );
-    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Idle))));
+    assert!(matches!(
+        result,
+        Err(MigrationError::InvalidState(WorkspaceState::Idle))
+    ));
 }
 
 #[test]
@@ -3885,7 +5252,10 @@ fn migration_start_rejects_closed_state() {
         "old-agent".into(),
         0,
     );
-    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Closed))));
+    assert!(matches!(
+        result,
+        Err(MigrationError::InvalidState(WorkspaceState::Closed))
+    ));
 }
 
 #[test]
@@ -3897,7 +5267,10 @@ fn migration_start_rejects_failed_state() {
         "old-agent".into(),
         0,
     );
-    assert!(matches!(result, Err(MigrationError::InvalidState(WorkspaceState::Failed))));
+    assert!(matches!(
+        result,
+        Err(MigrationError::InvalidState(WorkspaceState::Failed))
+    ));
 }
 
 #[test]
@@ -3920,7 +5293,10 @@ fn migration_fail_nonexistent_workspace() {
 
 #[test]
 fn event_bus_subscribe_receive_unsubscribe() {
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     let count = Arc::new(AtomicUsize::new(0));
     let count_clone = count.clone();
 
@@ -3960,7 +5336,9 @@ fn dispatch_to_nonexistent_task_handled() {
     assert!(actions.is_empty());
 
     // Add a task that's not dispatchable (Draft status).
-    graph.add_task(make_task("t-ghost", vec![], TaskStatus::Draft)).unwrap();
+    graph
+        .add_task(make_task("t-ghost", vec![], TaskStatus::Draft))
+        .unwrap();
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert!(actions.is_empty());
 }
@@ -3973,13 +5351,16 @@ fn concurrent_workspace_creation_unique_ids() {
 
     // Add 10 pending tasks.
     for i in 0..10 {
-        graph.add_task(make_task(&format!("t-{i}"), vec![], TaskStatus::Pending)).unwrap();
+        graph
+            .add_task(make_task(&format!("t-{i}"), vec![], TaskStatus::Pending))
+            .unwrap();
     }
 
     let actions = disp.try_dispatch(&mut graph, &mut topo);
     assert_eq!(actions.len(), 10);
 
     // Verify all workspace IDs are unique.
-    let ids: std::collections::HashSet<_> = actions.iter().map(|a| a.workspace_id.clone()).collect();
+    let ids: std::collections::HashSet<_> =
+        actions.iter().map(|a| a.workspace_id.clone()).collect();
     assert_eq!(ids.len(), 10, "all 10 workspace IDs must be unique");
 }

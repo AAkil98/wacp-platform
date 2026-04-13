@@ -169,9 +169,7 @@ impl MigrationCoordinator {
             .ok_or_else(|| MigrationError::NotMigrating(workspace_id.to_string()))?;
 
         if ctx.snapshot.is_some() {
-            return Err(MigrationError::SnapshotAlreadySet(
-                workspace_id.to_string(),
-            ));
+            return Err(MigrationError::SnapshotAlreadySet(workspace_id.to_string()));
         }
 
         ctx.snapshot = Some(snapshot);

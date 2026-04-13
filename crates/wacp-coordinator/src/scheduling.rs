@@ -56,10 +56,7 @@ impl SchedulingOps {
                 Some(t) => t,
                 None => continue,
             };
-            if !matches!(
-                dep.status,
-                TaskStatus::Completed | TaskStatus::Integrated
-            ) {
+            if !matches!(dep.status, TaskStatus::Completed | TaskStatus::Integrated) {
                 continue;
             }
             if let Some(ref cp) = dep.checkpoint_ref {
@@ -148,5 +145,4 @@ impl SchedulingOps {
 
         Ok(ids)
     }
-
 }

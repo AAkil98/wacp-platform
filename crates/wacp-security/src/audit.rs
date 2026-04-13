@@ -25,10 +25,7 @@ pub enum AuditEvent {
     },
 
     /// Secret was accessed (exposed for use).
-    SecretAccess {
-        key_name: String,
-        purpose: String,
-    },
+    SecretAccess { key_name: String, purpose: String },
 
     /// Content filter triggered.
     ContentFiltered {
@@ -199,11 +196,34 @@ mod tests {
     fn all_audit_event_variants_serialize() {
         // Ensure every variant can be serialized without panic
         let events: Vec<AuditEvent> = vec![
-            AuditEvent::AuthAttempt { identity: "x".into(), method: "y".into(), success: true, reason: None },
-            AuditEvent::RateLimited { identity: "x".into(), limit_type: "y".into() },
-            AuditEvent::SecretAccess { key_name: "x".into(), purpose: "y".into() },
-            AuditEvent::ContentFiltered { rule_name: "x".into(), action: "y".into(), context: "z".into() },
-            AuditEvent::ToolInvocation { tool_name: "x".into(), capability: "y".into(), input_hash: "h".into(), output_hash: None, duration_ms: 0, success: true, error_code: None },
+            AuditEvent::AuthAttempt {
+                identity: "x".into(),
+                method: "y".into(),
+                success: true,
+                reason: None,
+            },
+            AuditEvent::RateLimited {
+                identity: "x".into(),
+                limit_type: "y".into(),
+            },
+            AuditEvent::SecretAccess {
+                key_name: "x".into(),
+                purpose: "y".into(),
+            },
+            AuditEvent::ContentFiltered {
+                rule_name: "x".into(),
+                action: "y".into(),
+                context: "z".into(),
+            },
+            AuditEvent::ToolInvocation {
+                tool_name: "x".into(),
+                capability: "y".into(),
+                input_hash: "h".into(),
+                output_hash: None,
+                duration_ms: 0,
+                success: true,
+                error_code: None,
+            },
         ];
         for event in &events {
             let json = serde_json::to_value(event).unwrap();

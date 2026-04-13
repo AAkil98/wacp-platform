@@ -1,6 +1,6 @@
 use tokio::sync::mpsc;
-use wacp_types::*;
 use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+use wacp_types::*;
 
 use crate::state::{ArchivedWorkspace, MigrationSnapshot, WorkspaceConfig, WorkspaceState};
 
@@ -186,7 +186,8 @@ impl WorkspaceActor {
                 self.transition(WorkspaceTrigger::MigrationFailed).await;
             }
             CoordinatorCommand::IntegrationSucceeded => {
-                self.transition(WorkspaceTrigger::IntegrationSucceeded).await;
+                self.transition(WorkspaceTrigger::IntegrationSucceeded)
+                    .await;
             }
             CoordinatorCommand::IntegrationFailed => {
                 self.transition(WorkspaceTrigger::IntegrationFailed).await;
@@ -198,7 +199,8 @@ impl WorkspaceActor {
                 self.transition(WorkspaceTrigger::ConflictResolved).await;
             }
             CoordinatorCommand::ConflictUnresolvable => {
-                self.transition(WorkspaceTrigger::ConflictUnresolvable).await;
+                self.transition(WorkspaceTrigger::ConflictUnresolvable)
+                    .await;
             }
             CoordinatorCommand::GrantVisibility(resources) => {
                 self.state.grant_visibility(&resources);

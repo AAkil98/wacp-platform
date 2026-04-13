@@ -2,8 +2,8 @@ use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use parking_lot::{Mutex, RwLock};
 use ring::rand::{SecureRandom, SystemRandom};
 use wacp_types::{UserId, WorkspaceId};
@@ -62,10 +62,7 @@ impl PskAuthenticator {
     /// Register an agent and return its token (256-bit random, base64url, 43 chars).
     pub fn register_agent(&self, workspace_id: WorkspaceId, role: String) -> String {
         let token = self.generate_token();
-        let identity = AgentIdentity {
-            workspace_id,
-            role,
-        };
+        let identity = AgentIdentity { workspace_id, role };
         self.agent_tokens.write().insert(token.clone(), identity);
         token
     }
@@ -91,9 +88,7 @@ impl PskAuthenticator {
 
     fn generate_token(&self) -> String {
         let mut bytes = [0u8; 32]; // 256 bits
-        self.rng
-            .fill(&mut bytes)
-            .expect("system random available");
+        self.rng.fill(&mut bytes).expect("system random available");
         URL_SAFE_NO_PAD.encode(bytes)
     }
 }
@@ -342,12 +337,7 @@ mod tests {
     fn psk_tokens_are_unique() {
         let psk = PskAuthenticator::new();
         let tokens: Vec<_> = (0..10)
-            .map(|i| {
-                psk.register_agent(
-                    WorkspaceId::from(format!("ws-{i}")),
-                    "worker".into(),
-                )
-            })
+            .map(|i| psk.register_agent(WorkspaceId::from(format!("ws-{i}")), "worker".into()))
             .collect();
         let unique: std::collections::HashSet<_> = tokens.iter().collect();
         assert_eq!(unique.len(), tokens.len(), "all tokens must be unique");

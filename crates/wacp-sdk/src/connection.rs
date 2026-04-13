@@ -5,10 +5,10 @@ use wacp_transport::wacp_v1;
 use wacp_transport::wacp_v1::agent_service_client::AgentServiceClient;
 use wacp_types::*;
 
+use crate::AgentConfig;
 use crate::builder::{CheckpointBuilder, EnvelopeBuilder};
 use crate::error::Error;
 use crate::streams::{CommandStream, InboxStream};
-use crate::AgentConfig;
 
 /// A connected WACP agent — the primary SDK type.
 ///

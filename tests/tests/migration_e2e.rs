@@ -4,7 +4,6 @@ use wacp_integration_tests::*;
 
 use wacp_types::*;
 
-
 #[tokio::test]
 async fn migration_workspace_transitions() {
     let (mut coord, mut rx) = make_coordinator();
@@ -33,9 +32,7 @@ async fn abort_from_any_non_terminal_state() {
     dispatch(&mut coord, "ws-abort", "task-abort");
 
     // Abort from Idle (no activation needed)
-    coord
-        .abort_workspace(&WorkspaceId::from("ws-abort"))
-        .await;
+    coord.abort_workspace(&WorkspaceId::from("ws-abort")).await;
     drain_events(&mut coord, &mut rx, 10, 200).await;
 
     assert_eq!(
@@ -71,9 +68,7 @@ async fn multiple_workspace_independent_lifecycles() {
     );
 
     // Abort ws-a, ws-b should stay Idle
-    coord
-        .abort_workspace(&WorkspaceId::from("ws-a"))
-        .await;
+    coord.abort_workspace(&WorkspaceId::from("ws-a")).await;
     drain_events(&mut coord, &mut rx, 10, 200).await;
 
     assert_eq!(

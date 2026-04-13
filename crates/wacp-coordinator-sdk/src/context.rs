@@ -37,7 +37,10 @@ impl CoordinatorContext {
         client: CoordinatorServiceClient<tonic::transport::Channel>,
         cancellation: CancellationToken,
     ) -> Self {
-        Self { client, cancellation }
+        Self {
+            client,
+            cancellation,
+        }
     }
 
     // ── Task graph ──────────────────────────────────────────
@@ -61,10 +64,7 @@ impl CoordinatorContext {
     }
 
     /// Create a task graph from definitions. Returns assigned task IDs.
-    pub async fn decompose(
-        &mut self,
-        tasks: Vec<TaskDefinition>,
-    ) -> Result<Vec<String>, Error> {
+    pub async fn decompose(&mut self, tasks: Vec<TaskDefinition>) -> Result<Vec<String>, Error> {
         let proto_tasks: Vec<wacp_v1::TaskDefinition> = tasks
             .into_iter()
             .map(|t| wacp_v1::TaskDefinition {
@@ -105,7 +105,11 @@ impl CoordinatorContext {
                 task_id: t.task_id,
                 name: t.name,
                 description: t.description,
-                status: format!("{:?}", wacp_v1::TaskStatus::try_from(t.status).unwrap_or(wacp_v1::TaskStatus::Unspecified)),
+                status: format!(
+                    "{:?}",
+                    wacp_v1::TaskStatus::try_from(t.status)
+                        .unwrap_or(wacp_v1::TaskStatus::Unspecified)
+                ),
                 assigned_workspace: if t.assigned_workspace.is_empty() {
                     None
                 } else {
@@ -117,11 +121,7 @@ impl CoordinatorContext {
     }
 
     /// Cancel a task and cascade to dependents.
-    pub async fn cancel_task(
-        &mut self,
-        task_id: &str,
-        reason: &str,
-    ) -> Result<(), Error> {
+    pub async fn cancel_task(&mut self, task_id: &str, reason: &str) -> Result<(), Error> {
         self.client
             .cancel_task(wacp_v1::CancelTaskRequest {
                 task_id: task_id.into(),
@@ -167,11 +167,7 @@ impl CoordinatorContext {
     }
 
     /// Terminate a workspace.
-    pub async fn abort(
-        &mut self,
-        workspace_id: &str,
-        reason: &str,
-    ) -> Result<(), Error> {
+    pub async fn abort(&mut self, workspace_id: &str, reason: &str) -> Result<(), Error> {
         self.client
             .abort_workspace(wacp_v1::AbortWorkspaceRequest {
                 workspace_id: workspace_id.into(),
@@ -247,10 +243,7 @@ impl CoordinatorContext {
     // ── Integration ─────────────────────────────────────────
 
     /// Trigger the integration pipeline for a completed workspace.
-    pub async fn integrate(
-        &mut self,
-        workspace_id: &str,
-    ) -> Result<IntegrationResult, Error> {
+    pub async fn integrate(&mut self, workspace_id: &str) -> Result<IntegrationResult, Error> {
         let response = self
             .client
             .trigger_integration(wacp_v1::TriggerIntegrationRequest {
@@ -306,7 +299,11 @@ impl CoordinatorContext {
         Ok(stream.map(|item| {
             item.map(|ev| SignalEvent {
                 workspace_id: ev.workspace_id,
-                signal_type: format!("{:?}", wacp_v1::SignalType::try_from(ev.signal_type).unwrap_or(wacp_v1::SignalType::Unspecified)),
+                signal_type: format!(
+                    "{:?}",
+                    wacp_v1::SignalType::try_from(ev.signal_type)
+                        .unwrap_or(wacp_v1::SignalType::Unspecified)
+                ),
                 reason: ev.reason,
                 context: ev.context,
                 timestamp: ev.timestamp,
@@ -323,10 +320,7 @@ impl CoordinatorContext {
     ) -> Result<SignalEvent, Error> {
         let mut stream = self.signals(filter).await?;
         tokio::time::timeout(Duration::from_millis(timeout_ms), async {
-            stream
-                .next()
-                .await
-                .ok_or(Error::StreamEnded)?
+            stream.next().await.ok_or(Error::StreamEnded)?
         })
         .await
         .map_err(|_| Error::SignalTimeout(timeout_ms))?

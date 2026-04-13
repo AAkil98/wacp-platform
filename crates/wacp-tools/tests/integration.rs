@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use wacp_tools::*;
 use wacp_tools::descriptor::Capability;
 use wacp_tools::handler::{ToolContext, ToolHandler};
 use wacp_tools::resilience::CircuitBreakerConfig;
+use wacp_tools::*;
 
 fn test_cap(name: &str, schema: serde_json::Value) -> Capability {
     Capability {
@@ -45,11 +45,14 @@ async fn full_tool_lifecycle() {
         Ok(json!({"sum": x + y}))
     };
 
-    let cap = test_cap("add", json!({
-        "type": "object",
-        "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
-        "required": ["x", "y"]
-    }));
+    let cap = test_cap(
+        "add",
+        json!({
+            "type": "object",
+            "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+            "required": ["x", "y"]
+        }),
+    );
 
     let pkg = PackageBuilder::new(test_desc("math", vec![cap]))
         .handler("add", handler)
@@ -60,7 +63,12 @@ async fn full_tool_lifecycle() {
     registry.register(pkg).await.unwrap();
 
     let result = registry
-        .execute("math", "add", json!({"x": 3, "y": 4}), ExecutionOptions::default())
+        .execute(
+            "math",
+            "add",
+            json!({"x": 3, "y": 4}),
+            ExecutionOptions::default(),
+        )
         .await
         .unwrap();
 
@@ -82,11 +90,14 @@ async fn input_validation_prevents_handler_execution() {
         }
     };
 
-    let cap = test_cap("strict", json!({
-        "type": "object",
-        "properties": {"required_field": {"type": "string"}},
-        "required": ["required_field"]
-    }));
+    let cap = test_cap(
+        "strict",
+        json!({
+            "type": "object",
+            "properties": {"required_field": {"type": "string"}},
+            "required": ["required_field"]
+        }),
+    );
 
     let pkg = PackageBuilder::new(test_desc("strict_tool", vec![cap]))
         .handler("strict", handler)
@@ -98,11 +109,19 @@ async fn input_validation_prevents_handler_execution() {
 
     // Invalid input → handler never called
     let err = registry
-        .execute("strict_tool", "strict", json!({}), ExecutionOptions::default())
+        .execute(
+            "strict_tool",
+            "strict",
+            json!({}),
+            ExecutionOptions::default(),
+        )
         .await
         .unwrap_err();
 
-    assert_eq!(err.code, wacp_tools::handler::ToolErrorCode::ValidationFailed);
+    assert_eq!(
+        err.code,
+        wacp_tools::handler::ToolErrorCode::ValidationFailed
+    );
     assert_eq!(call_count.load(Ordering::Relaxed), 0);
 }
 
@@ -115,7 +134,10 @@ async fn config_flows_through_to_handler_context() {
         async move { Ok(config) }
     };
 
-    let mut desc = test_desc("configured", vec![test_cap("run", json!({"type": "object"}))]);
+    let mut desc = test_desc(
+        "configured",
+        vec![test_cap("run", json!({"type": "object"}))],
+    );
     desc.config_schema = Some(json!({
         "type": "object",
         "properties": {"api_url": {"type": "string"}}
@@ -151,10 +173,13 @@ async fn circuit_breaker_blocks_after_repeated_failures() {
         Err(wacp_tools::ToolError::execution("always fails", false))
     };
 
-    let pkg = PackageBuilder::new(test_desc("flaky", vec![test_cap("run", json!({"type": "object"}))]))
-        .handler("run", handler)
-        .build()
-        .unwrap();
+    let pkg = PackageBuilder::new(test_desc(
+        "flaky",
+        vec![test_cap("run", json!({"type": "object"}))],
+    ))
+    .handler("run", handler)
+    .build()
+    .unwrap();
 
     let mut registry = ToolRegistry::new(RegistryConfig {
         default_circuit_breaker: CircuitBreakerConfig {
@@ -169,7 +194,9 @@ async fn circuit_breaker_blocks_after_repeated_failures() {
 
     // 3 failures trip the breaker
     for _ in 0..3 {
-        let _ = registry.execute("flaky", "run", json!({}), ExecutionOptions::default()).await;
+        let _ = registry
+            .execute("flaky", "run", json!({}), ExecutionOptions::default())
+            .await;
     }
 
     // 4th call → circuit breaker blocks
@@ -189,10 +216,13 @@ async fn timeout_cancels_long_running_handler() {
         Ok(json!({"should_not_reach": true}))
     };
 
-    let pkg = PackageBuilder::new(test_desc("slow", vec![test_cap("run", json!({"type": "object"}))]))
-        .handler("run", handler)
-        .build()
-        .unwrap();
+    let pkg = PackageBuilder::new(test_desc(
+        "slow",
+        vec![test_cap("run", json!({"type": "object"}))],
+    ))
+    .handler("run", handler)
+    .build()
+    .unwrap();
 
     let mut registry = ToolRegistry::new(RegistryConfig {
         execution: ExecutionConfig {
@@ -215,27 +245,35 @@ async fn timeout_cancels_long_running_handler() {
 
 #[tokio::test]
 async fn multi_capability_tool_routes_correctly() {
-    let read_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
-        Ok(json!({"action": "read"}))
-    };
+    let read_handler =
+        |_ctx: &ToolContext, _args: serde_json::Value| async move { Ok(json!({"action": "read"})) };
     let write_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
         Ok(json!({"action": "write"}))
     };
 
-    let pkg = PackageBuilder::new(test_desc("file_tool", vec![
-        test_cap("read", json!({"type": "object"})),
-        test_cap("write", json!({"type": "object"})),
-    ]))
-        .handler("read", read_handler)
-        .handler("write", write_handler)
-        .build()
-        .unwrap();
+    let pkg = PackageBuilder::new(test_desc(
+        "file_tool",
+        vec![
+            test_cap("read", json!({"type": "object"})),
+            test_cap("write", json!({"type": "object"})),
+        ],
+    ))
+    .handler("read", read_handler)
+    .handler("write", write_handler)
+    .build()
+    .unwrap();
 
     let mut registry = ToolRegistry::new(RegistryConfig::default());
     registry.register(pkg).await.unwrap();
 
-    let r1 = registry.execute("file_tool", "read", json!({}), ExecutionOptions::default()).await.unwrap();
-    let r2 = registry.execute("file_tool", "write", json!({}), ExecutionOptions::default()).await.unwrap();
+    let r1 = registry
+        .execute("file_tool", "read", json!({}), ExecutionOptions::default())
+        .await
+        .unwrap();
+    let r2 = registry
+        .execute("file_tool", "write", json!({}), ExecutionOptions::default())
+        .await
+        .unwrap();
 
     assert_eq!(r1["action"], "read");
     assert_eq!(r2["action"], "write");

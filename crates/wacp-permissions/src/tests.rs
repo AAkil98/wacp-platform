@@ -336,10 +336,7 @@ fn envelope_send_requires_port_right() {
         receiver_workspace: &ws("w1"),
         origin: EnvelopeOrigin::Agent,
     });
-    assert!(matches!(
-        result,
-        Err(PermissionDenied::NoPortRight { .. })
-    ));
+    assert!(matches!(result, Err(PermissionDenied::NoPortRight { .. })));
 }
 
 #[test]
@@ -414,12 +411,13 @@ fn derived_role_inherits_base_matrix_via_fallback() {
 fn derived_role_custom_checkpoint_type() {
     let e = reviewer_engine();
     // reviewer has checkpoint_types: [review] — should be able to create review.
-    assert!(e
-        .evaluate(&Action::CreateCheckpoint {
+    assert!(
+        e.evaluate(&Action::CreateCheckpoint {
             role: "reviewer",
             checkpoint_type: "review",
         })
-        .is_ok());
+        .is_ok()
+    );
 }
 
 #[test]
@@ -481,12 +479,13 @@ fn derived_role_denied_coordinator_signals() {
 #[test]
 fn coordinator_integrate_is_exclusive() {
     let e = base_engine();
-    assert!(e
-        .evaluate(&Action::EmitSignal {
+    assert!(
+        e.evaluate(&Action::EmitSignal {
             role: "coordinator",
             signal_type: SignalType::Integrate,
         })
-        .is_ok());
+        .is_ok()
+    );
 
     for role in ["worker", "observer"] {
         assert!(
@@ -505,12 +504,13 @@ fn coordinator_integrate_is_exclusive() {
 #[test]
 fn coordinator_acknowledged_is_exclusive() {
     let e = base_engine();
-    assert!(e
-        .evaluate(&Action::EmitSignal {
+    assert!(
+        e.evaluate(&Action::EmitSignal {
             role: "coordinator",
             signal_type: SignalType::Acknowledged,
         })
-        .is_ok());
+        .is_ok()
+    );
 
     for role in ["worker", "observer"] {
         assert!(
@@ -530,7 +530,11 @@ fn coordinator_acknowledged_is_exclusive() {
 fn coordinator_denied_worker_only_signals() {
     let e = base_engine();
     // Coordinator cannot emit Blocked, Checkpoint, Escalation.
-    for st in [SignalType::Blocked, SignalType::Checkpoint, SignalType::Escalation] {
+    for st in [
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Escalation,
+    ] {
         assert!(
             matches!(
                 e.evaluate(&Action::EmitSignal {
@@ -758,12 +762,13 @@ checkpoint_types: []
     let e = PermissionEngine::new(&t);
 
     // lead inherits worker's ability to create artifact checkpoints.
-    assert!(e
-        .evaluate(&Action::CreateCheckpoint {
+    assert!(
+        e.evaluate(&Action::CreateCheckpoint {
             role: "lead",
             checkpoint_type: "artifact",
         })
-        .is_ok());
+        .is_ok()
+    );
 }
 
 // ── Phase 18b+: Additional permission coverage ──
@@ -827,7 +832,10 @@ fn coordinator_can_send_directive_with_port_right() {
         receiver_workspace: &ws("w1"),
         origin: EnvelopeOrigin::Agent,
     });
-    assert!(result.is_ok(), "coordinator with port right should send directive to worker");
+    assert!(
+        result.is_ok(),
+        "coordinator with port right should send directive to worker"
+    );
 }
 
 #[test]
@@ -839,7 +847,10 @@ fn observer_cannot_create_checkpoint() {
         checkpoint_type: "artifact",
     });
     assert!(
-        matches!(result, Err(PermissionDenied::CheckpointTypeNotPermitted { .. })),
+        matches!(
+            result,
+            Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+        ),
         "observer should be denied artifact checkpoint creation"
     );
 }
@@ -889,7 +900,10 @@ fn empty_engine_denies_unknown_role() {
         checkpoint_type: "artifact",
     });
     assert!(
-        matches!(result2, Err(PermissionDenied::CheckpointTypeNotPermitted { .. })),
+        matches!(
+            result2,
+            Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+        ),
         "unknown role 'ghost' should be denied checkpoint creation"
     );
 }

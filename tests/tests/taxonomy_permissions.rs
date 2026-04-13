@@ -29,18 +29,22 @@ fn send_action<'a>(
 #[test]
 fn base_role_signal_permissions() {
     let engine = empty_engine();
-    assert!(engine
-        .evaluate(&Action::EmitSignal {
-            role: "worker",
-            signal_type: SignalType::Ready,
-        })
-        .is_ok());
-    assert!(engine
-        .evaluate(&Action::EmitSignal {
-            role: "worker",
-            signal_type: SignalType::Blocked,
-        })
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&Action::EmitSignal {
+                role: "worker",
+                signal_type: SignalType::Ready,
+            })
+            .is_ok()
+    );
+    assert!(
+        engine
+            .evaluate(&Action::EmitSignal {
+                role: "worker",
+                signal_type: SignalType::Blocked,
+            })
+            .is_ok()
+    );
 }
 
 #[test]
@@ -57,35 +61,55 @@ fn base_role_envelope_permissions() {
     });
 
     // Coordinator can send directive to worker (with port right)
-    assert!(engine
-        .evaluate(&send_action("coordinator", "directive", "worker", &ws_root, &ws_1))
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&send_action(
+                "coordinator",
+                "directive",
+                "worker",
+                &ws_root,
+                &ws_1
+            ))
+            .is_ok()
+    );
     // Worker cannot send directive (not in permission matrix)
     engine.grant_port_right(PortRight {
         right_type: PortRightType::Send,
         holder: ws_1.clone(),
         target: ws_root.clone(),
     });
-    assert!(engine
-        .evaluate(&send_action("worker", "directive", "coordinator", &ws_1, &ws_root))
-        .is_err());
+    assert!(
+        engine
+            .evaluate(&send_action(
+                "worker",
+                "directive",
+                "coordinator",
+                &ws_1,
+                &ws_root
+            ))
+            .is_err()
+    );
 }
 
 #[test]
 fn base_role_checkpoint_permissions() {
     let engine = empty_engine();
-    assert!(engine
-        .evaluate(&Action::CreateCheckpoint {
-            role: "worker",
-            checkpoint_type: "artifact",
-        })
-        .is_ok());
-    assert!(engine
-        .evaluate(&Action::CreateCheckpoint {
-            role: "observer",
-            checkpoint_type: "artifact",
-        })
-        .is_err());
+    assert!(
+        engine
+            .evaluate(&Action::CreateCheckpoint {
+                role: "worker",
+                checkpoint_type: "artifact",
+            })
+            .is_ok()
+    );
+    assert!(
+        engine
+            .evaluate(&Action::CreateCheckpoint {
+                role: "observer",
+                checkpoint_type: "artifact",
+            })
+            .is_err()
+    );
 }
 
 #[test]
@@ -112,12 +136,14 @@ checkpoint_types:
     let mut engine = PermissionEngine::new(&tax);
 
     // Derived role inherits worker signal permissions
-    assert!(engine
-        .evaluate(&Action::EmitSignal {
-            role: "analyst",
-            signal_type: SignalType::Complete,
-        })
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&Action::EmitSignal {
+                role: "analyst",
+                signal_type: SignalType::Complete,
+            })
+            .is_ok()
+    );
 
     // Custom envelope type (needs port right)
     let ws_a = WorkspaceId::from("ws-analyst");
@@ -127,23 +153,35 @@ checkpoint_types:
         holder: ws_a.clone(),
         target: ws_c.clone(),
     });
-    assert!(engine
-        .evaluate(&send_action("analyst", "analysis_report", "coordinator", &ws_a, &ws_c))
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&send_action(
+                "analyst",
+                "analysis_report",
+                "coordinator",
+                &ws_a,
+                &ws_c
+            ))
+            .is_ok()
+    );
 
     // Custom checkpoint type
-    assert!(engine
-        .evaluate(&Action::CreateCheckpoint {
-            role: "analyst",
-            checkpoint_type: "analysis_result",
-        })
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&Action::CreateCheckpoint {
+                role: "analyst",
+                checkpoint_type: "analysis_result",
+            })
+            .is_ok()
+    );
 
     // Worker cannot use analyst-only checkpoint type
-    assert!(engine
-        .evaluate(&Action::CreateCheckpoint {
-            role: "worker",
-            checkpoint_type: "analysis_result",
-        })
-        .is_err());
+    assert!(
+        engine
+            .evaluate(&Action::CreateCheckpoint {
+                role: "worker",
+                checkpoint_type: "analysis_result",
+            })
+            .is_err()
+    );
 }

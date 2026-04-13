@@ -85,7 +85,10 @@ fn load_yaml_reviewer() {
 #[test]
 fn load_json_roundtrip() {
     let yaml_t = Taxonomy::load_yaml(reviewer_yaml(), PV).unwrap();
-    let json_str = serde_json::to_string(&serde_yaml::from_str::<TaxonomyDefinition>(reviewer_yaml()).unwrap()).unwrap();
+    let json_str = serde_json::to_string(
+        &serde_yaml::from_str::<TaxonomyDefinition>(reviewer_yaml()).unwrap(),
+    )
+    .unwrap();
     let json_t = Taxonomy::load_json(&json_str, PV).unwrap();
 
     assert_eq!(yaml_t.id, json_t.id);
@@ -685,7 +688,11 @@ checkpoint_types: []
     assert!(t.is_valid_checkpoint_type("artifact"));
     assert!(t.is_valid_checkpoint_type("observation"));
     assert_eq!(t.resolved_roles.len(), 0, "no derived roles");
-    assert_eq!(t.envelope_permissions.len(), 3, "only 3 base envelope permissions");
+    assert_eq!(
+        t.envelope_permissions.len(),
+        3,
+        "only 3 base envelope permissions"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -796,9 +803,18 @@ fn vertical_manifest_swe_roundtrip() {
     let manifest = VerticalManifest::load_yaml(swe_manifest_yaml()).expect("parse");
     assert_eq!(manifest.id, "swe");
     assert_eq!(manifest.name, "Software Engineering");
-    assert!(manifest.context_schema.is_empty(), "SWE has no context requirements");
-    assert!(manifest.tool_policies.is_empty(), "SWE has no tool policies");
-    assert!(manifest.checkpoint_types.is_empty(), "SWE has no custom checkpoint types");
+    assert!(
+        manifest.context_schema.is_empty(),
+        "SWE has no context requirements"
+    );
+    assert!(
+        manifest.tool_policies.is_empty(),
+        "SWE has no tool policies"
+    );
+    assert!(
+        manifest.checkpoint_types.is_empty(),
+        "SWE has no custom checkpoint types"
+    );
     assert_eq!(manifest.quality_criteria.len(), 1);
     assert_eq!(manifest.quality_criteria[0].id, "correctness");
     assert_eq!(manifest.task_types.len(), 1);
@@ -816,25 +832,41 @@ fn vertical_manifest_finance_roundtrip() {
     assert_eq!(manifest.id, "finance");
 
     // context_schema
-    let jurisdiction = manifest.context_schema.get("jurisdiction").expect("jurisdiction field");
+    let jurisdiction = manifest
+        .context_schema
+        .get("jurisdiction")
+        .expect("jurisdiction field");
     assert_eq!(jurisdiction.field_type, FieldType::Enum);
     assert!(jurisdiction.required);
     let enum_vals = jurisdiction.enum_values.as_ref().expect("enum_values");
     assert!(enum_vals.contains(&"SEC".to_string()));
 
     // tool_policies
-    let policy = manifest.tool_policies.get("trade_execute").expect("trade_execute policy");
+    let policy = manifest
+        .tool_policies
+        .get("trade_execute")
+        .expect("trade_execute policy");
     assert_eq!(policy.kind, ToolPolicyKind::RequiresCheckpoint);
     assert_eq!(policy.checkpoint_type.as_deref(), Some("compliance_check"));
     assert_eq!(policy.matching_field.as_deref(), Some("trade_id"));
     assert_eq!(policy.expires_after_ms, Some(300_000));
 
     // checkpoint_types
-    let ct = manifest.checkpoint_types.get("compliance_check").expect("compliance_check type");
+    let ct = manifest
+        .checkpoint_types
+        .get("compliance_check")
+        .expect("compliance_check type");
     assert_eq!(ct.fields.len(), 2);
-    let status_field = ct.fields.iter().find(|f| f.name == "status").expect("status field");
+    let status_field = ct
+        .fields
+        .iter()
+        .find(|f| f.name == "status")
+        .expect("status field");
     assert_eq!(status_field.field_type, FieldType::Enum);
-    let status_vals = status_field.enum_values.as_ref().expect("status enum_values");
+    let status_vals = status_field
+        .enum_values
+        .as_ref()
+        .expect("status enum_values");
     assert!(status_vals.contains(&"approved".to_string()));
 
     // quality_criteria

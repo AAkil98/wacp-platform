@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use wacp_types::{UserId, WorkspaceId};
 
 use crate::auth::{AgentIdentity, AuthError, Authenticator};
@@ -99,11 +99,26 @@ fn decode_jwt(token: &str) -> Result<JwtClaims, &'static str> {
         serde_json::from_slice(&payload_bytes).map_err(|_| "invalid JSON in payload")?;
 
     Ok(JwtClaims {
-        sub: payload.get("sub").and_then(|v| v.as_str()).unwrap_or("").into(),
-        iss: payload.get("iss").and_then(|v| v.as_str()).unwrap_or("").into(),
-        aud: payload.get("aud").and_then(|v| v.as_str()).unwrap_or("").into(),
+        sub: payload
+            .get("sub")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .into(),
+        iss: payload
+            .get("iss")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .into(),
+        aud: payload
+            .get("aud")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .into(),
         exp: payload.get("exp").and_then(|v| v.as_u64()).unwrap_or(0),
-        role: payload.get("role").and_then(|v| v.as_str()).map(|s| s.into()),
+        role: payload
+            .get("role")
+            .and_then(|v| v.as_str())
+            .map(|s| s.into()),
     })
 }
 
@@ -160,7 +175,10 @@ mod tests {
             "aud": "wacp-api",
             "exp": past_exp(),
         }));
-        assert!(matches!(auth.authenticate_human(&token), Err(AuthError::InvalidToken)));
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
     }
 
     #[test]
@@ -172,7 +190,10 @@ mod tests {
             "aud": "wacp-api",
             "exp": future_exp(),
         }));
-        assert!(matches!(auth.authenticate_human(&token), Err(AuthError::InvalidToken)));
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
     }
 
     #[test]
@@ -184,14 +205,23 @@ mod tests {
             "aud": "different-api",
             "exp": future_exp(),
         }));
-        assert!(matches!(auth.authenticate_human(&token), Err(AuthError::InvalidToken)));
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
     }
 
     #[test]
     fn invalid_jwt_structure_rejected() {
         let auth = OAuthAuthenticator::new("issuer", "audience");
-        assert!(matches!(auth.authenticate_human("not.a.jwt"), Err(AuthError::InvalidToken)));
-        assert!(matches!(auth.authenticate_human("only-one-part"), Err(AuthError::InvalidToken)));
+        assert!(matches!(
+            auth.authenticate_human("not.a.jwt"),
+            Err(AuthError::InvalidToken)
+        ));
+        assert!(matches!(
+            auth.authenticate_human("only-one-part"),
+            Err(AuthError::InvalidToken)
+        ));
     }
 
     #[test]

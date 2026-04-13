@@ -31,8 +31,7 @@ impl FileSnapshotStorage {
     }
 
     fn system_path(&self, sequence: u64) -> PathBuf {
-        self.dir
-            .join(format!("system-{:012}.snapshot", sequence))
+        self.dir.join(format!("system-{:012}.snapshot", sequence))
     }
 
     fn latest_link(&self) -> PathBuf {
@@ -77,19 +76,12 @@ impl FileSnapshotStorage {
 }
 
 impl SnapshotStorage for FileSnapshotStorage {
-    fn write_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-        data: &[u8],
-    ) -> Result<(), StorageError> {
+    fn write_workspace(&self, workspace_id: &WorkspaceId, data: &[u8]) -> Result<(), StorageError> {
         let path = self.workspace_path(workspace_id);
         Self::write_with_checksum(&path, data)
     }
 
-    fn read_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-    ) -> Result<Option<Vec<u8>>, StorageError> {
+    fn read_workspace(&self, workspace_id: &WorkspaceId) -> Result<Option<Vec<u8>>, StorageError> {
         let path = self.workspace_path(workspace_id);
         Self::read_with_checksum(&path)
     }

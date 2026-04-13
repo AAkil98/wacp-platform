@@ -29,10 +29,7 @@ pub enum TaxonomyError {
     CrossRegistryMissing { role: String, reference: String },
 
     #[error("envelope type {envelope_type} references unknown role {role}")]
-    EnvelopeRoleNotFound {
-        envelope_type: String,
-        role: String,
-    },
+    EnvelopeRoleNotFound { envelope_type: String, role: String },
 
     #[error("checkpoint type {checkpoint_type} references unknown role {role}")]
     CheckpointRoleNotFound {

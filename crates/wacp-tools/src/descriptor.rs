@@ -68,9 +68,8 @@ impl ToolDescriptor {
         }
 
         if let Some(schema) = &self.config_schema {
-            validate_json_schema(schema).map_err(|reason| {
-                DescriptorError::InvalidConfigSchema { reason }
-            })?;
+            validate_json_schema(schema)
+                .map_err(|reason| DescriptorError::InvalidConfigSchema { reason })?;
         }
 
         Ok(())
@@ -151,7 +150,10 @@ fn validate_name(name: &str) -> Result<(), DescriptorError> {
             reason: format!("name exceeds 64 characters ({})", name.len()),
         });
     }
-    if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
         return Err(DescriptorError::InvalidName {
             name: name.to_string(),
             reason: "name must contain only lowercase alphanumeric characters and underscores"
@@ -189,12 +191,13 @@ fn validate_version(version: &str) -> Result<(), DescriptorError> {
 fn validate_json_schema(schema: &serde_json::Value) -> Result<(), String> {
     match schema {
         serde_json::Value::Object(map) => {
-            if !map.contains_key("type") && !map.contains_key("$ref") && !map.contains_key("oneOf")
-                && !map.contains_key("anyOf") && !map.contains_key("allOf")
+            if !map.contains_key("type")
+                && !map.contains_key("$ref")
+                && !map.contains_key("oneOf")
+                && !map.contains_key("anyOf")
+                && !map.contains_key("allOf")
             {
-                return Err(
-                    "schema must have 'type', '$ref', 'oneOf', 'anyOf', or 'allOf'".into(),
-                );
+                return Err("schema must have 'type', '$ref', 'oneOf', 'anyOf', or 'allOf'".into());
             }
             Ok(())
         }
@@ -408,7 +411,8 @@ mod tests {
     #[test]
     fn valid_config_schema_accepted() {
         let mut desc = valid_descriptor();
-        desc.config_schema = Some(json!({"type": "object", "properties": {"api_key": {"type": "string"}}}));
+        desc.config_schema =
+            Some(json!({"type": "object", "properties": {"api_key": {"type": "string"}}}));
         assert!(desc.validate().is_ok());
     }
 

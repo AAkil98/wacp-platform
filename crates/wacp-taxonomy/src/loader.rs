@@ -22,13 +22,10 @@ const COORDINATOR_CAPABILITIES: &[&str] = &[
 /// Default capabilities per base role.
 fn base_capabilities(role: BaseRole) -> HashSet<String> {
     match role {
-        BaseRole::Worker => [
-            "send: query → coordinator",
-            "create: artifact",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect(),
+        BaseRole::Worker => ["send: query → coordinator", "create: artifact"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         BaseRole::Observer => ["create: observation"]
             .iter()
             .map(|s| s.to_string())
@@ -68,10 +65,7 @@ fn base_permission_rows() -> Vec<EnvelopePermissionRow> {
 }
 
 /// Load and validate a taxonomy from a parsed definition.
-pub fn load(
-    def: TaxonomyDefinition,
-    protocol_version: &str,
-) -> Result<Taxonomy, TaxonomyError> {
+pub fn load(def: TaxonomyDefinition, protocol_version: &str) -> Result<Taxonomy, TaxonomyError> {
     // 1. Protocol version check.
     if def.protocol_version != protocol_version {
         return Err(TaxonomyError::ProtocolVersionMismatch {
@@ -82,8 +76,11 @@ pub fn load(
 
     // Collect derived role names for cross-reference checks.
     let derived_role_names: HashSet<&str> = def.roles.iter().map(|r| r.name.as_str()).collect();
-    let custom_checkpoint_names: HashSet<&str> =
-        def.checkpoint_types.iter().map(|c| c.name.as_str()).collect();
+    let custom_checkpoint_names: HashSet<&str> = def
+        .checkpoint_types
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
 
     // Helper: is this a known role (base or derived)?
     let is_known_role =

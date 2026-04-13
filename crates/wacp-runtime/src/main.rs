@@ -7,7 +7,7 @@ pub mod metrics;
 pub mod tls;
 
 pub use agent::TestAgent;
-pub use config::{ConfigError, RuntimeConfig, PROTOCOL_VERSION};
+pub use config::{ConfigError, PROTOCOL_VERSION, RuntimeConfig};
 pub use init::{Runtime, RuntimeError};
 
 use std::path::PathBuf;
@@ -93,9 +93,8 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     rt.block_on(async {
         // Start observability endpoints before runtime init (so health shows Starting).
-        let health_state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(
-            health::HEALTH_STARTING,
-        ));
+        let health_state =
+            std::sync::Arc::new(std::sync::atomic::AtomicU8::new(health::HEALTH_STARTING));
 
         if config.observability.health.enabled {
             if let Err(e) =
@@ -121,8 +120,7 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
                 }
             };
             if let Err(e) =
-                metrics::start_metrics_server(&config.observability.metrics, metrics.registry)
-                    .await
+                metrics::start_metrics_server(&config.observability.metrics, metrics.registry).await
             {
                 tracing::error!(error = %e, "metrics server failed to start");
                 return ExitCode::from(3);
@@ -143,10 +141,7 @@ fn cmd_serve(config_path: Option<&std::path::Path>) -> ExitCode {
         };
 
         // Mark ready after all subsystems initialized.
-        health_state.store(
-            health::HEALTH_READY,
-            std::sync::atomic::Ordering::Relaxed,
-        );
+        health_state.store(health::HEALTH_READY, std::sync::atomic::Ordering::Relaxed);
         tracing::info!("runtime ready");
 
         runtime.run().await;

@@ -17,7 +17,7 @@ use wacp_transport::rest_gateway::{
     GatewayBackend, GatewayError, RestGateway, WorkspaceSummaryItem,
 };
 use wacp_transport::websocket::ws_handler;
-use wacp_transport::{start_grpc_server, GrpcServerConfig};
+use wacp_transport::{GrpcServerConfig, start_grpc_server};
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -60,7 +60,10 @@ impl GatewayBackend for MockBackend {
         req: wacp_transport::wacp_v1::SubmitGoalRequest,
     ) -> Result<wacp_transport::wacp_v1::SubmitGoalResponse, GatewayError> {
         Ok(wacp_transport::wacp_v1::SubmitGoalResponse {
-            goal_id: format!("goal-mock-{}", &req.description[..8.min(req.description.len())]),
+            goal_id: format!(
+                "goal-mock-{}",
+                &req.description[..8.min(req.description.len())]
+            ),
             root_workspace_id: "ws-mock-root".into(),
         })
     }
@@ -245,7 +248,12 @@ async fn main() {
 
     eprintln!(
         "wacp-mock-runtime starting — fixtures={}, verticals={}, ports=agent:{}/highway:{}/coordinator:{}/rest:{}",
-        cli.fixtures, manifests.len(), cli.agent_port, cli.highway_port, cli.coordinator_port, cli.rest_port,
+        cli.fixtures,
+        manifests.len(),
+        cli.agent_port,
+        cli.highway_port,
+        cli.coordinator_port,
+        cli.rest_port,
     );
 
     // Start gRPC services.

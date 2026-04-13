@@ -95,10 +95,11 @@ fn load_json_descriptor(path: &Path) -> Result<ToolDescriptor, DiscoveryError> {
             reason: e.to_string(),
         })?;
 
-    desc.validate().map_err(|e| DiscoveryError::ValidationFailed {
-        path: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    desc.validate()
+        .map_err(|e| DiscoveryError::ValidationFailed {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
     Ok(desc)
 }
@@ -115,10 +116,11 @@ fn load_yaml_descriptor(path: &Path) -> Result<ToolDescriptor, DiscoveryError> {
             reason: e.to_string(),
         })?;
 
-    desc.validate().map_err(|e| DiscoveryError::ValidationFailed {
-        path: path.display().to_string(),
-        reason: e.to_string(),
-    })?;
+    desc.validate()
+        .map_err(|e| DiscoveryError::ValidationFailed {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
 
     Ok(desc)
 }
@@ -206,7 +208,10 @@ capabilities:
         let result = discover_descriptors(dir.path());
         assert_eq!(result.descriptors.len(), 1);
         assert_eq!(result.errors.len(), 1);
-        assert!(matches!(&result.errors[0], DiscoveryError::ParseFailed { .. }));
+        assert!(matches!(
+            &result.errors[0],
+            DiscoveryError::ParseFailed { .. }
+        ));
     }
 
     #[test]
@@ -229,7 +234,10 @@ capabilities:
         let result = discover_descriptors(dir.path());
         assert_eq!(result.descriptors.len(), 1);
         assert_eq!(result.errors.len(), 1);
-        assert!(matches!(&result.errors[0], DiscoveryError::ValidationFailed { .. }));
+        assert!(matches!(
+            &result.errors[0],
+            DiscoveryError::ValidationFailed { .. }
+        ));
     }
 
     #[test]
@@ -265,11 +273,7 @@ capabilities:
         let dir = tempfile::tempdir().unwrap();
         write_json_descriptor(dir.path(), "tool_a");
         fs::create_dir(dir.path().join("subdir")).unwrap();
-        fs::write(
-            dir.path().join("subdir/nested.json"),
-            "{}",
-        )
-        .unwrap();
+        fs::write(dir.path().join("subdir/nested.json"), "{}").unwrap();
 
         let result = discover_descriptors(dir.path());
         assert_eq!(result.descriptors.len(), 1); // only top-level

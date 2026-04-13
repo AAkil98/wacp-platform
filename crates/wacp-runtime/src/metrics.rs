@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
 
+use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
 use prometheus::{
     Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec, Opts, Registry, TextEncoder,
@@ -58,8 +58,9 @@ pub fn register_metrics() -> Result<RuntimeMetrics, MetricsError> {
     registry.register(Box::new(grpc_requests_total.clone()))?;
 
     let grpc_request_duration = HistogramVec::new(
-        HistogramOpts::new("wacp_grpc_request_duration_seconds", "RPC latency")
-            .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0]),
+        HistogramOpts::new("wacp_grpc_request_duration_seconds", "RPC latency").buckets(vec![
+            0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0,
+        ]),
         &["service", "method"],
     )?;
     registry.register(Box::new(grpc_request_duration.clone()))?;
@@ -295,6 +296,10 @@ mod tests {
         let families = m.registry.gather();
         // uptime_seconds (GaugeVec with empty label set) may not appear
         // until observed; verify the 14 label-bearing families are present.
-        assert!(families.len() >= 14, "expected at least 14 metric families, got {}", families.len());
+        assert!(
+            families.len() >= 14,
+            "expected at least 14 metric families, got {}",
+            families.len()
+        );
     }
 }

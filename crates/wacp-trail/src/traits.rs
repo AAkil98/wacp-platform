@@ -35,29 +35,18 @@ pub type ScannedEntry = (u64, Vec<u8>, [u8; 32]);
 /// Append-only trail storage backend (storage spec §11).
 pub trait TrailStorage: Send + Sync {
     /// Append an entry. Implementation MUST fsync before returning.
-    fn append(
-        &mut self,
-        entry: &[u8],
-        chain_hash: &[u8; 32],
-    ) -> Result<WriteReceipt, StorageError>;
+    fn append(&mut self, entry: &[u8], chain_hash: &[u8; 32])
+    -> Result<WriteReceipt, StorageError>;
 
     /// Read an entry by segment and byte offset.
-    fn read(
-        &self,
-        segment: SegmentId,
-        offset: u64,
-        length: u32,
-    ) -> Result<Vec<u8>, StorageError>;
+    fn read(&self, segment: SegmentId, offset: u64, length: u32) -> Result<Vec<u8>, StorageError>;
 
     /// Rotate the active segment.
     fn rotate(&mut self) -> Result<SegmentId, StorageError>;
 
     /// Scan a segment from a byte offset, yielding (offset, entry, hash).
-    fn scan(
-        &self,
-        segment: SegmentId,
-        from_offset: u64,
-    ) -> Result<Vec<ScannedEntry>, StorageError>;
+    fn scan(&self, segment: SegmentId, from_offset: u64)
+    -> Result<Vec<ScannedEntry>, StorageError>;
 
     /// Current metadata.
     fn metadata(&self) -> StorageMetadata;
@@ -66,11 +55,7 @@ pub trait TrailStorage: Send + Sync {
 /// Content-addressable checkpoint storage (storage spec §11).
 pub trait CheckpointStorage: Send + Sync {
     /// Store a payload. Returns true if new, false if deduplicated.
-    fn store(
-        &self,
-        content_hash: &[u8; 32],
-        payload: &[u8],
-    ) -> Result<bool, StorageError>;
+    fn store(&self, content_hash: &[u8; 32], payload: &[u8]) -> Result<bool, StorageError>;
 
     /// Read a payload by content hash. None if not found.
     fn read(&self, content_hash: &[u8; 32]) -> Result<Option<Vec<u8>>, StorageError>;
@@ -84,16 +69,9 @@ pub trait CheckpointStorage: Send + Sync {
 
 /// Workspace and system snapshot storage (storage spec §11).
 pub trait SnapshotStorage: Send + Sync {
-    fn write_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-        data: &[u8],
-    ) -> Result<(), StorageError>;
+    fn write_workspace(&self, workspace_id: &WorkspaceId, data: &[u8]) -> Result<(), StorageError>;
 
-    fn read_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-    ) -> Result<Option<Vec<u8>>, StorageError>;
+    fn read_workspace(&self, workspace_id: &WorkspaceId) -> Result<Option<Vec<u8>>, StorageError>;
 
     fn delete_workspace(&self, workspace_id: &WorkspaceId) -> Result<(), StorageError>;
 

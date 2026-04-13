@@ -56,19 +56,12 @@ impl TrailStorage for InMemoryTrailStorage {
         })
     }
 
-    fn read(
-        &self,
-        segment: SegmentId,
-        offset: u64,
-        _length: u32,
-    ) -> Result<Vec<u8>, StorageError> {
+    fn read(&self, segment: SegmentId, offset: u64, _length: u32) -> Result<Vec<u8>, StorageError> {
         let seg = self
             .segments
             .get(segment.0 as usize)
             .ok_or(StorageError::SegmentNotFound(segment.0))?;
-        let (entry, _) = seg
-            .get(offset as usize)
-            .ok_or(StorageError::NotFound)?;
+        let (entry, _) = seg.get(offset as usize).ok_or(StorageError::NotFound)?;
         Ok(entry.clone())
     }
 
@@ -130,11 +123,7 @@ impl Default for InMemoryCheckpointStorage {
 }
 
 impl CheckpointStorage for InMemoryCheckpointStorage {
-    fn store(
-        &self,
-        content_hash: &[u8; 32],
-        payload: &[u8],
-    ) -> Result<bool, StorageError> {
+    fn store(&self, content_hash: &[u8; 32], payload: &[u8]) -> Result<bool, StorageError> {
         let mut store = self.lock();
         if store.contains_key(content_hash) {
             Ok(false)
@@ -181,11 +170,7 @@ impl Default for InMemorySnapshotStorage {
 }
 
 impl SnapshotStorage for InMemorySnapshotStorage {
-    fn write_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-        data: &[u8],
-    ) -> Result<(), StorageError> {
+    fn write_workspace(&self, workspace_id: &WorkspaceId, data: &[u8]) -> Result<(), StorageError> {
         self.workspaces
             .lock()
             .unwrap()
@@ -193,10 +178,7 @@ impl SnapshotStorage for InMemorySnapshotStorage {
         Ok(())
     }
 
-    fn read_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-    ) -> Result<Option<Vec<u8>>, StorageError> {
+    fn read_workspace(&self, workspace_id: &WorkspaceId) -> Result<Option<Vec<u8>>, StorageError> {
         Ok(self
             .workspaces
             .lock()
@@ -214,19 +196,11 @@ impl SnapshotStorage for InMemorySnapshotStorage {
     }
 
     fn write_system(&self, sequence: u64, data: &[u8]) -> Result<(), StorageError> {
-        self.systems
-            .lock()
-            .unwrap()
-            .push((sequence, data.to_vec()));
+        self.systems.lock().unwrap().push((sequence, data.to_vec()));
         Ok(())
     }
 
     fn read_latest_system(&self) -> Result<Option<(u64, Vec<u8>)>, StorageError> {
-        Ok(self
-            .systems
-            .lock()
-            .unwrap()
-            .last()
-            .cloned())
+        Ok(self.systems.lock().unwrap().last().cloned())
     }
 }

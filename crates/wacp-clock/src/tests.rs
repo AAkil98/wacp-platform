@@ -100,7 +100,10 @@ fn bytes_lexicographic_order() {
     ];
     for (a, b) in pairs {
         assert!(a < b, "{a} should be < {b}");
-        assert!(a.to_bytes() < b.to_bytes(), "{a}.to_bytes() should be < {b}.to_bytes()");
+        assert!(
+            a.to_bytes() < b.to_bytes(),
+            "{a}.to_bytes() should be < {b}.to_bytes()"
+        );
     }
 }
 
@@ -335,7 +338,10 @@ fn clock_last_returns_initial() {
 fn system_time_source_nonzero() {
     let src = SystemTimeSource;
     let now = src.now_us();
-    assert!(now > 0, "SystemTimeSource::now_us() should return a nonzero value");
+    assert!(
+        now > 0,
+        "SystemTimeSource::now_us() should return a nonzero value"
+    );
 }
 
 #[test]
@@ -359,7 +365,10 @@ fn clock_send_returns_advanced() {
     assert_eq!(first.logical(), 0);
 
     let second = clock.send();
-    assert!(second > first, "send() must return a strictly advancing timestamp");
+    assert!(
+        second > first,
+        "send() must return a strictly advancing timestamp"
+    );
     assert_eq!(second.physical_us(), 1000);
     assert_eq!(second.logical(), 1);
 }
@@ -375,6 +384,10 @@ fn bytes_10_bytes_length() {
     ];
     for ts in timestamps {
         let bytes = ts.to_bytes();
-        assert_eq!(bytes.len(), 10, "to_bytes() must produce exactly 10 bytes for {ts}");
+        assert_eq!(
+            bytes.len(),
+            10,
+            "to_bytes() must produce exactly 10 bytes for {ts}"
+        );
     }
 }

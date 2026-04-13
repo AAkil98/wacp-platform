@@ -47,7 +47,9 @@ mod tests {
         let json = r#"{"provider":"anthropic","api_key":"sk-test"}"#;
         let config: ProviderConfig = serde_json::from_str(json).unwrap();
         match config {
-            ProviderConfig::Anthropic { api_key, base_url, .. } => {
+            ProviderConfig::Anthropic {
+                api_key, base_url, ..
+            } => {
                 assert_eq!(api_key, "sk-test");
                 assert_eq!(base_url, "https://api.anthropic.com");
             }
@@ -67,7 +69,9 @@ mod tests {
         let json = r#"{"provider":"generic","base_url":"http://localhost:11434"}"#;
         let config: ProviderConfig = serde_json::from_str(json).unwrap();
         match config {
-            ProviderConfig::Generic { api_key, base_url, .. } => {
+            ProviderConfig::Generic {
+                api_key, base_url, ..
+            } => {
                 assert!(api_key.is_none());
                 assert_eq!(base_url, "http://localhost:11434");
             }

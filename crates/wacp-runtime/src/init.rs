@@ -9,11 +9,11 @@ use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
 use wacp_trail::{FileTrailConfig, FileTrailStorage, InMemoryTrailStorage};
-use wacp_transport::{start_grpc_server, GrpcServerConfig};
+use wacp_transport::{GrpcServerConfig, start_grpc_server};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
 
-use crate::config::{RuntimeConfig, PROTOCOL_VERSION};
+use crate::config::{PROTOCOL_VERSION, RuntimeConfig};
 
 /// Errors during runtime initialization.
 #[derive(Debug, thiserror::Error)]
@@ -69,8 +69,8 @@ impl Runtime {
         .map_err(|e| RuntimeError::Storage(e.to_string()))?;
 
         // 4. Run recovery — reconstruct state from trail.
-        let recovered = RecoveryEngine::recover(&trail)
-            .map_err(|e| RuntimeError::Recovery(e.to_string()))?;
+        let recovered =
+            RecoveryEngine::recover(&trail).map_err(|e| RuntimeError::Recovery(e.to_string()))?;
 
         tracing::info!(
             workspaces_recovered = recovered.workspace_states.len(),
@@ -111,11 +111,10 @@ impl Runtime {
             .parse()
             .map_err(|e| RuntimeError::Transport(format!("invalid highway address: {e}")))?;
 
-        let coordinator_addr: SocketAddr = config
-            .server
-            .coordinator_listen
-            .parse()
-            .map_err(|e| RuntimeError::Transport(format!("invalid coordinator address: {e}")))?;
+        let coordinator_addr: SocketAddr =
+            config.server.coordinator_listen.parse().map_err(|e| {
+                RuntimeError::Transport(format!("invalid coordinator address: {e}"))
+            })?;
 
         let grpc_handles = start_grpc_server(GrpcServerConfig {
             agent_addr,
@@ -152,8 +151,8 @@ impl Runtime {
         let verticals = Self::load_vertical_manifests(&config);
 
         let trail = InMemoryTrailStorage::new();
-        let _recovered = RecoveryEngine::recover(&trail)
-            .map_err(|e| RuntimeError::Recovery(e.to_string()))?;
+        let _recovered =
+            RecoveryEngine::recover(&trail).map_err(|e| RuntimeError::Recovery(e.to_string()))?;
 
         let permissions = PermissionEngine::new(&taxonomy);
 
@@ -353,10 +352,18 @@ impl Runtime {
                         id: node.id.to_string(),
                         state: node.status as i32,
                         role: String::new(),
-                        parent: node.parent.as_ref().map(|p| p.to_string()).unwrap_or_default(),
+                        parent: node
+                            .parent
+                            .as_ref()
+                            .map(|p| p.to_string())
+                            .unwrap_or_default(),
                         owner: node.owner.to_string(),
                         originator: String::new(),
-                        task_id: node.task_id.as_ref().map(|t| t.to_string()).unwrap_or_default(),
+                        task_id: node
+                            .task_id
+                            .as_ref()
+                            .map(|t| t.to_string())
+                            .unwrap_or_default(),
                         current_usage: None,
                         budget: None,
                         checkpoint_count: 0,

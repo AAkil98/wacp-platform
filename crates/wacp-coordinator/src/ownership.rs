@@ -66,11 +66,7 @@ pub fn resolve_originator(
     injector: Option<&UserId>,
 ) -> Originator {
     if is_injection {
-        Originator::User(
-            injector
-                .expect("injection must have an injector")
-                .clone(),
-        )
+        Originator::User(injector.expect("injection must have an injector").clone())
     } else {
         parent_originator.clone()
     }

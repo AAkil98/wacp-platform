@@ -131,7 +131,10 @@ impl PortRightsGraph {
 
     /// Consume a send-once right (CH-3).
     pub fn consume(&mut self, right_id: &str) -> Result<(), PortRightError> {
-        let entry = self.by_id.get_mut(right_id).ok_or(PortRightError::NotFound)?;
+        let entry = self
+            .by_id
+            .get_mut(right_id)
+            .ok_or(PortRightError::NotFound)?;
 
         if entry.kind != PortRightType::SendOnce {
             return Err(PortRightError::NotSendOnce);
@@ -146,7 +149,10 @@ impl PortRightsGraph {
 
     /// Revoke a right (coordinator action).
     pub fn revoke(&mut self, right_id: &str) -> Result<(), PortRightError> {
-        let entry = self.by_id.get_mut(right_id).ok_or(PortRightError::NotFound)?;
+        let entry = self
+            .by_id
+            .get_mut(right_id)
+            .ok_or(PortRightError::NotFound)?;
 
         if entry.status != PortRightStatus::Active {
             return Err(PortRightError::NotActive);

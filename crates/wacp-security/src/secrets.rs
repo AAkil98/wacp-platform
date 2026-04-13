@@ -47,8 +47,7 @@ impl SecretStore {
 
     /// Store a secret. Overwrites if key exists.
     pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
-        self.secrets
-            .insert(key.into(), SecretValue::new(value));
+        self.secrets.insert(key.into(), SecretValue::new(value));
     }
 
     /// Retrieve a secret. Returns None if not found.

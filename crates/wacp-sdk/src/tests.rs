@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 use tonic::{Request, Response, Status};
 use wacp_transport::wacp_v1;
@@ -420,10 +420,7 @@ async fn signal_failed_with_reason() {
 #[tokio::test]
 async fn signal_escalation_with_context() {
     let (agent, state) = setup().await;
-    agent
-        .signal_escalation(b"need human review")
-        .await
-        .unwrap();
+    agent.signal_escalation(b"need human review").await.unwrap();
     let calls = &state.lock().await.signal_calls;
     assert_eq!(calls[0].r#type, wacp_v1::SignalType::Escalation as i32);
     assert_eq!(calls[0].context, b"need human review");
@@ -470,10 +467,7 @@ async fn checkpoint_with_all_options() {
     assert_eq!(calls[0].r#type, "observation");
     assert_eq!(calls[0].payload, b"metrics data");
     assert_eq!(calls[0].intent, "record performance metrics");
-    assert_eq!(
-        calls[0].status,
-        wacp_v1::CheckpointStatus::Final as i32
-    );
+    assert_eq!(calls[0].status, wacp_v1::CheckpointStatus::Final as i32);
     assert_eq!(calls[0].confidence, wacp_v1::Confidence::Medium as i32);
     let usage = calls[0].resource_usage.as_ref().unwrap();
     assert_eq!(usage.tokens, 1000);
@@ -521,7 +515,11 @@ async fn checkpoint_missing_type_error() {
 #[tokio::test]
 async fn checkpoint_missing_payload_error() {
     let (agent, _) = setup().await;
-    let result = agent.checkpoint().checkpoint_type("artifact").create().await;
+    let result = agent
+        .checkpoint()
+        .checkpoint_type("artifact")
+        .create()
+        .await;
     assert!(matches!(
         result,
         Err(Error::MissingField(ref f)) if f == "payload"
@@ -562,10 +560,7 @@ async fn send_envelope_with_all_fields() {
     assert_eq!(calls[0].r#type, "query");
     assert_eq!(calls[0].payload, b"what is the status?");
     assert_eq!(calls[0].in_reply_to, "env-prev-1");
-    assert_eq!(
-        calls[0].priority,
-        wacp_v1::EnvelopePriority::Urgent as i32
-    );
+    assert_eq!(calls[0].priority, wacp_v1::EnvelopePriority::Urgent as i32);
 }
 
 // ── EnvelopeBuilder (3 tests) ───────────────────────────
@@ -589,11 +584,7 @@ async fn envelope_builder_methods_chain() {
 #[tokio::test]
 async fn envelope_missing_to_error() {
     let (agent, _) = setup().await;
-    let result = agent
-        .send_envelope()
-        .envelope_type("feedback")
-        .send()
-        .await;
+    let result = agent.send_envelope().envelope_type("feedback").send().await;
     assert!(matches!(
         result,
         Err(Error::MissingField(ref f)) if f == "to"
@@ -989,14 +980,8 @@ async fn envelope_priority_proto_mapping() {
             .unwrap();
     }
     let calls = &state.lock().await.envelope_send_calls;
-    assert_eq!(
-        calls[0].priority,
-        wacp_v1::EnvelopePriority::Normal as i32
-    );
-    assert_eq!(
-        calls[1].priority,
-        wacp_v1::EnvelopePriority::Urgent as i32
-    );
+    assert_eq!(calls[0].priority, wacp_v1::EnvelopePriority::Normal as i32);
+    assert_eq!(calls[1].priority, wacp_v1::EnvelopePriority::Urgent as i32);
     assert_eq!(
         calls[2].priority,
         wacp_v1::EnvelopePriority::Blocking as i32

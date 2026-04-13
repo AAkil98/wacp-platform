@@ -138,12 +138,7 @@ impl TrailStorage for FileTrailStorage {
         Ok(receipt)
     }
 
-    fn read(
-        &self,
-        segment: SegmentId,
-        offset: u64,
-        _length: u32,
-    ) -> Result<Vec<u8>, StorageError> {
+    fn read(&self, segment: SegmentId, offset: u64, _length: u32) -> Result<Vec<u8>, StorageError> {
         let path = segment_path(&self.dir, segment);
         let mut file = File::open(&path).map_err(|_| StorageError::SegmentNotFound(segment.0))?;
         file.seek(SeekFrom::Start(offset))?;
@@ -213,9 +208,10 @@ fn list_segments(dir: &Path) -> Result<Vec<u64>, StorageError> {
         let name = name.to_string_lossy();
         if let Some(rest) = name.strip_prefix("segment-")
             && let Some(num_str) = rest.strip_suffix(".trail")
-                && let Ok(n) = num_str.parse::<u64>() {
-                    ids.push(n);
-                }
+            && let Ok(n) = num_str.parse::<u64>()
+        {
+            ids.push(n);
+        }
     }
     Ok(ids)
 }
@@ -230,8 +226,7 @@ fn scan_segment_file_from(
     from_offset: u64,
 ) -> Result<Vec<ScannedEntry>, StorageError> {
     let path = segment_path(dir, id);
-    let mut file =
-        File::open(&path).map_err(|_| StorageError::SegmentNotFound(id.0))?;
+    let mut file = File::open(&path).map_err(|_| StorageError::SegmentNotFound(id.0))?;
     let file_len = file.metadata()?.len();
     file.seek(SeekFrom::Start(from_offset))?;
 

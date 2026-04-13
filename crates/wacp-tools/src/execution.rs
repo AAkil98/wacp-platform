@@ -78,13 +78,9 @@ pub async fn execute(
 }
 
 /// Validate invocation args against the capability's input schema.
-fn validate_input(
-    args: &serde_json::Value,
-    schema: &serde_json::Value,
-) -> Result<(), ToolError> {
-    jsonschema::validate(schema, args).map_err(|e| {
-        ToolError::validation(format!("input validation failed: {e}"))
-    })
+fn validate_input(args: &serde_json::Value, schema: &serde_json::Value) -> Result<(), ToolError> {
+    jsonschema::validate(schema, args)
+        .map_err(|e| ToolError::validation(format!("input validation failed: {e}")))
 }
 
 /// Resolve the effective timeout from the three-level hierarchy.
@@ -150,19 +146,12 @@ async fn invoke_with_timeout(
 }
 
 /// Check that the serialized result does not exceed the size limit.
-fn check_result_size(
-    result: &serde_json::Value,
-    max_bytes: usize,
-) -> Result<(), ToolError> {
-    let size = serde_json::to_vec(result)
-        .map(|v| v.len())
-        .unwrap_or(0);
+fn check_result_size(result: &serde_json::Value, max_bytes: usize) -> Result<(), ToolError> {
+    let size = serde_json::to_vec(result).map(|v| v.len()).unwrap_or(0);
 
     if size > max_bytes {
         return Err(ToolError::execution(
-            format!(
-                "result size ({size} bytes) exceeds maximum ({max_bytes} bytes)"
-            ),
+            format!("result size ({size} bytes) exceeds maximum ({max_bytes} bytes)"),
             false,
         ));
     }
@@ -551,13 +540,18 @@ mod tests {
             max_result_bytes: size, // exactly at limit
             ..default_config()
         };
-        let handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
-            Ok(json!({"v": 1}))
-        };
+        let handler =
+            |_ctx: &ToolContext, _args: serde_json::Value| async move { Ok(json!({"v": 1})) };
         let result = execute(
-            &handler, &cap, "test", &json!({}), &config,
-            json!({"value": 1}), default_opts(),
-        ).await;
+            &handler,
+            &cap,
+            "test",
+            &json!({}),
+            &config,
+            json!({"value": 1}),
+            default_opts(),
+        )
+        .await;
         assert!(result.is_ok());
     }
 
@@ -570,13 +564,18 @@ mod tests {
             max_result_bytes: size - 1, // one byte under → fail
             ..default_config()
         };
-        let handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
-            Ok(json!({"v": 1}))
-        };
+        let handler =
+            |_ctx: &ToolContext, _args: serde_json::Value| async move { Ok(json!({"v": 1})) };
         let result = execute(
-            &handler, &cap, "test", &json!({}), &config,
-            json!({"value": 1}), default_opts(),
-        ).await;
+            &handler,
+            &cap,
+            "test",
+            &json!({}),
+            &config,
+            json!({"value": 1}),
+            default_opts(),
+        )
+        .await;
         assert_eq!(result.unwrap_err().code, ToolErrorCode::ExecutionFailed);
     }
 
@@ -585,19 +584,18 @@ mod tests {
     #[tokio::test]
     async fn context_populated_correctly() {
         let cap = test_capability();
-        let context_checker =
-            |ctx: &ToolContext, _args: serde_json::Value| {
-                let name = ctx.tool_name.clone();
-                let cap_name = ctx.capability_name.clone();
-                let ws = ctx.workspace_id.clone();
-                async move {
-                    Ok(json!({
-                        "tool": name,
-                        "cap": cap_name,
-                        "has_ws": ws.is_some(),
-                    }))
-                }
-            };
+        let context_checker = |ctx: &ToolContext, _args: serde_json::Value| {
+            let name = ctx.tool_name.clone();
+            let cap_name = ctx.capability_name.clone();
+            let ws = ctx.workspace_id.clone();
+            async move {
+                Ok(json!({
+                    "tool": name,
+                    "cap": cap_name,
+                    "has_ws": ws.is_some(),
+                }))
+            }
+        };
         let result = execute(
             &context_checker,
             &cap,

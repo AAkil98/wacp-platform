@@ -91,8 +91,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cert_path = dir.path().join("cert.pem");
         let key_path = dir.path().join("key.pem");
-        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
-        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
+        std::fs::write(
+            &cert_path,
+            b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &key_path,
+            b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n",
+        )
+        .unwrap();
 
         let tls = TlsConfig {
             enabled: true,
@@ -110,9 +118,21 @@ mod tests {
         let cert_path = dir.path().join("cert.pem");
         let key_path = dir.path().join("key.pem");
         let ca_path = dir.path().join("ca.pem");
-        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
-        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
-        std::fs::write(&ca_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
+        std::fs::write(
+            &cert_path,
+            b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &key_path,
+            b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &ca_path,
+            b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
 
         let tls = TlsConfig {
             enabled: true,
@@ -129,8 +149,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let cert_path = dir.path().join("cert.pem");
         let key_path = dir.path().join("key.pem");
-        std::fs::write(&cert_path, b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n").unwrap();
-        std::fs::write(&key_path, b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n").unwrap();
+        std::fs::write(
+            &cert_path,
+            b"-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &key_path,
+            b"-----BEGIN PRIVATE KEY-----\nZmFrZQ==\n-----END PRIVATE KEY-----\n",
+        )
+        .unwrap();
 
         let tls = TlsConfig {
             enabled: true,

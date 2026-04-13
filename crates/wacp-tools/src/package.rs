@@ -20,8 +20,10 @@ pub struct ToolPackage {
     pub shutdown: Option<ShutdownFn>,
 }
 
-pub type InitializeFn =
-    Box<dyn FnOnce(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<(), ToolError>> + Send>> + Send>;
+pub type InitializeFn = Box<
+    dyn FnOnce(serde_json::Value) -> Pin<Box<dyn Future<Output = Result<(), ToolError>> + Send>>
+        + Send,
+>;
 
 pub type ShutdownFn =
     Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<(), ToolError>> + Send>> + Send>;
@@ -93,8 +95,13 @@ impl PackageBuilder {
     }
 
     /// Register a handler for a capability.
-    pub fn handler(mut self, capability_name: impl Into<String>, handler: impl ToolHandler) -> Self {
-        self.handlers.insert(capability_name.into(), Box::new(handler));
+    pub fn handler(
+        mut self,
+        capability_name: impl Into<String>,
+        handler: impl ToolHandler,
+    ) -> Self {
+        self.handlers
+            .insert(capability_name.into(), Box::new(handler));
         self
     }
 
@@ -182,7 +189,9 @@ mod tests {
             .handler("read", noop_handler())
             // "write" handler missing
             .build();
-        assert!(matches!(pkg, Err(PackageError::MissingHandler { capability }) if capability == "write"));
+        assert!(
+            matches!(pkg, Err(PackageError::MissingHandler { capability }) if capability == "write")
+        );
     }
 
     #[test]

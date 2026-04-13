@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use tokio::sync::Semaphore;
@@ -245,9 +245,11 @@ impl ConcurrencyLimiter {
                 // No permit available — check queue capacity
                 if self.config.max_concurrent == 0 {
                     // Unlimited — should never reach here, but handle gracefully
-                    let permit = self.semaphore.acquire().await.map_err(|_| {
-                        ToolError::internal("semaphore closed")
-                    })?;
+                    let permit = self
+                        .semaphore
+                        .acquire()
+                        .await
+                        .map_err(|_| ToolError::internal("semaphore closed"))?;
                     return Ok(ConcurrencyPermit {
                         _permit: permit,
                         queued: &self.queued,

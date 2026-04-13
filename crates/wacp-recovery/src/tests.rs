@@ -1,9 +1,13 @@
-use wacp_trail::{compute_chain_hash, ChainHash, InMemoryTrailStorage, TrailStorage};
+use wacp_trail::{ChainHash, InMemoryTrailStorage, TrailStorage, compute_chain_hash};
 
 use crate::*;
 
 /// Helper: append a JSON event to the trail with proper hash chain.
-fn append_event(trail: &mut InMemoryTrailStorage, chain_head: &mut ChainHash, event: &serde_json::Value) {
+fn append_event(
+    trail: &mut InMemoryTrailStorage,
+    chain_head: &mut ChainHash,
+    event: &serde_json::Value,
+) {
     let bytes = serde_json::to_vec(event).unwrap();
     let hash = compute_chain_hash(chain_head, &bytes);
     trail.append(&bytes, hash.as_ref()).unwrap();
@@ -71,7 +75,8 @@ fn recover_chain_corrupt() {
     append_event(&mut trail, &mut head, &event1);
 
     // Write a second entry with a wrong hash (tampered).
-    let event2_bytes = serde_json::to_vec(&serde_json::json!({"event_type": "test", "timestamp": 2000})).unwrap();
+    let event2_bytes =
+        serde_json::to_vec(&serde_json::json!({"event_type": "test", "timestamp": 2000})).unwrap();
     let wrong_hash = [0xFFu8; 32];
     trail.append(&event2_bytes, &wrong_hash).unwrap();
 
@@ -131,20 +136,18 @@ fn recover_in_flight_detected() {
 
 use wacp_trail::InMemorySnapshotStorage;
 
-fn make_snapshot(seq: u64, ws_states: &[(&str, &str)], task_statuses: &[(&str, &str)]) -> (u64, Vec<u8>) {
+fn make_snapshot(
+    seq: u64,
+    ws_states: &[(&str, &str)],
+    task_statuses: &[(&str, &str)],
+) -> (u64, Vec<u8>) {
     let mut nodes = serde_json::Map::new();
     for (id, state) in ws_states {
-        nodes.insert(
-            id.to_string(),
-            serde_json::json!({"status": state}),
-        );
+        nodes.insert(id.to_string(), serde_json::json!({"status": state}));
     }
     let mut tasks = serde_json::Map::new();
     for (id, status) in task_statuses {
-        tasks.insert(
-            id.to_string(),
-            serde_json::json!({"status": status}),
-        );
+        tasks.insert(id.to_string(), serde_json::json!({"status": status}));
     }
     let snap = serde_json::json!({
         "sequence": seq,
@@ -194,9 +197,15 @@ fn recover_with_snapshot_valid() {
     let state = RecoveryEngine::recover_with_snapshot(&trail, &snapshots).unwrap();
     assert_eq!(state.snapshot_sequence, Some(3));
     // ws-1: snapshot says Active, delta says Blocked → Blocked wins.
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Blocked));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Blocked)
+    );
     // ws-2: only in delta.
-    assert_eq!(state.workspace_states.get("ws-2"), Some(&WorkspaceState::Active));
+    assert_eq!(
+        state.workspace_states.get("ws-2"),
+        Some(&WorkspaceState::Active)
+    );
 }
 
 #[test]
@@ -240,9 +249,18 @@ fn recover_empty_trail_with_valid_snapshot() {
     let state = RecoveryEngine::recover_with_snapshot(&trail, &snapshots).unwrap();
     assert_eq!(state.snapshot_sequence, Some(42));
     assert_eq!(state.last_sequence, 42);
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Active));
-    assert_eq!(state.workspace_states.get("ws-2"), Some(&WorkspaceState::Blocked));
-    assert_eq!(state.task_statuses.get("t-1"), Some(&TaskStatus::InProgress));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Active)
+    );
+    assert_eq!(
+        state.workspace_states.get("ws-2"),
+        Some(&WorkspaceState::Blocked)
+    );
+    assert_eq!(
+        state.task_statuses.get("t-1"),
+        Some(&TaskStatus::InProgress)
+    );
     assert_eq!(state.clock_initial, wacp_clock::Timestamp::ZERO);
 }
 
@@ -264,7 +282,10 @@ fn recover_multiple_state_changes_last_wins() {
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     // Last state wins.
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Active));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Active)
+    );
     assert_eq!(state.last_sequence, 4);
 }
 
@@ -334,26 +355,37 @@ fn recover_migration_interrupted() {
     let mut head = ChainHash::GENESIS;
 
     // ws-1 created as Active.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_created",
-        "workspace_id": "ws-1",
-        "new_state": "Active",
-        "timestamp": 1000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_created",
+            "workspace_id": "ws-1",
+            "new_state": "Active",
+            "timestamp": 1000
+        }),
+    );
 
     // ws-1 transitions to Migrating (migration_started).
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_state_changed",
-        "workspace_id": "ws-1",
-        "new_state": "Migrating",
-        "timestamp": 2000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_state_changed",
+            "workspace_id": "ws-1",
+            "new_state": "Migrating",
+            "timestamp": 2000
+        }),
+    );
 
     // No migration_completed event — interrupted.
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     // The reconstructed state reflects the last recorded state: Migrating.
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Migrating));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Migrating)
+    );
 }
 
 #[test]
@@ -361,11 +393,15 @@ fn recover_unrecognized_event_type_skipped() {
     let mut trail = InMemoryTrailStorage::new();
     let mut head = ChainHash::GENESIS;
 
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "unknown_event",
-        "data": "something",
-        "timestamp": 1000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "unknown_event",
+            "data": "something",
+            "timestamp": 1000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     assert!(state.workspace_states.is_empty());
@@ -381,24 +417,36 @@ fn recover_task_created_and_completed() {
     let mut trail = InMemoryTrailStorage::new();
     let mut head = ChainHash::GENESIS;
 
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "task_status_changed",
-        "task_id": "t-1",
-        "new_status": "Pending",
-        "timestamp": 1000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "task_status_changed",
-        "task_id": "t-1",
-        "new_status": "InProgress",
-        "timestamp": 2000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "task_status_changed",
-        "task_id": "t-1",
-        "new_status": "Completed",
-        "timestamp": 3000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "task_status_changed",
+            "task_id": "t-1",
+            "new_status": "Pending",
+            "timestamp": 1000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "task_status_changed",
+            "task_id": "t-1",
+            "new_status": "InProgress",
+            "timestamp": 2000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "task_status_changed",
+            "task_id": "t-1",
+            "new_status": "Completed",
+            "timestamp": 3000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     assert_eq!(state.task_statuses.get("t-1"), Some(&TaskStatus::Completed));
@@ -412,19 +460,27 @@ fn recover_multiple_in_flight_some_delivered() {
 
     // Create 3 envelopes.
     for i in 1..=3 {
-        append_event(&mut trail, &mut head, &serde_json::json!({
-            "event_type": "envelope_created",
-            "envelope_id": format!("env-{i}"),
-            "timestamp": 1000 + i
-        }));
+        append_event(
+            &mut trail,
+            &mut head,
+            &serde_json::json!({
+                "event_type": "envelope_created",
+                "envelope_id": format!("env-{i}"),
+                "timestamp": 1000 + i
+            }),
+        );
     }
 
     // Deliver only env-2.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "envelope_delivered",
-        "envelope_id": "env-2",
-        "timestamp": 5000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "envelope_delivered",
+            "envelope_id": "env-2",
+            "timestamp": 5000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     assert_eq!(state.in_flight_envelopes.len(), 2);
@@ -438,27 +494,42 @@ fn recover_workspace_created_then_closed() {
     let mut trail = InMemoryTrailStorage::new();
     let mut head = ChainHash::GENESIS;
 
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_created",
-        "workspace_id": "ws-1",
-        "new_state": "Idle",
-        "timestamp": 1000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_state_changed",
-        "workspace_id": "ws-1",
-        "new_state": "Active",
-        "timestamp": 2000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_state_changed",
-        "workspace_id": "ws-1",
-        "new_state": "Closed",
-        "timestamp": 3000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_created",
+            "workspace_id": "ws-1",
+            "new_state": "Idle",
+            "timestamp": 1000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_state_changed",
+            "workspace_id": "ws-1",
+            "new_state": "Active",
+            "timestamp": 2000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_state_changed",
+            "workspace_id": "ws-1",
+            "new_state": "Closed",
+            "timestamp": 3000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Closed));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Closed)
+    );
 }
 
 #[test]
@@ -468,17 +539,28 @@ fn recover_workspace_multiple_transitions() {
 
     let transitions = ["Idle", "Active", "Blocked", "Active", "Closed"];
     for (i, st) in transitions.iter().enumerate() {
-        let event_type = if i == 0 { "workspace_created" } else { "workspace_state_changed" };
-        append_event(&mut trail, &mut head, &serde_json::json!({
-            "event_type": event_type,
-            "workspace_id": "ws-1",
-            "new_state": st,
-            "timestamp": 1000 + i as u64
-        }));
+        let event_type = if i == 0 {
+            "workspace_created"
+        } else {
+            "workspace_state_changed"
+        };
+        append_event(
+            &mut trail,
+            &mut head,
+            &serde_json::json!({
+                "event_type": event_type,
+                "workspace_id": "ws-1",
+                "new_state": st,
+                "timestamp": 1000 + i as u64
+            }),
+        );
     }
 
     let state = RecoveryEngine::recover(&trail).unwrap();
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Closed));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Closed)
+    );
     assert_eq!(state.last_sequence, 5);
 }
 
@@ -487,18 +569,30 @@ fn recover_clock_from_timestamps() {
     let mut trail = InMemoryTrailStorage::new();
     let mut head = ChainHash::GENESIS;
 
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "test",
-        "timestamp": 1000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "test",
-        "timestamp": 5000
-    }));
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "test",
-        "timestamp": 9999
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "test",
+            "timestamp": 1000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "test",
+            "timestamp": 5000
+        }),
+    );
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "test",
+            "timestamp": 9999
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     // clock_initial should be last_entry_timestamp.succ()
@@ -511,25 +605,36 @@ fn recover_empty_events_skipped() {
     let mut head = ChainHash::GENESIS;
 
     // Entry with empty event_type — should be skipped.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "",
-        "workspace_id": "ws-1",
-        "new_state": "Active",
-        "timestamp": 1000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "",
+            "workspace_id": "ws-1",
+            "new_state": "Active",
+            "timestamp": 1000
+        }),
+    );
 
     // Normal entry.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_created",
-        "workspace_id": "ws-2",
-        "new_state": "Idle",
-        "timestamp": 2000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_created",
+            "workspace_id": "ws-2",
+            "new_state": "Idle",
+            "timestamp": 2000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     // Empty event_type doesn't match any known event, so ws-1 not added.
     assert!(!state.workspace_states.contains_key("ws-1"));
-    assert_eq!(state.workspace_states.get("ws-2"), Some(&WorkspaceState::Idle));
+    assert_eq!(
+        state.workspace_states.get("ws-2"),
+        Some(&WorkspaceState::Idle)
+    );
     assert_eq!(state.last_sequence, 2);
 }
 
@@ -539,12 +644,16 @@ fn recover_large_trail_performance() {
     let mut head = ChainHash::GENESIS;
 
     for i in 0..1000u64 {
-        append_event(&mut trail, &mut head, &serde_json::json!({
-            "event_type": "workspace_state_changed",
-            "workspace_id": format!("ws-{}", i % 10),
-            "new_state": "Active",
-            "timestamp": 1000 + i
-        }));
+        append_event(
+            &mut trail,
+            &mut head,
+            &serde_json::json!({
+                "event_type": "workspace_state_changed",
+                "workspace_id": format!("ws-{}", i % 10),
+                "new_state": "Active",
+                "timestamp": 1000 + i
+            }),
+        );
     }
 
     let state = RecoveryEngine::recover(&trail).unwrap();
@@ -570,19 +679,36 @@ fn recover_interleaved_workspaces() {
         ("ws-3", "Failed"),
     ];
     for (i, (ws_id, state)) in events.iter().enumerate() {
-        let event_type = if state == &"Idle" { "workspace_created" } else { "workspace_state_changed" };
-        append_event(&mut trail, &mut head, &serde_json::json!({
-            "event_type": event_type,
-            "workspace_id": ws_id,
-            "new_state": state,
-            "timestamp": 1000 + i as u64
-        }));
+        let event_type = if state == &"Idle" {
+            "workspace_created"
+        } else {
+            "workspace_state_changed"
+        };
+        append_event(
+            &mut trail,
+            &mut head,
+            &serde_json::json!({
+                "event_type": event_type,
+                "workspace_id": ws_id,
+                "new_state": state,
+                "timestamp": 1000 + i as u64
+            }),
+        );
     }
 
     let state = RecoveryEngine::recover(&trail).unwrap();
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Blocked));
-    assert_eq!(state.workspace_states.get("ws-2"), Some(&WorkspaceState::Closed));
-    assert_eq!(state.workspace_states.get("ws-3"), Some(&WorkspaceState::Failed));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Blocked)
+    );
+    assert_eq!(
+        state.workspace_states.get("ws-2"),
+        Some(&WorkspaceState::Closed)
+    );
+    assert_eq!(
+        state.workspace_states.get("ws-3"),
+        Some(&WorkspaceState::Failed)
+    );
 }
 
 #[test]
@@ -591,18 +717,26 @@ fn recover_envelope_created_then_rejected() {
     let mut head = ChainHash::GENESIS;
 
     // Create envelope.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "envelope_created",
-        "envelope_id": "env-1",
-        "timestamp": 1000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "envelope_created",
+            "envelope_id": "env-1",
+            "timestamp": 1000
+        }),
+    );
 
     // Deliver (reject = delivery in protocol terms).
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "envelope_delivered",
-        "envelope_id": "env-1",
-        "timestamp": 2000
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "envelope_delivered",
+            "envelope_id": "env-1",
+            "timestamp": 2000
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
     assert!(state.in_flight_envelopes.is_empty());
@@ -614,10 +748,14 @@ fn recover_last_sequence_matches_count() {
     let mut head = ChainHash::GENESIS;
 
     for i in 0..7u64 {
-        append_event(&mut trail, &mut head, &serde_json::json!({
-            "event_type": "test",
-            "timestamp": 1000 + i
-        }));
+        append_event(
+            &mut trail,
+            &mut head,
+            &serde_json::json!({
+                "event_type": "test",
+                "timestamp": 1000 + i
+            }),
+        );
     }
 
     let state = RecoveryEngine::recover(&trail).unwrap();
@@ -630,16 +768,23 @@ fn recover_unknown_fields_ignored() {
     let mut head = ChainHash::GENESIS;
 
     // JSON with extra fields.
-    append_event(&mut trail, &mut head, &serde_json::json!({
-        "event_type": "workspace_created",
-        "workspace_id": "ws-1",
-        "new_state": "Idle",
-        "timestamp": 1000,
-        "extra_field": "should_be_ignored",
-        "nested": {"deeply": "ignored"}
-    }));
+    append_event(
+        &mut trail,
+        &mut head,
+        &serde_json::json!({
+            "event_type": "workspace_created",
+            "workspace_id": "ws-1",
+            "new_state": "Idle",
+            "timestamp": 1000,
+            "extra_field": "should_be_ignored",
+            "nested": {"deeply": "ignored"}
+        }),
+    );
 
     let state = RecoveryEngine::recover(&trail).unwrap();
-    assert_eq!(state.workspace_states.get("ws-1"), Some(&WorkspaceState::Idle));
+    assert_eq!(
+        state.workspace_states.get("ws-1"),
+        Some(&WorkspaceState::Idle)
+    );
     assert_eq!(state.last_sequence, 1);
 }

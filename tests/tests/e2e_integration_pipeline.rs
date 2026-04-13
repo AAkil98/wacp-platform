@@ -86,10 +86,14 @@ async fn e19_two_workers_overlapping() {
 
     // Activate both by routing directives
     let env1 = make_envelope("dir-w1", "ws-root", "ws-w1", "directive");
-    coord.route_envelope(&WorkspaceId::from("ws-w1"), env1).await;
+    coord
+        .route_envelope(&WorkspaceId::from("ws-w1"), env1)
+        .await;
 
     let env2 = make_envelope("dir-w2", "ws-root", "ws-w2", "directive");
-    coord.route_envelope(&WorkspaceId::from("ws-w2"), env2).await;
+    coord
+        .route_envelope(&WorkspaceId::from("ws-w2"), env2)
+        .await;
 
     drain_events(&mut coord, &mut rx, 10, 200).await;
 

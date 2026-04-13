@@ -49,7 +49,9 @@ pub enum AgentOutbound {
 /// Inbound messages from highway (human) to the runtime.
 #[derive(Debug)]
 pub enum HighwayInbound {
-    Authenticate { auth_token: String },
+    Authenticate {
+        auth_token: String,
+    },
     InjectEnvelope {
         to_workspace: WorkspaceId,
         envelope_type: String,

@@ -94,7 +94,9 @@ impl CompactionTask {
 
         for entry in entries {
             let entry = entry.map_err(|e| StorageError::Io(e.to_string()))?;
-            let meta = entry.metadata().map_err(|e| StorageError::Io(e.to_string()))?;
+            let meta = entry
+                .metadata()
+                .map_err(|e| StorageError::Io(e.to_string()))?;
             let created = meta.created().unwrap_or(SystemTime::UNIX_EPOCH);
             let age = now.duration_since(created).unwrap_or_default();
 
@@ -115,7 +117,10 @@ impl CompactionTask {
     /// Returns the number of merge operations performed.
     pub fn merge_warm_segments(&self, threshold_bytes: u64) -> Result<usize, StorageError> {
         let warm = self.tier_manager.list_warm_segments()?;
-        let small: Vec<_> = warm.iter().filter(|s| s.size_bytes < threshold_bytes).collect();
+        let small: Vec<_> = warm
+            .iter()
+            .filter(|s| s.size_bytes < threshold_bytes)
+            .collect();
 
         if small.len() < 2 {
             return Ok(0);
@@ -132,10 +137,10 @@ impl CompactionTask {
             let data_a = fs::read(&a.path).map_err(|e| StorageError::Io(e.to_string()))?;
             let data_b = fs::read(&b.path).map_err(|e| StorageError::Io(e.to_string()))?;
 
-            let dec_a = zstd::decode_all(data_a.as_slice())
-                .map_err(|e| StorageError::Io(e.to_string()))?;
-            let dec_b = zstd::decode_all(data_b.as_slice())
-                .map_err(|e| StorageError::Io(e.to_string()))?;
+            let dec_a =
+                zstd::decode_all(data_a.as_slice()).map_err(|e| StorageError::Io(e.to_string()))?;
+            let dec_b =
+                zstd::decode_all(data_b.as_slice()).map_err(|e| StorageError::Io(e.to_string()))?;
 
             let mut combined = dec_a;
             combined.extend_from_slice(&dec_b);

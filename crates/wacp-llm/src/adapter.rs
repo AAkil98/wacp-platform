@@ -10,19 +10,25 @@ pub trait LlmAdapter: Send + Sync + 'static {
         &self,
         messages: &[Message],
         options: &CompletionOptions,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CompletionResult, LlmError>> + Send + '_>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<CompletionResult, LlmError>> + Send + '_>,
+    >;
 
     /// Stream a completion token-by-token.
     fn complete_stream(
         &self,
         messages: &[Message],
         options: &CompletionOptions,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<StreamHandle, LlmError>> + Send + '_>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<StreamHandle, LlmError>> + Send + '_>,
+    >;
 
     /// List available models.
     fn models(
         &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<ModelInfo>, LlmError>> + Send + '_>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<ModelInfo>, LlmError>> + Send + '_>,
+    >;
 
     /// Check provider health.
     fn health(

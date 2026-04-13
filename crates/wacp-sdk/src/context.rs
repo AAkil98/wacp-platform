@@ -224,8 +224,9 @@ impl AgentContext {
             let payload_bytes =
                 serde_json::to_vec(&payload).map_err(|e| Error::MissingField(e.to_string()))?;
             let response = self.query(&payload_bytes, None).await?;
-            serde_json::from_slice(&response.payload)
-                .map_err(|e| wacp_tools::ToolError::internal(format!("invalid tool response: {e}")).into())
+            serde_json::from_slice(&response.payload).map_err(|e| {
+                wacp_tools::ToolError::internal(format!("invalid tool response: {e}")).into()
+            })
         }
     }
 
@@ -271,8 +272,8 @@ mod tests {
     use super::*;
     use wacp_tools::{
         PackageBuilder, RegistryConfig, ToolDescriptor, ToolRegistry,
-        handler::{ToolContext, ToolHandler},
         descriptor::Capability,
+        handler::{ToolContext, ToolHandler},
     };
 
     fn test_descriptor(name: &str) -> ToolDescriptor {
@@ -332,10 +333,8 @@ mod tests {
     async fn tools_without_registry_returns_empty() {
         // Simulate: tools() with None registry
         let tools: Option<Arc<ToolRegistry>> = None;
-        let list: Vec<&wacp_tools::ToolDescriptor> = tools
-            .as_ref()
-            .map(|r| r.list_tools())
-            .unwrap_or_default();
+        let list: Vec<&wacp_tools::ToolDescriptor> =
+            tools.as_ref().map(|r| r.list_tools()).unwrap_or_default();
         assert!(list.is_empty());
     }
 

@@ -112,10 +112,7 @@ impl WorkspaceTree {
             .entry(originator)
             .or_default()
             .push(child_id.clone());
-        self.owner_index
-            .entry(owner)
-            .or_default()
-            .push(child_id);
+        self.owner_index.entry(owner).or_default().push(child_id);
 
         Ok(())
     }
@@ -148,13 +145,7 @@ impl WorkspaceTree {
         };
         self.nodes
             .get(parent.as_ref())
-            .map(|p| {
-                p.children
-                    .iter()
-                    .filter(|c| *c != id)
-                    .cloned()
-                    .collect()
-            })
+            .map(|p| p.children.iter().filter(|c| *c != id).cloned().collect())
             .unwrap_or_default()
     }
 
@@ -269,10 +260,7 @@ impl WorkspaceTree {
         let mut reparented = Vec::new();
 
         for child_id in desc {
-            let child_owner = self
-                .nodes
-                .get(child_id.as_ref())
-                .map(|n| n.owner.clone());
+            let child_owner = self.nodes.get(child_id.as_ref()).map(|n| n.owner.clone());
 
             if let Some(co) = child_owner {
                 if co == owner {
@@ -296,9 +284,10 @@ impl WorkspaceTree {
         // Remove from old parent's children.
         if let Some(node) = self.nodes.get(child.as_ref())
             && let Some(ref old_parent) = node.parent.clone()
-                && let Some(parent_node) = self.nodes.get_mut(old_parent.as_ref()) {
-                    parent_node.children.retain(|c| c != child);
-                }
+            && let Some(parent_node) = self.nodes.get_mut(old_parent.as_ref())
+        {
+            parent_node.children.retain(|c| c != child);
+        }
 
         // Update child's parent.
         if let Some(node) = self.nodes.get_mut(child.as_ref()) {
@@ -307,9 +296,10 @@ impl WorkspaceTree {
 
         // Add to new parent's children.
         if let Some(parent_node) = self.nodes.get_mut(new_parent.as_ref())
-            && !parent_node.children.contains(child) {
-                parent_node.children.push(child.clone());
-            }
+            && !parent_node.children.contains(child)
+        {
+            parent_node.children.push(child.clone());
+        }
     }
 
     /// Update a node's status.

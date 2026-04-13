@@ -156,10 +156,14 @@ impl TierManager {
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
 
-            if let Some(id_str) = name_str.strip_prefix(prefix).and_then(|s| s.strip_suffix(suffix))
+            if let Some(id_str) = name_str
+                .strip_prefix(prefix)
+                .and_then(|s| s.strip_suffix(suffix))
                 && let Ok(id) = id_str.parse::<u64>()
             {
-                let meta = entry.metadata().map_err(|e| StorageError::Io(e.to_string()))?;
+                let meta = entry
+                    .metadata()
+                    .map_err(|e| StorageError::Io(e.to_string()))?;
                 segments.push(SegmentInfo {
                     id,
                     tier,
@@ -185,14 +189,13 @@ pub fn compress_file(src: &Path, dst: &Path) -> Result<(), StorageError> {
 /// Decompress a zstd-compressed file.
 pub fn decompress_file(src: &Path, dst: &Path) -> Result<(), StorageError> {
     let compressed = fs::read(src).map_err(|e| StorageError::Io(e.to_string()))?;
-    let mut decoder = zstd::Decoder::new(compressed.as_slice())
-        .map_err(|e| StorageError::Io(e.to_string()))?;
+    let mut decoder =
+        zstd::Decoder::new(compressed.as_slice()).map_err(|e| StorageError::Io(e.to_string()))?;
     let mut output = Vec::new();
     decoder
         .read_to_end(&mut output)
         .map_err(|e| StorageError::Io(e.to_string()))?;
-    let mut file =
-        fs::File::create(dst).map_err(|e| StorageError::Io(e.to_string()))?;
+    let mut file = fs::File::create(dst).map_err(|e| StorageError::Io(e.to_string()))?;
     file.write_all(&output)
         .map_err(|e| StorageError::Io(e.to_string()))
 }
@@ -303,11 +306,7 @@ mod tests {
 
         // Create hot segments.
         for i in 0..3u64 {
-            fs::write(
-                trail_dir.join(format!("segment-{i:06}.trail")),
-                "data",
-            )
-            .unwrap();
+            fs::write(trail_dir.join(format!("segment-{i:06}.trail")), "data").unwrap();
         }
 
         let mgr = TierManager::new(trail_dir, 10, 90, None).unwrap();

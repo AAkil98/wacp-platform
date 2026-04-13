@@ -54,7 +54,10 @@ pub struct Cost {
 
 impl Cost {
     pub fn usd(amount_micros: u64) -> Self {
-        Self { amount_micros, currency: "USD" }
+        Self {
+            amount_micros,
+            currency: "USD",
+        }
     }
 
     /// Format as a human-readable dollar string (e.g., "$0.001234").
@@ -97,13 +100,19 @@ mod tests {
 
     #[test]
     fn token_usage_total() {
-        let usage = TokenUsage { input_tokens: 100, output_tokens: 50 };
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 50,
+        };
         assert_eq!(usage.total(), 150);
     }
 
     #[test]
     fn token_usage_total_overflow_saturates() {
-        let usage = TokenUsage { input_tokens: u32::MAX, output_tokens: 1 };
+        let usage = TokenUsage {
+            input_tokens: u32::MAX,
+            output_tokens: 1,
+        };
         assert_eq!(usage.total(), u32::MAX);
     }
 

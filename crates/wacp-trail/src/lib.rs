@@ -15,7 +15,9 @@ pub mod memory;
 pub mod tiered;
 pub mod traits;
 
-pub use chain::{compute_chain_hash, verify_chain, verify_chain_link, ChainHash, ChainVerificationError};
+pub use chain::{
+    ChainHash, ChainVerificationError, compute_chain_hash, verify_chain, verify_chain_link,
+};
 pub use error::StorageError;
 pub use fs_checkpoint::FileCheckpointStorage;
 pub use fs_snapshot::FileSnapshotStorage;

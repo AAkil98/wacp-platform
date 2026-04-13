@@ -407,39 +407,105 @@ impl Default for HealthConfig {
 //   Metrics (Prometheus)          [::1]:9095
 // See IMPLEMENTATION.md §4.1 for the full rationale.
 
-fn default_agent_listen() -> String { "[::1]:9090".into() }
-fn default_highway_listen() -> String { "[::1]:9091".into() }
-fn default_coordinator_listen() -> String { "[::1]:9092".into() }
-fn default_rest_listen() -> String { "[::1]:9093".into() }
-fn default_tls_min_version() -> String { "1.2".into() }
-fn default_auth_provider() -> String { "psk".into() }
-fn default_auth_timeout() -> u64 { 5000 }
-fn default_rate_limit_failures() -> u32 { 10 }
-fn default_rate_limit_window() -> u32 { 60 }
-fn default_data_dir() -> String { "./data".into() }
-fn default_segment_size() -> u64 { 67_108_864 }
-fn default_index_batch_size() -> u32 { 100 }
-fn default_index_batch_timeout() -> u32 { 50 }
-fn default_ws_checkpoint_interval() -> u32 { 5 }
-fn default_ws_time_interval() -> u32 { 60 }
-fn default_sys_entry_interval() -> u64 { 10_000 }
-fn default_sys_time_interval() -> u32 { 30 }
-fn default_sys_retention() -> u32 { 3 }
-fn default_hot_segments() -> u32 { 10 }
-fn default_warm_retention() -> u32 { 90 }
-fn default_cold_retention() -> String { "indefinite".into() }
-fn default_compaction_interval() -> u32 { 60 }
-fn default_warning_threshold() -> f32 { 0.8 }
-fn default_max_retries() -> u32 { 3 }
-fn default_retry_backoff() -> u64 { 100 }
-fn default_log_level() -> String { "info".into() }
-fn default_log_format() -> String { "json".into() }
-fn default_log_output() -> String { "stderr".into() }
-fn default_metrics_listen() -> String { "[::1]:9095".into() }
-fn default_metrics_path() -> String { "/metrics".into() }
-fn default_health_enabled() -> bool { true }
-fn default_health_listen() -> String { "[::1]:9094".into() }
-fn default_health_path() -> String { "/healthz".into() }
+fn default_agent_listen() -> String {
+    "[::1]:9090".into()
+}
+fn default_highway_listen() -> String {
+    "[::1]:9091".into()
+}
+fn default_coordinator_listen() -> String {
+    "[::1]:9092".into()
+}
+fn default_rest_listen() -> String {
+    "[::1]:9093".into()
+}
+fn default_tls_min_version() -> String {
+    "1.2".into()
+}
+fn default_auth_provider() -> String {
+    "psk".into()
+}
+fn default_auth_timeout() -> u64 {
+    5000
+}
+fn default_rate_limit_failures() -> u32 {
+    10
+}
+fn default_rate_limit_window() -> u32 {
+    60
+}
+fn default_data_dir() -> String {
+    "./data".into()
+}
+fn default_segment_size() -> u64 {
+    67_108_864
+}
+fn default_index_batch_size() -> u32 {
+    100
+}
+fn default_index_batch_timeout() -> u32 {
+    50
+}
+fn default_ws_checkpoint_interval() -> u32 {
+    5
+}
+fn default_ws_time_interval() -> u32 {
+    60
+}
+fn default_sys_entry_interval() -> u64 {
+    10_000
+}
+fn default_sys_time_interval() -> u32 {
+    30
+}
+fn default_sys_retention() -> u32 {
+    3
+}
+fn default_hot_segments() -> u32 {
+    10
+}
+fn default_warm_retention() -> u32 {
+    90
+}
+fn default_cold_retention() -> String {
+    "indefinite".into()
+}
+fn default_compaction_interval() -> u32 {
+    60
+}
+fn default_warning_threshold() -> f32 {
+    0.8
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_retry_backoff() -> u64 {
+    100
+}
+fn default_log_level() -> String {
+    "info".into()
+}
+fn default_log_format() -> String {
+    "json".into()
+}
+fn default_log_output() -> String {
+    "stderr".into()
+}
+fn default_metrics_listen() -> String {
+    "[::1]:9095".into()
+}
+fn default_metrics_path() -> String {
+    "/metrics".into()
+}
+fn default_health_enabled() -> bool {
+    true
+}
+fn default_health_listen() -> String {
+    "[::1]:9094".into()
+}
+fn default_health_path() -> String {
+    "/healthz".into()
+}
 
 // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -539,10 +605,7 @@ impl RuntimeConfig {
             {
                 return Err(ConfigError::Validation {
                     field: "auth.external.url".into(),
-                    message: format!(
-                        "must be an HTTP(S) URL, got {:?}",
-                        self.auth.external.url
-                    ),
+                    message: format!("must be an HTTP(S) URL, got {:?}", self.auth.external.url),
                 });
             }
         }
@@ -732,9 +795,7 @@ impl RuntimeConfig {
             other => {
                 return Err(ConfigError::Validation {
                     field: "logging.level".into(),
-                    message: format!(
-                        "must be one of trace/debug/info/warn/error, got {other:?}"
-                    ),
+                    message: format!("must be one of trace/debug/info/warn/error, got {other:?}"),
                 });
             }
         }
@@ -853,19 +914,16 @@ fn apply_single_override(
             config.storage.trail.index_batch_timeout_ms = parse_u32_env(var, value)?;
         }
         "storage.snapshots.workspace_checkpoint_interval" => {
-            config.storage.snapshots.workspace_checkpoint_interval =
-                parse_u32_env(var, value)?;
+            config.storage.snapshots.workspace_checkpoint_interval = parse_u32_env(var, value)?;
         }
         "storage.snapshots.workspace_time_interval_seconds" => {
-            config.storage.snapshots.workspace_time_interval_seconds =
-                parse_u32_env(var, value)?;
+            config.storage.snapshots.workspace_time_interval_seconds = parse_u32_env(var, value)?;
         }
         "storage.snapshots.system_entry_interval" => {
             config.storage.snapshots.system_entry_interval = parse_u64_env(var, value)?;
         }
         "storage.snapshots.system_time_interval_minutes" => {
-            config.storage.snapshots.system_time_interval_minutes =
-                parse_u32_env(var, value)?;
+            config.storage.snapshots.system_time_interval_minutes = parse_u32_env(var, value)?;
         }
         "storage.snapshots.system_retention_count" => {
             config.storage.snapshots.system_retention_count = parse_u32_env(var, value)?;
@@ -995,11 +1053,17 @@ mod tests {
             config.storage.trail.segment_size_bytes,
             defaults.storage.trail.segment_size_bytes
         );
-        assert_eq!(config.resources.warning_threshold, defaults.resources.warning_threshold);
+        assert_eq!(
+            config.resources.warning_threshold,
+            defaults.resources.warning_threshold
+        );
         assert_eq!(config.delivery.max_retries, defaults.delivery.max_retries);
         assert_eq!(config.logging.level, defaults.logging.level);
         assert_eq!(config.logging.format, defaults.logging.format);
-        assert_eq!(config.observability.health.enabled, defaults.observability.health.enabled);
+        assert_eq!(
+            config.observability.health.enabled,
+            defaults.observability.health.enabled
+        );
     }
 
     #[test]
@@ -1252,11 +1316,7 @@ observability:
 
     // ── Environment variable overrides ──
 
-    fn override_one(
-        config: &mut RuntimeConfig,
-        key: &str,
-        value: &str,
-    ) -> Result<(), ConfigError> {
+    fn override_one(config: &mut RuntimeConfig, key: &str, value: &str) -> Result<(), ConfigError> {
         apply_overrides_from(
             config,
             std::iter::once((key.to_string(), value.to_string())),
@@ -1334,9 +1394,18 @@ observability:
         let parsed = RuntimeConfig::parse(&yaml).unwrap();
         let d = RuntimeConfig::default();
         assert_eq!(parsed.server.agent_listen, d.server.agent_listen);
-        assert_eq!(parsed.storage.trail.segment_size_bytes, d.storage.trail.segment_size_bytes);
-        assert_eq!(parsed.resources.warning_threshold, d.resources.warning_threshold);
-        assert_eq!(parsed.observability.health.path, d.observability.health.path);
+        assert_eq!(
+            parsed.storage.trail.segment_size_bytes,
+            d.storage.trail.segment_size_bytes
+        );
+        assert_eq!(
+            parsed.resources.warning_threshold,
+            d.resources.warning_threshold
+        );
+        assert_eq!(
+            parsed.observability.health.path,
+            d.observability.health.path
+        );
     }
 
     // ── Phase 18b.4: Runtime config coverage ──
@@ -1351,14 +1420,22 @@ observability:
     #[test]
     fn env_override_invalid_u64() {
         let mut config = RuntimeConfig::default();
-        let err = override_one(&mut config, "WACP_STORAGE__TRAIL__SEGMENT_SIZE_BYTES", "abc");
+        let err = override_one(
+            &mut config,
+            "WACP_STORAGE__TRAIL__SEGMENT_SIZE_BYTES",
+            "abc",
+        );
         assert!(err.is_err());
     }
 
     #[test]
     fn env_override_invalid_f32() {
         let mut config = RuntimeConfig::default();
-        let err = override_one(&mut config, "WACP_RESOURCES__WARNING_THRESHOLD", "not_a_number");
+        let err = override_one(
+            &mut config,
+            "WACP_RESOURCES__WARNING_THRESHOLD",
+            "not_a_number",
+        );
         assert!(err.is_err());
     }
 
@@ -1374,8 +1451,15 @@ observability:
         let yaml = RuntimeConfig::default_yaml();
         // Verify all 9 top-level sections are present.
         for section in [
-            "server:", "tls:", "auth:", "taxonomy:", "storage:",
-            "resources:", "delivery:", "logging:", "observability:",
+            "server:",
+            "tls:",
+            "auth:",
+            "taxonomy:",
+            "storage:",
+            "resources:",
+            "delivery:",
+            "logging:",
+            "observability:",
         ] {
             assert!(yaml.contains(section), "defaults YAML missing {section}");
         }
@@ -1390,7 +1474,10 @@ observability:
         // Server
         assert_eq!(parsed.server.agent_listen, d.server.agent_listen);
         assert_eq!(parsed.server.highway_listen, d.server.highway_listen);
-        assert_eq!(parsed.server.coordinator_listen, d.server.coordinator_listen);
+        assert_eq!(
+            parsed.server.coordinator_listen,
+            d.server.coordinator_listen
+        );
         assert_eq!(parsed.server.rest_listen, d.server.rest_listen);
         // TLS
         assert_eq!(parsed.tls.enabled, d.tls.enabled);
@@ -1402,28 +1489,64 @@ observability:
         assert_eq!(parsed.auth.provider, d.auth.provider);
         assert_eq!(parsed.auth.external.url, d.auth.external.url);
         assert_eq!(parsed.auth.external.timeout_ms, d.auth.external.timeout_ms);
-        assert_eq!(parsed.auth.rate_limit.max_failures, d.auth.rate_limit.max_failures);
-        assert_eq!(parsed.auth.rate_limit.window_seconds, d.auth.rate_limit.window_seconds);
+        assert_eq!(
+            parsed.auth.rate_limit.max_failures,
+            d.auth.rate_limit.max_failures
+        );
+        assert_eq!(
+            parsed.auth.rate_limit.window_seconds,
+            d.auth.rate_limit.window_seconds
+        );
         // Storage
         assert_eq!(parsed.storage.data_dir, d.storage.data_dir);
-        assert_eq!(parsed.storage.trail.segment_size_bytes, d.storage.trail.segment_size_bytes);
-        assert_eq!(parsed.storage.snapshots.system_retention_count, d.storage.snapshots.system_retention_count);
-        assert_eq!(parsed.storage.tiered.hot_segments, d.storage.tiered.hot_segments);
-        assert_eq!(parsed.storage.tiered.cold_retention, d.storage.tiered.cold_retention);
+        assert_eq!(
+            parsed.storage.trail.segment_size_bytes,
+            d.storage.trail.segment_size_bytes
+        );
+        assert_eq!(
+            parsed.storage.snapshots.system_retention_count,
+            d.storage.snapshots.system_retention_count
+        );
+        assert_eq!(
+            parsed.storage.tiered.hot_segments,
+            d.storage.tiered.hot_segments
+        );
+        assert_eq!(
+            parsed.storage.tiered.cold_retention,
+            d.storage.tiered.cold_retention
+        );
         // Resources
-        assert_eq!(parsed.resources.default_timeout_ms, d.resources.default_timeout_ms);
-        assert!((parsed.resources.warning_threshold - d.resources.warning_threshold).abs() < f32::EPSILON);
+        assert_eq!(
+            parsed.resources.default_timeout_ms,
+            d.resources.default_timeout_ms
+        );
+        assert!(
+            (parsed.resources.warning_threshold - d.resources.warning_threshold).abs()
+                < f32::EPSILON
+        );
         // Delivery
         assert_eq!(parsed.delivery.max_retries, d.delivery.max_retries);
-        assert_eq!(parsed.delivery.retry_backoff_ms, d.delivery.retry_backoff_ms);
+        assert_eq!(
+            parsed.delivery.retry_backoff_ms,
+            d.delivery.retry_backoff_ms
+        );
         // Logging
         assert_eq!(parsed.logging.level, d.logging.level);
         assert_eq!(parsed.logging.format, d.logging.format);
         assert_eq!(parsed.logging.output, d.logging.output);
         // Observability
-        assert_eq!(parsed.observability.metrics.enabled, d.observability.metrics.enabled);
-        assert_eq!(parsed.observability.health.enabled, d.observability.health.enabled);
-        assert_eq!(parsed.observability.health.path, d.observability.health.path);
+        assert_eq!(
+            parsed.observability.metrics.enabled,
+            d.observability.metrics.enabled
+        );
+        assert_eq!(
+            parsed.observability.health.enabled,
+            d.observability.health.enabled
+        );
+        assert_eq!(
+            parsed.observability.health.path,
+            d.observability.health.path
+        );
     }
 
     #[test]
@@ -1506,11 +1629,7 @@ observability:
     fn config_load_from_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.yaml");
-        std::fs::write(
-            &path,
-            "server:\n  agent_listen: \"127.0.0.1:8080\"\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "server:\n  agent_listen: \"127.0.0.1:8080\"\n").unwrap();
         let (config, resolved) = RuntimeConfig::load(Some(&path)).unwrap();
         assert_eq!(config.server.agent_listen, "127.0.0.1:8080");
         assert!(resolved.is_some());

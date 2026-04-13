@@ -114,11 +114,7 @@ impl TaskGraph {
     /// Decrements remaining_deps for all dependents.
     /// Returns task ids whose counter reached zero (newly ready).
     pub fn mark_completed(&mut self, id: &TaskId) -> Vec<TaskId> {
-        let dependents = self
-            .forward
-            .get(id.as_ref())
-            .cloned()
-            .unwrap_or_default();
+        let dependents = self.forward.get(id.as_ref()).cloned().unwrap_or_default();
 
         let mut newly_ready = Vec::new();
         for dep_id in dependents {
@@ -137,18 +133,11 @@ impl TaskGraph {
     /// Return dependents of a failed task (they are now blocked).
     /// Advisory — caller decides whether to cancel, retry, or escalate.
     pub fn mark_failed(&mut self, id: &TaskId) -> Vec<TaskId> {
-        self.forward
-            .get(id.as_ref())
-            .cloned()
-            .unwrap_or_default()
+        self.forward.get(id.as_ref()).cloned().unwrap_or_default()
     }
 
     /// Bind a task to a workspace. Sets workspace_ref and records in both maps.
-    pub fn bind(
-        &mut self,
-        task_id: &TaskId,
-        workspace_id: &WorkspaceId,
-    ) -> Result<(), GraphError> {
+    pub fn bind(&mut self, task_id: &TaskId, workspace_id: &WorkspaceId) -> Result<(), GraphError> {
         // Check task exists and is not already bound.
         let task = self
             .tasks
@@ -197,12 +186,7 @@ impl TaskGraph {
             .values()
             .filter(|t| {
                 t.status == TaskStatus::Pending
-                    && self
-                        .remaining_deps
-                        .get(t.id.as_ref())
-                        .copied()
-                        .unwrap_or(0)
-                        == 0
+                    && self.remaining_deps.get(t.id.as_ref()).copied().unwrap_or(0) == 0
             })
             .map(|t| &t.id)
             .collect()

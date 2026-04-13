@@ -52,12 +52,7 @@ impl TimeoutTracker {
     }
 
     /// Notify a workspace state change. Starts/stops the timer based on state.
-    pub fn on_state_change(
-        &mut self,
-        id: &WorkspaceId,
-        new_state: WorkspaceState,
-        now_ms: u64,
-    ) {
+    pub fn on_state_change(&mut self, id: &WorkspaceId, new_state: WorkspaceState, now_ms: u64) {
         let entry = match self.entries.get_mut(id.as_ref()) {
             Some(e) => e,
             None => return,

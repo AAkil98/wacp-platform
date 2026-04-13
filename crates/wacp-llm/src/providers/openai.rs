@@ -15,10 +15,7 @@ pub fn build_request(
     tools: &[ToolDefinition],
     stream: bool,
 ) -> serde_json::Value {
-    let api_messages: Vec<serde_json::Value> = messages
-        .iter()
-        .map(message_to_openai)
-        .collect();
+    let api_messages: Vec<serde_json::Value> = messages.iter().map(message_to_openai).collect();
 
     let mut body = json!({
         "model": model,
@@ -73,13 +70,28 @@ pub fn parse_response(body: &serde_json::Value) -> Result<CompletionResult, LlmE
     let mut tool_calls = Vec::new();
     if let Some(tcs) = message.get("tool_calls").and_then(|v| v.as_array()) {
         for tc in tcs {
-            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let empty = json!({});
             let function = tc.get("function").unwrap_or(&empty);
-            let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let args_str = function.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
+            let name = function
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let args_str = function
+                .get("arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or("{}");
             let arguments: serde_json::Value = serde_json::from_str(args_str).unwrap_or(json!({}));
-            tool_calls.push(ToolCall { id, name, arguments });
+            tool_calls.push(ToolCall {
+                id,
+                name,
+                arguments,
+            });
         }
     }
 
@@ -87,10 +99,7 @@ pub fn parse_response(body: &serde_json::Value) -> Result<CompletionResult, LlmE
     let pricing = cost::lookup_pricing(&model, OPENAI_PRICING);
     let cost = pricing.map(|p| cost::calculate_cost(&usage, &p));
 
-    let truncated = choice
-        .get("finish_reason")
-        .and_then(|v| v.as_str())
-        == Some("length");
+    let truncated = choice.get("finish_reason").and_then(|v| v.as_str()) == Some("length");
 
     Ok(CompletionResult {
         content,
@@ -150,7 +159,12 @@ fn message_to_openai(msg: &Message) -> serde_json::Value {
         Content::Blocks(blocks) => {
             // For tool results, OpenAI uses role=tool + tool_call_id
             if msg.role == Role::Tool {
-                if let Some(ContentBlock::ToolResult { tool_use_id, content, .. }) = blocks.first() {
+                if let Some(ContentBlock::ToolResult {
+                    tool_use_id,
+                    content,
+                    ..
+                }) = blocks.first()
+                {
                     return json!({
                         "role": "tool",
                         "tool_call_id": tool_use_id,
@@ -160,10 +174,14 @@ fn message_to_openai(msg: &Message) -> serde_json::Value {
             }
             // For assistant with tool_use blocks, reconstruct tool_calls
             if msg.role == Role::Assistant {
-                let text: String = blocks.iter().filter_map(|b| match b {
-                    ContentBlock::Text { text } => Some(text.as_str()),
-                    _ => None,
-                }).collect::<Vec<_>>().join("");
+                let text: String = blocks
+                    .iter()
+                    .filter_map(|b| match b {
+                        ContentBlock::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
 
                 let tool_calls: Vec<serde_json::Value> = blocks.iter().filter_map(|b| match b {
                     ContentBlock::ToolUse { id, name, input } => Some(json!({
@@ -184,10 +202,14 @@ fn message_to_openai(msg: &Message) -> serde_json::Value {
                 return obj;
             }
             // Fallback: join text blocks
-            let text: String = blocks.iter().filter_map(|b| match b {
-                ContentBlock::Text { text } => Some(text.as_str()),
-                _ => None,
-            }).collect::<Vec<_>>().join("");
+            let text: String = blocks
+                .iter()
+                .filter_map(|b| match b {
+                    ContentBlock::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("");
             json!({"role": role, "content": text})
         }
     }
@@ -212,10 +234,7 @@ mod tests {
 
     #[test]
     fn build_request_basic() {
-        let messages = vec![
-            Message::system("You are helpful."),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
         let body = build_request(&messages, "gpt-4o", Some(1024), None, &[], &[], false);
 
         assert_eq!(body["model"], "gpt-4o");
@@ -234,7 +253,15 @@ mod tests {
             description: "Read a file".into(),
             input_schema: json!({"type": "object"}),
         }];
-        let body = build_request(&[Message::user("hi")], "gpt-4o", None, None, &[], &tools, false);
+        let body = build_request(
+            &[Message::user("hi")],
+            "gpt-4o",
+            None,
+            None,
+            &[],
+            &tools,
+            false,
+        );
 
         let api_tools = body["tools"].as_array().unwrap();
         assert_eq!(api_tools[0]["type"], "function");

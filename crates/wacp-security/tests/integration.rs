@@ -52,10 +52,7 @@ fn audit_event_tool_invocation_with_hashes() {
     assert_eq!(parsed["duration_ms"], 42);
 
     // Verify determinism — same input → same hash
-    assert_eq!(
-        parsed["input_hash"],
-        sha256_hex(input),
-    );
+    assert_eq!(parsed["input_hash"], sha256_hex(input),);
 }
 
 // ── ContentFilter with multiple secrets in one message ──────────────────────
@@ -102,7 +99,10 @@ fn full_security_pipeline_filter_then_verify() {
 
     // Step 2: Verify filtered output has no leaks
     let leaks = store.scan_for_leaks(&filtered.output);
-    assert!(leaks.is_empty(), "filtered output should contain no secrets");
+    assert!(
+        leaks.is_empty(),
+        "filtered output should contain no secrets"
+    );
 
     // Step 3: Create audit event for the filtering
     let audit = AuditEvent::ContentFiltered {
@@ -116,5 +116,8 @@ fn full_security_pipeline_filter_then_verify() {
     // Step 4: Audit payload itself has no secrets
     let payload_str = String::from_utf8(payload).unwrap();
     let payload_leaks = store.scan_for_leaks(&payload_str);
-    assert!(payload_leaks.is_empty(), "audit payload should contain no secrets");
+    assert!(
+        payload_leaks.is_empty(),
+        "audit payload should contain no secrets"
+    );
 }

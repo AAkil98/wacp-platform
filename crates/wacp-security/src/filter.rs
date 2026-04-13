@@ -130,7 +130,10 @@ impl ContentFilter {
                             position: m.start(),
                         });
                     }
-                    output = rule.pattern.replace_all(&output, rule.replacement.as_str()).to_string();
+                    output = rule
+                        .pattern
+                        .replace_all(&output, rule.replacement.as_str())
+                        .to_string();
                 }
                 FilterAction::Warn => {
                     for m in rule.pattern.find_iter(&output) {

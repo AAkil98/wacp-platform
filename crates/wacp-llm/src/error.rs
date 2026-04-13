@@ -58,7 +58,11 @@ impl LlmError {
 
     /// Create a transport error (connection, DNS, etc.).
     pub fn transport(message: impl Into<String>, transient: bool) -> Self {
-        let persistence = if transient { ErrorPersistence::Transient } else { ErrorPersistence::Permanent };
+        let persistence = if transient {
+            ErrorPersistence::Transient
+        } else {
+            ErrorPersistence::Permanent
+        };
         Self {
             origin: ErrorOrigin::Transport,
             persistence,
@@ -238,8 +242,14 @@ mod tests {
         ];
         for (status, expected_origin, expected_persistence) in cases {
             let err = LlmError::from_status(status, "test");
-            assert_eq!(err.origin, expected_origin, "status {status} origin mismatch");
-            assert_eq!(err.persistence, expected_persistence, "status {status} persistence mismatch");
+            assert_eq!(
+                err.origin, expected_origin,
+                "status {status} origin mismatch"
+            );
+            assert_eq!(
+                err.persistence, expected_persistence,
+                "status {status} persistence mismatch"
+            );
         }
     }
 }

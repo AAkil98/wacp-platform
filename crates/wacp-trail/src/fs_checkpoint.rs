@@ -25,11 +25,7 @@ impl FileCheckpointStorage {
 }
 
 impl CheckpointStorage for FileCheckpointStorage {
-    fn store(
-        &self,
-        content_hash: &[u8; 32],
-        payload: &[u8],
-    ) -> Result<bool, StorageError> {
+    fn store(&self, content_hash: &[u8; 32], payload: &[u8]) -> Result<bool, StorageError> {
         let path = self.blob_path(content_hash);
         if path.exists() {
             return Ok(false); // deduplicated

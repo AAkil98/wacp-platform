@@ -86,9 +86,21 @@ fn inbox_fifo() {
 #[test]
 fn inbox_priority_ordering() {
     let mut ws = WsState::new(test_config());
-    ws.push_inbox(test_envelope("normal", "feedback", EnvelopePriority::Normal));
-    ws.push_inbox(test_envelope("urgent", "feedback", EnvelopePriority::Urgent));
-    ws.push_inbox(test_envelope("blocking", "feedback", EnvelopePriority::Blocking));
+    ws.push_inbox(test_envelope(
+        "normal",
+        "feedback",
+        EnvelopePriority::Normal,
+    ));
+    ws.push_inbox(test_envelope(
+        "urgent",
+        "feedback",
+        EnvelopePriority::Urgent,
+    ));
+    ws.push_inbox(test_envelope(
+        "blocking",
+        "feedback",
+        EnvelopePriority::Blocking,
+    ));
 
     assert_eq!(ws.pop_inbox().unwrap().id, EnvelopeId::from("blocking"));
     assert_eq!(ws.pop_inbox().unwrap().id, EnvelopeId::from("urgent"));
@@ -175,11 +187,8 @@ async fn coordinator_abort() {
     let mut got_state_change = false;
     let mut got_terminated = false;
 
-    while let Ok(evt) = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        event_rx.recv(),
-    )
-    .await
+    while let Ok(evt) =
+        tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
     {
         match evt {
             Some(WorkspaceEvent::StateChanged { to, .. }) => {
@@ -189,7 +198,7 @@ async fn coordinator_abort() {
             Some(WorkspaceEvent::Terminated(archived)) => {
                 assert_eq!(archived.terminal_state, wacp_types::WorkspaceState::Failed);
                 got_terminated = true;
-                }
+            }
             _ => {}
         }
         if got_terminated {
@@ -212,13 +221,10 @@ async fn first_envelope_activates() {
         .await
         .unwrap();
 
-    let evt = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        event_rx.recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let evt = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
 
     match evt {
         WorkspaceEvent::StateChanged { from, to, .. } => {
@@ -236,18 +242,16 @@ async fn agent_emit_signal() {
     // First activate the workspace.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
 
     // Drain the StateChanged event.
-    let _ = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        event_rx.recv(),
-    )
-    .await;
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
 
     // Now emit a signal.
     handle
@@ -263,11 +267,8 @@ async fn agent_emit_signal() {
     // Should get StateChanged (Active→Blocked) and Signal.
     let mut got_signal = false;
     for _ in 0..3 {
-        if let Ok(Some(evt)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             if let WorkspaceEvent::Signal(sig) = evt {
                 assert_eq!(sig.signal_type, SignalType::Blocked);
@@ -308,9 +309,11 @@ async fn auto_signal_emitted_on_checkpoint() {
     // Activate.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
 
@@ -337,11 +340,8 @@ async fn auto_signal_emitted_on_checkpoint() {
     let mut got_signal = false;
 
     for _ in 0..5 {
-        if let Ok(Some(evt)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             match evt {
                 WorkspaceEvent::CheckpointCreated(_) => got_checkpoint = true,
@@ -407,9 +407,21 @@ fn snapshot_capture_with_state() {
 #[test]
 fn snapshot_capture_preserves_inbox_order() {
     let mut ws = WsState::new(test_config());
-    ws.push_inbox(test_envelope("normal", "feedback", EnvelopePriority::Normal));
-    ws.push_inbox(test_envelope("urgent", "feedback", EnvelopePriority::Urgent));
-    ws.push_inbox(test_envelope("blocking", "feedback", EnvelopePriority::Blocking));
+    ws.push_inbox(test_envelope(
+        "normal",
+        "feedback",
+        EnvelopePriority::Normal,
+    ));
+    ws.push_inbox(test_envelope(
+        "urgent",
+        "feedback",
+        EnvelopePriority::Urgent,
+    ));
+    ws.push_inbox(test_envelope(
+        "blocking",
+        "feedback",
+        EnvelopePriority::Blocking,
+    ));
 
     let snap = ws.capture_snapshot();
     // Priority order: blocking > urgent > normal
@@ -467,7 +479,8 @@ fn restore_status_active() {
         trail_sequence: 0,
         delivered_envelope_ids: Default::default(),
     };
-    let ws = WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Active);
+    let ws =
+        WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Active);
     assert_eq!(ws.status, wacp_types::WorkspaceState::Active);
 }
 
@@ -481,7 +494,8 @@ fn restore_status_blocked() {
         trail_sequence: 0,
         delivered_envelope_ids: Default::default(),
     };
-    let ws = WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Blocked);
+    let ws =
+        WsState::restore_from_snapshot(test_config(), snap, wacp_types::WorkspaceState::Blocked);
     assert_eq!(ws.status, wacp_types::WorkspaceState::Blocked);
 }
 
@@ -509,9 +523,11 @@ async fn actor_migrate_begin_emits_snapshot() {
     // Activate first (Idle → Active via envelope).
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     // Drain StateChanged.
@@ -529,14 +545,13 @@ async fn actor_migrate_begin_emits_snapshot() {
     let mut got_snapshot = false;
 
     for _ in 0..5 {
-        if let Ok(Some(evt)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             match evt {
-                WorkspaceEvent::StateChanged { to, .. } if to == wacp_types::WorkspaceState::Migrating => {
+                WorkspaceEvent::StateChanged { to, .. }
+                    if to == wacp_types::WorkspaceState::Migrating =>
+                {
                     got_state_change = true;
                 }
                 WorkspaceEvent::MigrationSnapshot { workspace_id, .. } => {
@@ -581,9 +596,11 @@ async fn actor_migration_complete_to_active() {
     // Activate, then migrate.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
@@ -609,11 +626,8 @@ async fn actor_migration_complete_to_active() {
 
     let mut found_active = false;
     for _ in 0..3 {
-        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             if to == wacp_types::WorkspaceState::Active {
                 found_active = true;
@@ -631,9 +645,11 @@ async fn actor_migration_complete_to_blocked() {
     // Activate, then migrate.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
@@ -658,11 +674,8 @@ async fn actor_migration_complete_to_blocked() {
 
     let mut found_blocked = false;
     for _ in 0..3 {
-        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             if to == wacp_types::WorkspaceState::Blocked {
                 found_blocked = true;
@@ -680,9 +693,11 @@ async fn actor_agent_msg_rejected_in_migrating() {
     // Activate, then migrate.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
@@ -739,7 +754,11 @@ fn snapshot_full_roundtrip_all_fields() {
     let mut ws = WsState::new(test_config());
 
     // Mark an envelope as delivered first (for dedup set).
-    ws.push_inbox(test_envelope("e-delivered", "feedback", EnvelopePriority::Normal));
+    ws.push_inbox(test_envelope(
+        "e-delivered",
+        "feedback",
+        EnvelopePriority::Normal,
+    ));
     let popped = ws.pop_inbox().unwrap();
     assert_eq!(popped.id, EnvelopeId::from("e-delivered"));
 
@@ -806,15 +825,14 @@ fn snapshot_full_roundtrip_all_fields() {
 // --- Actor-level helpers ---
 
 /// Activate workspace: deliver first envelope, drain StateChanged.
-async fn activate(
-    handle: &WorkspaceHandle,
-    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
-) {
+async fn activate(handle: &WorkspaceHandle, event_rx: &mut mpsc::Receiver<WorkspaceEvent>) {
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-activate", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-activate",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
@@ -908,8 +926,13 @@ async fn actor_grant_visibility() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 5).await;
-    let terminated = events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_)));
-    assert!(terminated, "actor should still be alive after GrantVisibility");
+    let terminated = events
+        .iter()
+        .any(|e| matches!(e, WorkspaceEvent::Terminated(_)));
+    assert!(
+        terminated,
+        "actor should still be alive after GrantVisibility"
+    );
 }
 
 #[tokio::test]
@@ -939,7 +962,11 @@ async fn actor_update_budget() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 5).await;
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::Terminated(_)))
+    );
 }
 
 #[tokio::test]
@@ -963,16 +990,17 @@ async fn actor_graceful_termination_noop() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 5).await;
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::Terminated(_)))
+    );
 }
 
 // --- Integration + conflict command tests ---
 
 /// Get workspace to Integrating state: activate → agent sends Complete.
-async fn to_integrating(
-    handle: &WorkspaceHandle,
-    event_rx: &mut mpsc::Receiver<WorkspaceEvent>,
-) {
+async fn to_integrating(handle: &WorkspaceHandle, event_rx: &mut mpsc::Receiver<WorkspaceEvent>) {
     activate(handle, event_rx).await;
     handle
         .agent_tx
@@ -1122,9 +1150,11 @@ async fn actor_envelopes_accepted_in_migrating() {
     // Activate, then migrate.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-1", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
@@ -1141,9 +1171,11 @@ async fn actor_envelopes_accepted_in_migrating() {
     // Deliver envelope during migration — should be buffered in inbox.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-2", "feedback", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-2",
+            "feedback",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
 
@@ -1161,11 +1193,8 @@ async fn actor_envelopes_accepted_in_migrating() {
     // but it should still be alive and functional.
     let mut alive = false;
     for _ in 0..5 {
-        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             if to == wacp_types::WorkspaceState::Active {
                 alive = true;
@@ -1200,8 +1229,14 @@ fn workspace_budget_exhaustion_check() {
     let b = ws.resource_meter.budget.as_ref().unwrap();
     let limit = b.max_tokens.unwrap();
     let threshold = (limit as f64 * b.warning_threshold as f64) as u64;
-    assert!(ws.resource_meter.usage.tokens >= threshold, "usage should be at or above warning");
-    assert!(ws.resource_meter.usage.tokens < limit, "usage should be below hard limit");
+    assert!(
+        ws.resource_meter.usage.tokens >= threshold,
+        "usage should be at or above warning"
+    );
+    assert!(
+        ws.resource_meter.usage.tokens < limit,
+        "usage should be below hard limit"
+    );
 }
 
 #[tokio::test]
@@ -1212,16 +1247,20 @@ async fn workspace_concurrent_envelope_delivery() {
     // Deliver two envelopes.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-a", "feedback", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-a",
+            "feedback",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-b", "feedback", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-b",
+            "feedback",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
 
@@ -1233,7 +1272,11 @@ async fn workspace_concurrent_envelope_delivery() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 10).await;
-    assert!(events.iter().any(|e| matches!(e, WorkspaceEvent::Terminated(_))));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, WorkspaceEvent::Terminated(_)))
+    );
 }
 
 #[test]
@@ -1367,9 +1410,11 @@ async fn workspace_idle_accepts_envelope() {
     // Workspace starts Idle; delivering first envelope should transition to Active.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-first", "directive", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-first",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
 
@@ -1398,7 +1443,9 @@ async fn workspace_active_accepts_signal() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 5).await;
-    let got_signal = events.iter().any(|e| matches!(e, WorkspaceEvent::Signal(_)));
+    let got_signal = events
+        .iter()
+        .any(|e| matches!(e, WorkspaceEvent::Signal(_)));
     assert!(got_signal, "expected Signal event from Active workspace");
 }
 
@@ -1418,7 +1465,10 @@ async fn workspace_failed_terminal() {
         _ => None,
     });
     assert!(terminated.is_some());
-    assert_eq!(terminated.unwrap().terminal_state, wacp_types::WorkspaceState::Failed);
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Failed
+    );
 }
 
 #[tokio::test]
@@ -1438,7 +1488,10 @@ async fn workspace_closed_terminal() {
         _ => None,
     });
     assert!(terminated.is_some());
-    assert_eq!(terminated.unwrap().terminal_state, wacp_types::WorkspaceState::Closed);
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Closed
+    );
 }
 
 #[tokio::test]
@@ -1449,9 +1502,11 @@ async fn workspace_migration_snapshot_captures_state() {
     // Deliver another envelope so inbox is non-empty during migration.
     handle
         .coordinator_tx
-        .send(CoordinatorCommand::DeliverEnvelope(
-            test_envelope("env-extra", "feedback", EnvelopePriority::Normal),
-        ))
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-extra",
+            "feedback",
+            EnvelopePriority::Normal,
+        )))
         .await
         .unwrap();
     // Small delay for delivery.
@@ -1465,9 +1520,9 @@ async fn workspace_migration_snapshot_captures_state() {
         .unwrap();
 
     let events = drain_events(&mut event_rx, 10).await;
-    let got_snapshot = events.iter().any(|e| {
-        matches!(e, WorkspaceEvent::MigrationSnapshot { .. })
-    });
+    let got_snapshot = events
+        .iter()
+        .any(|e| matches!(e, WorkspaceEvent::MigrationSnapshot { .. }));
     assert!(got_snapshot, "expected MigrationSnapshot event");
 }
 
@@ -1495,5 +1550,8 @@ async fn workspace_abort_from_active() {
         _ => None,
     });
     assert!(terminated.is_some());
-    assert_eq!(terminated.unwrap().terminal_state, wacp_types::WorkspaceState::Failed);
+    assert_eq!(
+        terminated.unwrap().terminal_state,
+        wacp_types::WorkspaceState::Failed
+    );
 }

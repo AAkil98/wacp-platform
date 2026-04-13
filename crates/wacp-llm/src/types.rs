@@ -9,15 +9,28 @@ pub struct Message {
 
 impl Message {
     pub fn system(text: impl Into<String>) -> Self {
-        Self { role: Role::System, content: Content::Text(text.into()) }
+        Self {
+            role: Role::System,
+            content: Content::Text(text.into()),
+        }
     }
     pub fn user(text: impl Into<String>) -> Self {
-        Self { role: Role::User, content: Content::Text(text.into()) }
+        Self {
+            role: Role::User,
+            content: Content::Text(text.into()),
+        }
     }
     pub fn assistant(text: impl Into<String>) -> Self {
-        Self { role: Role::Assistant, content: Content::Text(text.into()) }
+        Self {
+            role: Role::Assistant,
+            content: Content::Text(text.into()),
+        }
     }
-    pub fn tool_result(tool_use_id: impl Into<String>, content: impl Into<String>, is_error: bool) -> Self {
+    pub fn tool_result(
+        tool_use_id: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) -> Self {
         Self {
             role: Role::Tool,
             content: Content::Blocks(vec![ContentBlock::ToolResult {
@@ -138,7 +151,9 @@ mod tests {
     #[test]
     fn content_blocks_serde() {
         let content = Content::Blocks(vec![
-            ContentBlock::Text { text: "hello".into() },
+            ContentBlock::Text {
+                text: "hello".into(),
+            },
             ContentBlock::ToolUse {
                 id: "call_1".into(),
                 name: "read_file".into(),
@@ -158,7 +173,9 @@ mod tests {
 
     #[test]
     fn content_as_text_from_blocks() {
-        let c = Content::Blocks(vec![ContentBlock::Text { text: "world".into() }]);
+        let c = Content::Blocks(vec![ContentBlock::Text {
+            text: "world".into(),
+        }]);
         assert_eq!(c.as_text(), Some("world"));
     }
 
@@ -218,14 +235,21 @@ mod tests {
         let msg = Message::user("Hello 🌍! Ñoño café résumé");
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: Message = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.content.as_text().unwrap(), "Hello 🌍! Ñoño café résumé");
+        assert_eq!(
+            parsed.content.as_text().unwrap(),
+            "Hello 🌍! Ñoño café résumé"
+        );
     }
 
     #[test]
     fn content_blocks_multiple_text_as_text_returns_first() {
         let c = Content::Blocks(vec![
-            ContentBlock::Text { text: "first".into() },
-            ContentBlock::Text { text: "second".into() },
+            ContentBlock::Text {
+                text: "first".into(),
+            },
+            ContentBlock::Text {
+                text: "second".into(),
+            },
         ]);
         assert_eq!(c.as_text(), Some("first"));
     }

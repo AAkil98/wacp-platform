@@ -13,10 +13,8 @@ pub struct ModelPricing {
 
 /// Calculate the cost of a completion from usage and pricing.
 pub fn calculate_cost(usage: &TokenUsage, pricing: &ModelPricing) -> Cost {
-    let input_cost =
-        (usage.input_tokens as u64) * pricing.input_price_micros_per_m / 1_000_000;
-    let output_cost =
-        (usage.output_tokens as u64) * pricing.output_price_micros_per_m / 1_000_000;
+    let input_cost = (usage.input_tokens as u64) * pricing.input_price_micros_per_m / 1_000_000;
+    let output_cost = (usage.output_tokens as u64) * pricing.output_price_micros_per_m / 1_000_000;
     Cost::usd(input_cost + output_cost)
 }
 
@@ -72,18 +70,66 @@ impl CostTracker {
 
 /// Anthropic model pricing (as of 2025).
 pub const ANTHROPIC_PRICING: &[(&str, ModelPricing)] = &[
-    ("claude-opus-4", ModelPricing { input_price_micros_per_m: 15_000_000, output_price_micros_per_m: 75_000_000 }),
-    ("claude-sonnet-4", ModelPricing { input_price_micros_per_m: 3_000_000, output_price_micros_per_m: 15_000_000 }),
-    ("claude-haiku-4", ModelPricing { input_price_micros_per_m: 800_000, output_price_micros_per_m: 4_000_000 }),
+    (
+        "claude-opus-4",
+        ModelPricing {
+            input_price_micros_per_m: 15_000_000,
+            output_price_micros_per_m: 75_000_000,
+        },
+    ),
+    (
+        "claude-sonnet-4",
+        ModelPricing {
+            input_price_micros_per_m: 3_000_000,
+            output_price_micros_per_m: 15_000_000,
+        },
+    ),
+    (
+        "claude-haiku-4",
+        ModelPricing {
+            input_price_micros_per_m: 800_000,
+            output_price_micros_per_m: 4_000_000,
+        },
+    ),
 ];
 
 /// OpenAI model pricing (as of 2025).
 pub const OPENAI_PRICING: &[(&str, ModelPricing)] = &[
-    ("gpt-4o", ModelPricing { input_price_micros_per_m: 2_500_000, output_price_micros_per_m: 10_000_000 }),
-    ("gpt-4o-mini", ModelPricing { input_price_micros_per_m: 150_000, output_price_micros_per_m: 600_000 }),
-    ("o3", ModelPricing { input_price_micros_per_m: 2_000_000, output_price_micros_per_m: 8_000_000 }),
-    ("o3-mini", ModelPricing { input_price_micros_per_m: 1_100_000, output_price_micros_per_m: 4_400_000 }),
-    ("o4-mini", ModelPricing { input_price_micros_per_m: 1_100_000, output_price_micros_per_m: 4_400_000 }),
+    (
+        "gpt-4o",
+        ModelPricing {
+            input_price_micros_per_m: 2_500_000,
+            output_price_micros_per_m: 10_000_000,
+        },
+    ),
+    (
+        "gpt-4o-mini",
+        ModelPricing {
+            input_price_micros_per_m: 150_000,
+            output_price_micros_per_m: 600_000,
+        },
+    ),
+    (
+        "o3",
+        ModelPricing {
+            input_price_micros_per_m: 2_000_000,
+            output_price_micros_per_m: 8_000_000,
+        },
+    ),
+    (
+        "o3-mini",
+        ModelPricing {
+            input_price_micros_per_m: 1_100_000,
+            output_price_micros_per_m: 4_400_000,
+        },
+    ),
+    (
+        "o4-mini",
+        ModelPricing {
+            input_price_micros_per_m: 1_100_000,
+            output_price_micros_per_m: 4_400_000,
+        },
+    ),
 ];
 
 #[cfg(test)]
@@ -93,7 +139,10 @@ mod tests {
     #[test]
     fn calculate_cost_sonnet() {
         // 1000 input tokens at $3/M + 500 output tokens at $15/M
-        let usage = TokenUsage { input_tokens: 1000, output_tokens: 500 };
+        let usage = TokenUsage {
+            input_tokens: 1000,
+            output_tokens: 500,
+        };
         let pricing = ModelPricing {
             input_price_micros_per_m: 3_000_000,
             output_price_micros_per_m: 15_000_000,
@@ -120,7 +169,10 @@ mod tests {
     #[test]
     fn calculate_cost_large_usage() {
         // 1M input tokens at $15/M = $15
-        let usage = TokenUsage { input_tokens: 1_000_000, output_tokens: 0 };
+        let usage = TokenUsage {
+            input_tokens: 1_000_000,
+            output_tokens: 0,
+        };
         let pricing = ModelPricing {
             input_price_micros_per_m: 15_000_000,
             output_price_micros_per_m: 75_000_000,
@@ -225,7 +277,10 @@ mod tests {
 
     #[test]
     fn calculate_cost_output_only() {
-        let usage = TokenUsage { input_tokens: 0, output_tokens: 1000 };
+        let usage = TokenUsage {
+            input_tokens: 0,
+            output_tokens: 1000,
+        };
         let pricing = ModelPricing {
             input_price_micros_per_m: 3_000_000,
             output_price_micros_per_m: 15_000_000,

@@ -87,8 +87,11 @@ impl TopologySet {
         self.escalation.register(&params.id, &params.owner);
 
         // 4. Port rights: parent → child send, child → parent send, child self-receive
-        self.port_rights
-            .create(params.parent.clone(), params.id.clone(), PortRightType::Send);
+        self.port_rights.create(
+            params.parent.clone(),
+            params.id.clone(),
+            PortRightType::Send,
+        );
         self.port_rights
             .create(params.id.clone(), params.parent, PortRightType::Send);
         self.port_rights

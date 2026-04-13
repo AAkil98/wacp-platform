@@ -10,11 +10,7 @@ use wacp_workspace::{WorkspaceConfig, WorkspaceEvent};
 /// Create a coordinator with an event channel. Returns root ID = "ws-root".
 pub fn make_coordinator() -> (Coordinator, mpsc::Receiver<WorkspaceEvent>) {
     let (tx, rx) = mpsc::channel(256);
-    let coord = Coordinator::new(
-        WorkspaceId::from("ws-root"),
-        UserId::from("system"),
-        tx,
-    );
+    let coord = Coordinator::new(WorkspaceId::from("ws-root"), UserId::from("system"), tx);
     (coord, rx)
 }
 
@@ -27,12 +23,7 @@ pub fn worker_config(id: &str, _task_id: &str) -> WorkspaceConfig {
         parent: WorkspaceId::from("ws-root"),
         owner: UserId::from("system"),
         originator: Originator::System,
-        directive: make_envelope(
-            &format!("dir-{id}"),
-            "ws-root",
-            id,
-            "directive",
-        ),
+        directive: make_envelope(&format!("dir-{id}"), "ws-root", id, "directive"),
         context: vec![],
         visibility: HashSet::new(),
         authority: HashSet::new(),
@@ -73,11 +64,7 @@ pub fn make_task(id: &str, name: &str) -> Task {
 }
 
 /// Dispatch a workspace and return the workspace ID.
-pub fn dispatch(
-    coord: &mut Coordinator,
-    ws_id: &str,
-    task_id: &str,
-) -> WorkspaceId {
+pub fn dispatch(coord: &mut Coordinator, ws_id: &str, task_id: &str) -> WorkspaceId {
     coord.dispatch(DispatchRequest {
         task_id: TaskId::from(task_id),
         config: worker_config(ws_id, task_id),
@@ -93,12 +80,7 @@ pub async fn drain_events(
     timeout_ms: u64,
 ) {
     for _ in 0..max {
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(timeout_ms),
-            rx.recv(),
-        )
-        .await
-        {
+        match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), rx.recv()).await {
             Ok(Some(event)) => coord.handle_event(&event),
             _ => break,
         }

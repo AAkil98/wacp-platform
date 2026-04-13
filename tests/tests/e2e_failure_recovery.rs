@@ -4,7 +4,7 @@ use wacp_coordinator::DispatchRequest;
 use wacp_integration_tests::e2e::E2eHarness;
 use wacp_integration_tests::*;
 use wacp_recovery::RecoveryEngine;
-use wacp_trail::{compute_chain_hash, ChainHash, InMemoryTrailStorage, TrailStorage};
+use wacp_trail::{ChainHash, InMemoryTrailStorage, TrailStorage, compute_chain_hash};
 use wacp_transport::wacp_v1;
 use wacp_types::*;
 
@@ -23,18 +23,24 @@ async fn e13_cascade_failure() {
     });
 
     // Abort parent — child should cascade
-    coord
-        .abort_workspace(&WorkspaceId::from("ws-parent"))
-        .await;
+    coord.abort_workspace(&WorkspaceId::from("ws-parent")).await;
     drain_events(&mut coord, &mut rx, 20, 200).await;
 
     assert_eq!(
-        coord.tree.get(&WorkspaceId::from("ws-parent")).unwrap().status,
+        coord
+            .tree
+            .get(&WorkspaceId::from("ws-parent"))
+            .unwrap()
+            .status,
         WorkspaceState::Failed
     );
     // Root should NOT be failed
     assert_ne!(
-        coord.tree.get(&WorkspaceId::from("ws-root")).unwrap().status,
+        coord
+            .tree
+            .get(&WorkspaceId::from("ws-root"))
+            .unwrap()
+            .status,
         WorkspaceState::Failed
     );
 }
@@ -120,10 +126,7 @@ async fn e16_workspace_activation_via_grpc() {
         .await
         .unwrap();
     assert_eq!(bind.get_ref().workspace_id, "ws-m");
-    assert_eq!(
-        bind.get_ref().state,
-        wacp_v1::WorkspaceState::Active as i32
-    );
+    assert_eq!(bind.get_ref().state, wacp_v1::WorkspaceState::Active as i32);
 
     // Signal through lifecycle
     for signal in [

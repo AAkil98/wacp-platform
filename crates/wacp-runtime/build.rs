@@ -8,10 +8,7 @@ fn main() {
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .unwrap_or_else(|| "unknown".into());
-    println!(
-        "cargo:rustc-env=WACP_GIT_COMMIT={}",
-        commit.trim()
-    );
+    println!("cargo:rustc-env=WACP_GIT_COMMIT={}", commit.trim());
 
     // Build timestamp (UTC).
     let timestamp = std::time::SystemTime::now()

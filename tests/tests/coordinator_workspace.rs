@@ -6,7 +6,6 @@ use wacp_coordinator::DispatchRequest;
 use wacp_fsm::TaskTrigger;
 use wacp_types::*;
 
-
 #[tokio::test]
 async fn dispatch_creates_workspace_in_tree() {
     let (mut coord, _rx) = make_coordinator();
@@ -29,7 +28,9 @@ async fn route_envelope_activates_workspace() {
     dispatch(&mut coord, "ws-1", "task-1");
 
     let envelope = make_envelope("dir-ws-1", "ws-root", "ws-1", "directive");
-    coord.route_envelope(&WorkspaceId::from("ws-1"), envelope).await;
+    coord
+        .route_envelope(&WorkspaceId::from("ws-1"), envelope)
+        .await;
 
     drain_events(&mut coord, &mut rx, 5, 200).await;
 
@@ -63,9 +64,7 @@ async fn cascade_failure_parent_to_child() {
         config: child_config,
     });
 
-    coord
-        .abort_workspace(&WorkspaceId::from("ws-parent"))
-        .await;
+    coord.abort_workspace(&WorkspaceId::from("ws-parent")).await;
     drain_events(&mut coord, &mut rx, 20, 200).await;
 
     assert_eq!(
@@ -90,7 +89,11 @@ async fn task_graph_lifecycle() {
         .transition(&TaskId::from("task-1"), TaskTrigger::Approve)
         .unwrap();
     assert_eq!(
-        coord.task_graph.get(&TaskId::from("task-1")).unwrap().status,
+        coord
+            .task_graph
+            .get(&TaskId::from("task-1"))
+            .unwrap()
+            .status,
         TaskStatus::Pending
     );
 
@@ -112,7 +115,11 @@ async fn task_graph_lifecycle() {
         .unwrap();
 
     assert_eq!(
-        coord.task_graph.get(&TaskId::from("task-1")).unwrap().status,
+        coord
+            .task_graph
+            .get(&TaskId::from("task-1"))
+            .unwrap()
+            .status,
         TaskStatus::Integrated
     );
 }

@@ -44,9 +44,9 @@ pub enum BackoffStrategy {
 pub fn compute_delay(config: &RetryConfig, attempt: u32) -> Duration {
     let base = match config.backoff {
         BackoffStrategy::Fixed => config.base_delay_ms,
-        BackoffStrategy::Exponential => {
-            config.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt))
-        }
+        BackoffStrategy::Exponential => config
+            .base_delay_ms
+            .saturating_mul(2u64.saturating_pow(attempt)),
     };
 
     // Cap at a reasonable maximum (1 hour) before jitter to prevent overflow
@@ -144,7 +144,10 @@ mod tests {
         let result = apply_retry_after(
             computed,
             Some(5000),
-            &RetryConfig { honor_retry_after: true, ..Default::default() },
+            &RetryConfig {
+                honor_retry_after: true,
+                ..Default::default()
+            },
         );
         assert_eq!(result, Duration::from_millis(5000));
     }
@@ -155,7 +158,10 @@ mod tests {
         let result = apply_retry_after(
             computed,
             Some(1000),
-            &RetryConfig { honor_retry_after: true, ..Default::default() },
+            &RetryConfig {
+                honor_retry_after: true,
+                ..Default::default()
+            },
         );
         assert_eq!(result, Duration::from_millis(5000)); // computed is larger
     }
@@ -166,7 +172,10 @@ mod tests {
         let result = apply_retry_after(
             computed,
             Some(5000),
-            &RetryConfig { honor_retry_after: false, ..Default::default() },
+            &RetryConfig {
+                honor_retry_after: false,
+                ..Default::default()
+            },
         );
         assert_eq!(result, Duration::from_millis(1000)); // retry-after ignored
     }

@@ -19,9 +19,7 @@ pub struct CheckpointBuilder {
 }
 
 impl CheckpointBuilder {
-    pub(crate) fn new(
-        client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
-    ) -> Self {
+    pub(crate) fn new(client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>) -> Self {
         Self {
             client,
             checkpoint_type: None,
@@ -68,9 +66,7 @@ impl CheckpointBuilder {
         let checkpoint_type = self
             .checkpoint_type
             .ok_or(Error::MissingField("checkpoint_type".into()))?;
-        let payload = self
-            .payload
-            .ok_or(Error::MissingField("payload".into()))?;
+        let payload = self.payload.ok_or(Error::MissingField("payload".into()))?;
 
         let proto_status = match self.status {
             CheckpointStatus::Provisional => wacp_v1::CheckpointStatus::Provisional,
@@ -130,9 +126,7 @@ pub struct EnvelopeBuilder {
 }
 
 impl EnvelopeBuilder {
-    pub(crate) fn new(
-        client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
-    ) -> Self {
+    pub(crate) fn new(client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>) -> Self {
         Self {
             client,
             to: None,
@@ -170,9 +164,7 @@ impl EnvelopeBuilder {
 
     /// Send the envelope. Requires `to` and `envelope_type`.
     pub async fn send(self) -> Result<EnvelopeResult, Error> {
-        let to = self
-            .to
-            .ok_or(Error::MissingField("to".into()))?;
+        let to = self.to.ok_or(Error::MissingField("to".into()))?;
         let envelope_type = self
             .envelope_type
             .ok_or(Error::MissingField("envelope_type".into()))?;
@@ -210,4 +202,3 @@ impl EnvelopeBuilder {
 pub struct EnvelopeResult {
     pub id: String,
 }
-

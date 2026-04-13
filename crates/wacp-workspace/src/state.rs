@@ -132,8 +132,7 @@ impl WorkspaceState {
     /// Pop the highest-priority envelope from the inbox.
     pub fn pop_inbox(&mut self) -> Option<Envelope> {
         let envelope = self.inbox.pop_front()?;
-        self.delivered_envelope_ids
-            .insert(envelope.id.to_string());
+        self.delivered_envelope_ids.insert(envelope.id.to_string());
         Some(envelope)
     }
 

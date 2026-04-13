@@ -86,7 +86,12 @@ async fn e2e_single_worker() {
     });
 
     // Verify workspace exists in tree.
-    assert!(rt.coordinator.tree.get(&WorkspaceId::from("ws-1")).is_some());
+    assert!(
+        rt.coordinator
+            .tree
+            .get(&WorkspaceId::from("ws-1"))
+            .is_some()
+    );
 
     // Send directive to activate the workspace.
     let directive = Envelope {
@@ -106,11 +111,8 @@ async fn e2e_single_worker() {
         .await;
 
     // Receive events — workspace should activate.
-    if let Ok(Some(event)) = tokio::time::timeout(
-        std::time::Duration::from_millis(200),
-        rt.event_rx.recv(),
-    )
-    .await
+    if let Ok(Some(event)) =
+        tokio::time::timeout(std::time::Duration::from_millis(200), rt.event_rx.recv()).await
     {
         match event {
             WorkspaceEvent::StateChanged { to, .. } => {
@@ -138,11 +140,8 @@ async fn e2e_workspace_lifecycle() {
     // Should get StateChanged(Failed) + Terminated.
     let mut got_failed = false;
     for _ in 0..5 {
-        if let Ok(Some(event)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            rt.event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(event)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
             if let WorkspaceEvent::StateChanged { to, .. } = &event {
                 if *to == WorkspaceState::Failed {
@@ -234,11 +233,8 @@ async fn e2e_failure_cascade() {
 
     // Process events.
     for _ in 0..10 {
-        if let Ok(Some(event)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            rt.event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(event)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
             rt.coordinator.handle_event(&event);
         }
@@ -281,17 +277,18 @@ async fn e2e_grpc_bind_and_authenticate() {
     // Spawn the runtime event loop in the background.
     let rt_handle = tokio::spawn(async move {
         // Run for a short time then stop.
-        tokio::time::timeout(std::time::Duration::from_secs(2), rt.run()).await.ok();
+        tokio::time::timeout(std::time::Duration::from_secs(2), rt.run())
+            .await
+            .ok();
     });
 
     // Give the server a moment to bind.
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Connect agent client and call Bind.
-    let mut agent_client =
-        AgentServiceClient::connect("http://127.0.0.1:29090")
-            .await
-            .unwrap();
+    let mut agent_client = AgentServiceClient::connect("http://127.0.0.1:29090")
+        .await
+        .unwrap();
 
     let bind_response = agent_client
         .bind(wacp_v1::BindRequest {
@@ -305,10 +302,9 @@ async fn e2e_grpc_bind_and_authenticate() {
     assert_eq!(bind_response.get_ref().workspace_id, "ws-grpc");
 
     // Connect highway client and call Authenticate.
-    let mut highway_client =
-        HighwayServiceClient::connect("http://127.0.0.1:29091")
-            .await
-            .unwrap();
+    let mut highway_client = HighwayServiceClient::connect("http://127.0.0.1:29091")
+        .await
+        .unwrap();
 
     let auth_response = highway_client
         .authenticate(wacp_v1::AuthenticateRequest {
@@ -383,7 +379,12 @@ async fn coordinator_dispatch_creates_node() {
         task_id: TaskId::from("task-1"),
         config: worker_config("ws-1", "task-1"),
     });
-    assert!(rt.coordinator.tree.get(&WorkspaceId::from("ws-1")).is_some());
+    assert!(
+        rt.coordinator
+            .tree
+            .get(&WorkspaceId::from("ws-1"))
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -393,7 +394,11 @@ async fn coordinator_dispatch_sets_task_id() {
         task_id: TaskId::from("task-42"),
         config: worker_config("ws-42", "task-42"),
     });
-    let node = rt.coordinator.tree.get(&WorkspaceId::from("ws-42")).unwrap();
+    let node = rt
+        .coordinator
+        .tree
+        .get(&WorkspaceId::from("ws-42"))
+        .unwrap();
     assert_eq!(node.task_id.as_ref().unwrap(), &TaskId::from("task-42"));
 }
 
@@ -431,11 +436,8 @@ async fn coordinator_abort_sets_failed() {
 
     // Drain events to let state update propagate.
     for _ in 0..5 {
-        if let Ok(Some(e)) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            rt.event_rx.recv(),
-        )
-        .await
+        if let Ok(Some(e)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
             rt.coordinator.handle_event(&e);
         }
@@ -519,7 +521,11 @@ fn load_vertical_manifests_skips_malformed_yaml() {
 
     let bad_dir = root.path().join("bad");
     std::fs::create_dir_all(&bad_dir).unwrap();
-    std::fs::write(bad_dir.join("vertical.yaml"), b"\xFF\xFE invalid utf8 maybe not, but bad yaml: [\n").unwrap();
+    std::fs::write(
+        bad_dir.join("vertical.yaml"),
+        b"\xFF\xFE invalid utf8 maybe not, but bad yaml: [\n",
+    )
+    .unwrap();
 
     let good_dir = root.path().join("swe");
     std::fs::create_dir_all(&good_dir).unwrap();
@@ -562,11 +568,12 @@ async fn runtime_shutdown_aborts_active_workspaces() {
         task_id: TaskId::from("task-shutdown"),
         config: worker_config("ws-shutdown", "task-shutdown"),
     });
-    assert!(rt
-        .coordinator
-        .tree
-        .get(&WorkspaceId::from("ws-shutdown"))
-        .is_some());
+    assert!(
+        rt.coordinator
+            .tree
+            .get(&WorkspaceId::from("ws-shutdown"))
+            .is_some()
+    );
     rt.shutdown().await;
     // After shutdown, workspace should be failed.
     assert_eq!(

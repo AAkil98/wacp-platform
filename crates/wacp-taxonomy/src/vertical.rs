@@ -11,8 +11,8 @@
 //! manifest is display/config metadata; a taxonomy definition is a protocol
 //! contract.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::TaxonomyError;
 

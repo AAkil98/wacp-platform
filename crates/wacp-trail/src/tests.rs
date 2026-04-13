@@ -374,7 +374,10 @@ fn fs_crash_recovery_truncate() {
     {
         use std::io::Write;
         let seg_path = config_dir.join("segment-000000.trail");
-        let mut f = std::fs::OpenOptions::new().append(true).open(seg_path).unwrap();
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(seg_path)
+            .unwrap();
         f.write_all(&[0xFF; 10]).unwrap(); // partial/corrupt bytes
     }
 
@@ -514,27 +517,36 @@ fn make_entry(seq: u64, ws: Option<&str>, actor: &str, event_type: &str) -> Inde
 #[test]
 fn index_insert_and_query() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    idx.insert(&make_entry(1, Some("ws-1"), "worker", "checkpoint_created")).unwrap();
-    idx.insert(&make_entry(2, Some("ws-1"), "worker", "signal_emitted")).unwrap();
-    idx.insert(&make_entry(3, Some("ws-2"), "worker", "checkpoint_created")).unwrap();
+    idx.insert(&make_entry(1, Some("ws-1"), "worker", "checkpoint_created"))
+        .unwrap();
+    idx.insert(&make_entry(2, Some("ws-1"), "worker", "signal_emitted"))
+        .unwrap();
+    idx.insert(&make_entry(3, Some("ws-2"), "worker", "checkpoint_created"))
+        .unwrap();
 
-    let result = idx.query(&TrailQuery {
-        workspace_id: Some("ws-1".into()),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            workspace_id: Some("ws-1".into()),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 2);
 }
 
 #[test]
 fn index_query_by_event_type() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    idx.insert(&make_entry(1, Some("ws-1"), "worker", "signal_emitted")).unwrap();
-    idx.insert(&make_entry(2, Some("ws-1"), "worker", "checkpoint_created")).unwrap();
+    idx.insert(&make_entry(1, Some("ws-1"), "worker", "signal_emitted"))
+        .unwrap();
+    idx.insert(&make_entry(2, Some("ws-1"), "worker", "checkpoint_created"))
+        .unwrap();
 
-    let result = idx.query(&TrailQuery {
-        event_type: Some("checkpoint_created".into()),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            event_type: Some("checkpoint_created".into()),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 1);
     assert_eq!(result.entries[0].sequence_number, 2);
 }
@@ -542,13 +554,17 @@ fn index_query_by_event_type() {
 #[test]
 fn index_query_by_actor() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    idx.insert(&make_entry(1, None, "protocol", "run_started")).unwrap();
-    idx.insert(&make_entry(2, Some("ws-1"), "worker", "signal_emitted")).unwrap();
+    idx.insert(&make_entry(1, None, "protocol", "run_started"))
+        .unwrap();
+    idx.insert(&make_entry(2, Some("ws-1"), "worker", "signal_emitted"))
+        .unwrap();
 
-    let result = idx.query(&TrailQuery {
-        actor: Some("protocol".into()),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            actor: Some("protocol".into()),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 1);
 }
 
@@ -556,32 +572,40 @@ fn index_query_by_actor() {
 fn index_query_by_timestamp_range() {
     let idx = TrailIndex::open_in_memory().unwrap();
     for i in 1..=5 {
-        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt"))
+            .unwrap();
     }
 
     let from = wacp_clock::Timestamp::new(2000, 0).to_bytes();
     let to = wacp_clock::Timestamp::new(4000, 0).to_bytes();
 
-    let result = idx.query(&TrailQuery {
-        from_timestamp: Some(from),
-        to_timestamp: Some(to),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            from_timestamp: Some(from),
+            to_timestamp: Some(to),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 3); // seq 2,3,4
 }
 
 #[test]
 fn index_query_compound() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    idx.insert(&make_entry(1, Some("ws-1"), "worker", "signal_emitted")).unwrap();
-    idx.insert(&make_entry(2, Some("ws-1"), "worker", "checkpoint_created")).unwrap();
-    idx.insert(&make_entry(3, Some("ws-2"), "worker", "checkpoint_created")).unwrap();
+    idx.insert(&make_entry(1, Some("ws-1"), "worker", "signal_emitted"))
+        .unwrap();
+    idx.insert(&make_entry(2, Some("ws-1"), "worker", "checkpoint_created"))
+        .unwrap();
+    idx.insert(&make_entry(3, Some("ws-2"), "worker", "checkpoint_created"))
+        .unwrap();
 
-    let result = idx.query(&TrailQuery {
-        workspace_id: Some("ws-1".into()),
-        event_type: Some("checkpoint_created".into()),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            workspace_id: Some("ws-1".into()),
+            event_type: Some("checkpoint_created".into()),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 1);
     assert_eq!(result.entries[0].sequence_number, 2);
 }
@@ -590,13 +614,16 @@ fn index_query_compound() {
 fn index_query_limit() {
     let idx = TrailIndex::open_in_memory().unwrap();
     for i in 1..=10 {
-        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt"))
+            .unwrap();
     }
 
-    let result = idx.query(&TrailQuery {
-        limit: 3,
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            limit: 3,
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert_eq!(result.entries.len(), 3);
     assert!(result.has_more);
 }
@@ -604,10 +631,12 @@ fn index_query_limit() {
 #[test]
 fn index_query_empty() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    let result = idx.query(&TrailQuery {
-        workspace_id: Some("nonexistent".into()),
-        ..TrailQuery::new()
-    }).unwrap();
+    let result = idx
+        .query(&TrailQuery {
+            workspace_id: Some("nonexistent".into()),
+            ..TrailQuery::new()
+        })
+        .unwrap();
     assert!(result.entries.is_empty());
     assert!(!result.has_more);
 }
@@ -618,14 +647,17 @@ fn index_last_sequence() {
     assert_eq!(idx.last_sequence().unwrap(), None);
 
     idx.insert(&make_entry(5, None, "protocol", "evt")).unwrap();
-    idx.insert(&make_entry(10, None, "protocol", "evt")).unwrap();
+    idx.insert(&make_entry(10, None, "protocol", "evt"))
+        .unwrap();
     assert_eq!(idx.last_sequence().unwrap(), Some(10));
 }
 
 #[test]
 fn index_batch_insert() {
     let idx = TrailIndex::open_in_memory().unwrap();
-    let entries: Vec<_> = (1..=5).map(|i| make_entry(i, Some("ws-1"), "worker", "evt")).collect();
+    let entries: Vec<_> = (1..=5)
+        .map(|i| make_entry(i, Some("ws-1"), "worker", "evt"))
+        .collect();
     idx.insert_batch(&entries).unwrap();
     assert_eq!(idx.last_sequence().unwrap(), Some(5));
 }
@@ -831,7 +863,8 @@ fn index_rebuild_after_corrupt() {
     // Corrupt index entries, rebuild from scratch: same results.
     let idx = TrailIndex::open_in_memory().unwrap();
     for i in 1..=5 {
-        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+        idx.insert(&make_entry(i, Some("ws-1"), "worker", "evt"))
+            .unwrap();
     }
     let original = idx.query(&TrailQuery::new()).unwrap();
     assert_eq!(original.entries.len(), 5);
@@ -839,7 +872,8 @@ fn index_rebuild_after_corrupt() {
     // Simulate "rebuild": create a new index and re-insert the same entries.
     let idx2 = TrailIndex::open_in_memory().unwrap();
     for i in 1..=5 {
-        idx2.insert(&make_entry(i, Some("ws-1"), "worker", "evt")).unwrap();
+        idx2.insert(&make_entry(i, Some("ws-1"), "worker", "evt"))
+            .unwrap();
     }
     let rebuilt = idx2.query(&TrailQuery::new()).unwrap();
     assert_eq!(rebuilt.entries.len(), original.entries.len());

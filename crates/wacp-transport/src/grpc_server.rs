@@ -1,16 +1,16 @@
 use std::net::SocketAddr;
 
 use tokio::sync::mpsc;
-use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Server;
+use tonic::transport::server::ServerTlsConfig;
 
+use crate::TransportError;
 use crate::grpc_agent::{AgentRequest, AgentServiceImpl};
 use crate::grpc_coordinator::{CoordinatorRequest, CoordinatorServiceImpl};
 use crate::grpc_highway::{HighwayRequest, HighwayServiceImpl};
 use crate::proto::wacp_v1::agent_service_server::AgentServiceServer;
 use crate::proto::wacp_v1::coordinator_service_server::CoordinatorServiceServer;
 use crate::proto::wacp_v1::highway_service_server::HighwayServiceServer;
-use crate::TransportError;
 
 /// Configuration for the gRPC server.
 pub struct GrpcServerConfig {

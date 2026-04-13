@@ -6,9 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use wacp_taxonomy::Taxonomy;
-use wacp_types::{
-    EnvelopeOrigin, PortRight, PortRightType, SignalType, WorkspaceId,
-};
+use wacp_types::{EnvelopeOrigin, PortRight, PortRightType, SignalType, WorkspaceId};
 
 /// The permission engine. Built from a Taxonomy at initialization.
 pub struct PermissionEngine {
@@ -224,9 +222,10 @@ impl PermissionEngine {
                     sb.to_string(),
                     envelope_type.to_string(),
                     rb.to_string(),
-                )) {
-                    return true;
-                }
+                ))
+            {
+                return true;
+            }
         }
 
         if let Some(rb) = receiver_base
@@ -234,9 +233,10 @@ impl PermissionEngine {
                 sender.to_string(),
                 envelope_type.to_string(),
                 rb.to_string(),
-            )) {
-                return true;
-            }
+            ))
+        {
+            return true;
+        }
 
         false
     }
@@ -257,9 +257,10 @@ impl PermissionEngine {
                 return Ok(());
             }
             if let Some(base) = self.role_bases.get(*role)
-                && permitted.contains(base) {
-                    return Ok(());
-                }
+                && permitted.contains(base)
+            {
+                return Ok(());
+            }
         }
 
         Err(PermissionDenied::CheckpointTypeNotPermitted {
@@ -274,9 +275,10 @@ impl PermissionEngine {
         };
 
         if let Some(emit_set) = self.signal_emit_sets.get(*role)
-            && emit_set.contains(signal_type) {
-                return Ok(());
-            }
+            && emit_set.contains(signal_type)
+        {
+            return Ok(());
+        }
 
         Err(PermissionDenied::SignalTypeNotPermitted {
             rule: "§5.2".into(),
@@ -306,32 +308,26 @@ impl PermissionEngine {
     }
 
     /// Consume a SendOnce right. Returns true if consumed, false if none exists.
-    pub fn consume_send_once(
-        &mut self,
-        holder: &WorkspaceId,
-        target: &WorkspaceId,
-    ) -> bool {
+    pub fn consume_send_once(&mut self, holder: &WorkspaceId, target: &WorkspaceId) -> bool {
         if let Some(rights) = self.port_rights.get_mut(holder)
             && let Some(pos) = rights
                 .iter()
                 .position(|r| r.target == *target && r.right_type == PortRightType::SendOnce)
-            {
-                rights.remove(pos);
-                return true;
-            }
+        {
+            rights.remove(pos);
+            return true;
+        }
         false
     }
 
     /// Check if the holder has a Send or SendOnce right to the target.
     pub fn has_send_right(&self, holder: &WorkspaceId, target: &WorkspaceId) -> bool {
-        self.port_rights
-            .get(holder)
-            .is_some_and(|rights| {
-                rights.iter().any(|r| {
-                    r.target == *target
-                        && matches!(r.right_type, PortRightType::Send | PortRightType::SendOnce)
-                })
+        self.port_rights.get(holder).is_some_and(|rights| {
+            rights.iter().any(|r| {
+                r.target == *target
+                    && matches!(r.right_type, PortRightType::Send | PortRightType::SendOnce)
             })
+        })
     }
 }
 

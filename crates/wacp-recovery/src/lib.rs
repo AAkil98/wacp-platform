@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use wacp_clock::Timestamp;
 use wacp_coordinator::SystemSnapshot;
-use wacp_trail::{verify_chain, ChainHash, SegmentId, SnapshotStorage, StorageError, TrailStorage};
+use wacp_trail::{ChainHash, SegmentId, SnapshotStorage, StorageError, TrailStorage, verify_chain};
 use wacp_types::*;
 
 /// Error during recovery.
@@ -191,10 +191,7 @@ impl RecoveryEngine {
     fn verify_integrity(entries: &[(Vec<u8>, ChainHash)]) -> Result<(), RecoveryError> {
         verify_chain(entries).map_err(|e| RecoveryError::TrailCorruption {
             index: e.index,
-            details: format!(
-                "expected {}, computed {}",
-                e.expected, e.computed
-            ),
+            details: format!("expected {}, computed {}", e.expected, e.computed),
         })
     }
 
@@ -207,29 +204,30 @@ impl RecoveryEngine {
 
         for (entry_bytes, _) in entries {
             if let Ok(event) = serde_json::from_slice::<serde_json::Value>(entry_bytes)
-                && let Some(event_type) = event.get("event_type").and_then(|v| v.as_str()) {
-                    match event_type {
-                        "workspace_created" | "workspace_state_changed" => {
-                            if let (Some(ws_id), Some(state_str)) = (
-                                event.get("workspace_id").and_then(|v| v.as_str()),
-                                event.get("new_state").and_then(|v| v.as_str()),
-                            )
-                                && let Some(state) = parse_workspace_state(state_str) {
-                                    ws_states.insert(ws_id.to_string(), state);
-                                }
+                && let Some(event_type) = event.get("event_type").and_then(|v| v.as_str())
+            {
+                match event_type {
+                    "workspace_created" | "workspace_state_changed" => {
+                        if let (Some(ws_id), Some(state_str)) = (
+                            event.get("workspace_id").and_then(|v| v.as_str()),
+                            event.get("new_state").and_then(|v| v.as_str()),
+                        ) && let Some(state) = parse_workspace_state(state_str)
+                        {
+                            ws_states.insert(ws_id.to_string(), state);
                         }
-                        "task_status_changed" => {
-                            if let (Some(task_id), Some(status_str)) = (
-                                event.get("task_id").and_then(|v| v.as_str()),
-                                event.get("new_status").and_then(|v| v.as_str()),
-                            )
-                                && let Some(status) = parse_task_status(status_str) {
-                                    task_statuses.insert(task_id.to_string(), status);
-                                }
-                        }
-                        _ => {}
                     }
+                    "task_status_changed" => {
+                        if let (Some(task_id), Some(status_str)) = (
+                            event.get("task_id").and_then(|v| v.as_str()),
+                            event.get("new_status").and_then(|v| v.as_str()),
+                        ) && let Some(status) = parse_task_status(status_str)
+                        {
+                            task_statuses.insert(task_id.to_string(), status);
+                        }
+                    }
+                    _ => {}
                 }
+            }
         }
 
         (ws_states, task_statuses)
@@ -243,17 +241,18 @@ impl RecoveryEngine {
         for (entry_bytes, _) in entries {
             if let Ok(event) = serde_json::from_slice::<serde_json::Value>(entry_bytes)
                 && let Some(event_type) = event.get("event_type").and_then(|v| v.as_str())
-                    && let Some(env_id) = event.get("envelope_id").and_then(|v| v.as_str()) {
-                        match event_type {
-                            "envelope_created" => {
-                                created.insert(env_id.to_string());
-                            }
-                            "envelope_delivered" => {
-                                delivered.insert(env_id.to_string());
-                            }
-                            _ => {}
-                        }
+                && let Some(env_id) = event.get("envelope_id").and_then(|v| v.as_str())
+            {
+                match event_type {
+                    "envelope_created" => {
+                        created.insert(env_id.to_string());
                     }
+                    "envelope_delivered" => {
+                        delivered.insert(env_id.to_string());
+                    }
+                    _ => {}
+                }
+            }
         }
 
         created.difference(&delivered).cloned().collect()
@@ -263,9 +262,10 @@ impl RecoveryEngine {
     fn extract_last_timestamp(entries: &[(Vec<u8>, ChainHash)]) -> Timestamp {
         if let Some((entry_bytes, _)) = entries.last()
             && let Ok(event) = serde_json::from_slice::<serde_json::Value>(entry_bytes)
-                && let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64()) {
-                    return Timestamp::new(ts, 0);
-                }
+            && let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64())
+        {
+            return Timestamp::new(ts, 0);
+        }
         Timestamp::ZERO
     }
 }

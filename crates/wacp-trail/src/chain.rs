@@ -41,11 +41,7 @@ pub fn compute_chain_hash(previous: &ChainHash, entry_bytes: &[u8]) -> ChainHash
 }
 
 /// Verify a single chain link.
-pub fn verify_chain_link(
-    previous: &ChainHash,
-    entry_bytes: &[u8],
-    expected: &ChainHash,
-) -> bool {
+pub fn verify_chain_link(previous: &ChainHash, entry_bytes: &[u8], expected: &ChainHash) -> bool {
     compute_chain_hash(previous, entry_bytes) == *expected
 }
 
@@ -71,9 +67,7 @@ impl std::error::Error for ChainVerificationError {}
 
 /// Verify a full chain from genesis.
 /// Each element is (entry_bytes, chain_hash).
-pub fn verify_chain(
-    entries: &[(Vec<u8>, ChainHash)],
-) -> Result<(), ChainVerificationError> {
+pub fn verify_chain(entries: &[(Vec<u8>, ChainHash)]) -> Result<(), ChainVerificationError> {
     let mut previous = ChainHash::GENESIS;
     for (i, (entry_bytes, expected)) in entries.iter().enumerate() {
         let computed = compute_chain_hash(&previous, entry_bytes);

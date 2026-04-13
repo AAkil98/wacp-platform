@@ -194,8 +194,8 @@ mod tests {
     #[test]
     fn both_limits_enforced_independently() {
         let limiter = RateLimiter::new(RateLimitConfig {
-            max_requests_per_window: 10,  // generous request limit
-            max_tokens_per_window: 100,   // tight token limit
+            max_requests_per_window: 10, // generous request limit
+            max_tokens_per_window: 100,  // tight token limit
             window: Duration::from_secs(60),
         });
         // 2 requests, 50 tokens each = 100 total

@@ -82,9 +82,7 @@ impl<T: TimeSource> Clock<T> {
         {
             // Physical advanced beyond both — reset logical.
             0
-        } else if max_physical == self.last.physical_us()
-            && max_physical == remote.physical_us()
-        {
+        } else if max_physical == self.last.physical_us() && max_physical == remote.physical_us() {
             // All three tied — take max of both logicals + 1.
             self.last.logical().max(remote.logical()).saturating_add(1)
         } else if max_physical == self.last.physical_us() {

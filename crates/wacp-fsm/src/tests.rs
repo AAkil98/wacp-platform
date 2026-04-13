@@ -115,7 +115,11 @@ fn ws_blocked_to_failed() {
 #[test]
 fn ws_migrating_succeeded() {
     assert_eq!(
-        ws(WorkspaceState::Migrating, WorkspaceTrigger::MigrationSucceeded).unwrap(),
+        ws(
+            WorkspaceState::Migrating,
+            WorkspaceTrigger::MigrationSucceeded
+        )
+        .unwrap(),
         WorkspaceState::Active
     );
 }
@@ -123,7 +127,11 @@ fn ws_migrating_succeeded() {
 #[test]
 fn ws_migrating_succeeded_blocked() {
     assert_eq!(
-        ws(WorkspaceState::Migrating, WorkspaceTrigger::MigrationSucceededBlocked).unwrap(),
+        ws(
+            WorkspaceState::Migrating,
+            WorkspaceTrigger::MigrationSucceededBlocked
+        )
+        .unwrap(),
         WorkspaceState::Blocked
     );
 }
@@ -139,7 +147,11 @@ fn ws_migrating_failed() {
 #[test]
 fn ws_migrating_abort() {
     assert_eq!(
-        ws(WorkspaceState::Migrating, WorkspaceTrigger::CoordinatorAbort).unwrap(),
+        ws(
+            WorkspaceState::Migrating,
+            WorkspaceTrigger::CoordinatorAbort
+        )
+        .unwrap(),
         WorkspaceState::Failed
     );
 }
@@ -147,7 +159,11 @@ fn ws_migrating_abort() {
 #[test]
 fn ws_suspended_resume() {
     assert_eq!(
-        ws(WorkspaceState::Suspended, WorkspaceTrigger::CoordinatorResume).unwrap(),
+        ws(
+            WorkspaceState::Suspended,
+            WorkspaceTrigger::CoordinatorResume
+        )
+        .unwrap(),
         WorkspaceState::Active
     );
 }
@@ -155,7 +171,11 @@ fn ws_suspended_resume() {
 #[test]
 fn ws_suspended_abort() {
     assert_eq!(
-        ws(WorkspaceState::Suspended, WorkspaceTrigger::CoordinatorAbort).unwrap(),
+        ws(
+            WorkspaceState::Suspended,
+            WorkspaceTrigger::CoordinatorAbort
+        )
+        .unwrap(),
         WorkspaceState::Failed
     );
 }
@@ -163,7 +183,11 @@ fn ws_suspended_abort() {
 #[test]
 fn ws_integrating_to_closed() {
     assert_eq!(
-        ws(WorkspaceState::Integrating, WorkspaceTrigger::IntegrationSucceeded).unwrap(),
+        ws(
+            WorkspaceState::Integrating,
+            WorkspaceTrigger::IntegrationSucceeded
+        )
+        .unwrap(),
         WorkspaceState::Closed
     );
 }
@@ -171,7 +195,11 @@ fn ws_integrating_to_closed() {
 #[test]
 fn ws_integrating_to_conflicted() {
     assert_eq!(
-        ws(WorkspaceState::Integrating, WorkspaceTrigger::ConflictDetected).unwrap(),
+        ws(
+            WorkspaceState::Integrating,
+            WorkspaceTrigger::ConflictDetected
+        )
+        .unwrap(),
         WorkspaceState::Conflicted
     );
 }
@@ -179,7 +207,11 @@ fn ws_integrating_to_conflicted() {
 #[test]
 fn ws_integrating_to_failed() {
     assert_eq!(
-        ws(WorkspaceState::Integrating, WorkspaceTrigger::IntegrationFailed).unwrap(),
+        ws(
+            WorkspaceState::Integrating,
+            WorkspaceTrigger::IntegrationFailed
+        )
+        .unwrap(),
         WorkspaceState::Failed
     );
 }
@@ -187,7 +219,11 @@ fn ws_integrating_to_failed() {
 #[test]
 fn ws_conflicted_to_closed() {
     assert_eq!(
-        ws(WorkspaceState::Conflicted, WorkspaceTrigger::ConflictResolved).unwrap(),
+        ws(
+            WorkspaceState::Conflicted,
+            WorkspaceTrigger::ConflictResolved
+        )
+        .unwrap(),
         WorkspaceState::Closed
     );
 }
@@ -195,7 +231,11 @@ fn ws_conflicted_to_closed() {
 #[test]
 fn ws_conflicted_to_failed() {
     assert_eq!(
-        ws(WorkspaceState::Conflicted, WorkspaceTrigger::ConflictUnresolvable).unwrap(),
+        ws(
+            WorkspaceState::Conflicted,
+            WorkspaceTrigger::ConflictUnresolvable
+        )
+        .unwrap(),
         WorkspaceState::Failed
     );
 }
@@ -264,10 +304,7 @@ fn ws_illegal_transitions() {
 
 // ── Envelope FSM ──
 
-fn env(
-    state: EnvelopeState,
-    trigger: EnvelopeTrigger,
-) -> Result<EnvelopeState, TransitionError> {
+fn env(state: EnvelopeState, trigger: EnvelopeTrigger) -> Result<EnvelopeState, TransitionError> {
     EnvelopeFsm::transition(state, &trigger)
 }
 
@@ -671,27 +708,27 @@ fn workspace_exhaustive_transition_table() {
         (
             Idle,
             vec![
-                Illegal,         // AgentReady
-                Illegal,         // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Ok(Active),      // ReceiveFirstEnvelope
-                Ok(Failed),      // CoordinatorAbort
-                Illegal,         // CoordinatorSuspend
-                Illegal,         // CoordinatorResume
-                Illegal,         // CoordinatorMigrate
-                Illegal,         // MigrationSucceeded
-                Illegal,         // MigrationSucceededBlocked
-                Illegal,         // MigrationFailed
-                Illegal,         // IntegrationSucceeded
-                Illegal,         // IntegrationFailed
-                Illegal,         // ConflictDetected
-                Illegal,         // ConflictResolved
-                Illegal,         // ConflictUnresolvable
-                Ok(Failed),      // TimeoutExceeded
-                Ok(Failed),      // BudgetExceeded
-                Ok(Failed),      // CreationError
+                Illegal,    // AgentReady
+                Illegal,    // AgentStarted
+                Illegal,    // AgentBlocked
+                Illegal,    // AgentComplete
+                Illegal,    // AgentFailed
+                Ok(Active), // ReceiveFirstEnvelope
+                Ok(Failed), // CoordinatorAbort
+                Illegal,    // CoordinatorSuspend
+                Illegal,    // CoordinatorResume
+                Illegal,    // CoordinatorMigrate
+                Illegal,    // MigrationSucceeded
+                Illegal,    // MigrationSucceededBlocked
+                Illegal,    // MigrationFailed
+                Illegal,    // IntegrationSucceeded
+                Illegal,    // IntegrationFailed
+                Illegal,    // ConflictDetected
+                Illegal,    // ConflictResolved
+                Illegal,    // ConflictUnresolvable
+                Ok(Failed), // TimeoutExceeded
+                Ok(Failed), // BudgetExceeded
+                Ok(Failed), // CreationError
             ],
         ),
         (
@@ -723,131 +760,131 @@ fn workspace_exhaustive_transition_table() {
         (
             Blocked,
             vec![
-                Illegal,         // AgentReady
-                Ok(Active),      // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Illegal,         // ReceiveFirstEnvelope
-                Ok(Failed),      // CoordinatorAbort
-                Ok(Suspended),   // CoordinatorSuspend
-                Illegal,         // CoordinatorResume
-                Ok(Migrating),   // CoordinatorMigrate
-                Illegal,         // MigrationSucceeded
-                Illegal,         // MigrationSucceededBlocked
-                Illegal,         // MigrationFailed
-                Illegal,         // IntegrationSucceeded
-                Illegal,         // IntegrationFailed
-                Illegal,         // ConflictDetected
-                Illegal,         // ConflictResolved
-                Illegal,         // ConflictUnresolvable
-                Ok(Failed),      // TimeoutExceeded
-                Ok(Failed),      // BudgetExceeded
-                Illegal,         // CreationError
+                Illegal,       // AgentReady
+                Ok(Active),    // AgentStarted
+                Illegal,       // AgentBlocked
+                Illegal,       // AgentComplete
+                Illegal,       // AgentFailed
+                Illegal,       // ReceiveFirstEnvelope
+                Ok(Failed),    // CoordinatorAbort
+                Ok(Suspended), // CoordinatorSuspend
+                Illegal,       // CoordinatorResume
+                Ok(Migrating), // CoordinatorMigrate
+                Illegal,       // MigrationSucceeded
+                Illegal,       // MigrationSucceededBlocked
+                Illegal,       // MigrationFailed
+                Illegal,       // IntegrationSucceeded
+                Illegal,       // IntegrationFailed
+                Illegal,       // ConflictDetected
+                Illegal,       // ConflictResolved
+                Illegal,       // ConflictUnresolvable
+                Ok(Failed),    // TimeoutExceeded
+                Ok(Failed),    // BudgetExceeded
+                Illegal,       // CreationError
             ],
         ),
         (
             Suspended,
             vec![
-                Illegal,         // AgentReady
-                Illegal,         // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Illegal,         // ReceiveFirstEnvelope
-                Ok(Failed),      // CoordinatorAbort
-                Illegal,         // CoordinatorSuspend
-                Ok(Active),      // CoordinatorResume
-                Illegal,         // CoordinatorMigrate
-                Illegal,         // MigrationSucceeded
-                Illegal,         // MigrationSucceededBlocked
-                Illegal,         // MigrationFailed
-                Illegal,         // IntegrationSucceeded
-                Illegal,         // IntegrationFailed
-                Illegal,         // ConflictDetected
-                Illegal,         // ConflictResolved
-                Illegal,         // ConflictUnresolvable
-                Illegal,         // TimeoutExceeded
-                Illegal,         // BudgetExceeded
-                Illegal,         // CreationError
+                Illegal,    // AgentReady
+                Illegal,    // AgentStarted
+                Illegal,    // AgentBlocked
+                Illegal,    // AgentComplete
+                Illegal,    // AgentFailed
+                Illegal,    // ReceiveFirstEnvelope
+                Ok(Failed), // CoordinatorAbort
+                Illegal,    // CoordinatorSuspend
+                Ok(Active), // CoordinatorResume
+                Illegal,    // CoordinatorMigrate
+                Illegal,    // MigrationSucceeded
+                Illegal,    // MigrationSucceededBlocked
+                Illegal,    // MigrationFailed
+                Illegal,    // IntegrationSucceeded
+                Illegal,    // IntegrationFailed
+                Illegal,    // ConflictDetected
+                Illegal,    // ConflictResolved
+                Illegal,    // ConflictUnresolvable
+                Illegal,    // TimeoutExceeded
+                Illegal,    // BudgetExceeded
+                Illegal,    // CreationError
             ],
         ),
         (
             Migrating,
             vec![
-                Illegal,         // AgentReady
-                Illegal,         // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Illegal,         // ReceiveFirstEnvelope
-                Ok(Failed),      // CoordinatorAbort
-                Illegal,         // CoordinatorSuspend
-                Illegal,         // CoordinatorResume
-                Illegal,         // CoordinatorMigrate
-                Ok(Active),      // MigrationSucceeded
-                Ok(Blocked),     // MigrationSucceededBlocked
-                Ok(Failed),      // MigrationFailed
-                Illegal,         // IntegrationSucceeded
-                Illegal,         // IntegrationFailed
-                Illegal,         // ConflictDetected
-                Illegal,         // ConflictResolved
-                Illegal,         // ConflictUnresolvable
-                Illegal,         // TimeoutExceeded
-                Illegal,         // BudgetExceeded
-                Illegal,         // CreationError
+                Illegal,     // AgentReady
+                Illegal,     // AgentStarted
+                Illegal,     // AgentBlocked
+                Illegal,     // AgentComplete
+                Illegal,     // AgentFailed
+                Illegal,     // ReceiveFirstEnvelope
+                Ok(Failed),  // CoordinatorAbort
+                Illegal,     // CoordinatorSuspend
+                Illegal,     // CoordinatorResume
+                Illegal,     // CoordinatorMigrate
+                Ok(Active),  // MigrationSucceeded
+                Ok(Blocked), // MigrationSucceededBlocked
+                Ok(Failed),  // MigrationFailed
+                Illegal,     // IntegrationSucceeded
+                Illegal,     // IntegrationFailed
+                Illegal,     // ConflictDetected
+                Illegal,     // ConflictResolved
+                Illegal,     // ConflictUnresolvable
+                Illegal,     // TimeoutExceeded
+                Illegal,     // BudgetExceeded
+                Illegal,     // CreationError
             ],
         ),
         (
             Integrating,
             vec![
-                Illegal,         // AgentReady
-                Illegal,         // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Illegal,         // ReceiveFirstEnvelope
-                Illegal,         // CoordinatorAbort
-                Illegal,         // CoordinatorSuspend
-                Illegal,         // CoordinatorResume
-                Illegal,         // CoordinatorMigrate
-                Illegal,         // MigrationSucceeded
-                Illegal,         // MigrationSucceededBlocked
-                Illegal,         // MigrationFailed
-                Ok(Closed),      // IntegrationSucceeded
-                Ok(Failed),      // IntegrationFailed
-                Ok(Conflicted),  // ConflictDetected
-                Illegal,         // ConflictResolved
-                Illegal,         // ConflictUnresolvable
-                Illegal,         // TimeoutExceeded
-                Illegal,         // BudgetExceeded
-                Illegal,         // CreationError
+                Illegal,        // AgentReady
+                Illegal,        // AgentStarted
+                Illegal,        // AgentBlocked
+                Illegal,        // AgentComplete
+                Illegal,        // AgentFailed
+                Illegal,        // ReceiveFirstEnvelope
+                Illegal,        // CoordinatorAbort
+                Illegal,        // CoordinatorSuspend
+                Illegal,        // CoordinatorResume
+                Illegal,        // CoordinatorMigrate
+                Illegal,        // MigrationSucceeded
+                Illegal,        // MigrationSucceededBlocked
+                Illegal,        // MigrationFailed
+                Ok(Closed),     // IntegrationSucceeded
+                Ok(Failed),     // IntegrationFailed
+                Ok(Conflicted), // ConflictDetected
+                Illegal,        // ConflictResolved
+                Illegal,        // ConflictUnresolvable
+                Illegal,        // TimeoutExceeded
+                Illegal,        // BudgetExceeded
+                Illegal,        // CreationError
             ],
         ),
         (
             Conflicted,
             vec![
-                Illegal,         // AgentReady
-                Illegal,         // AgentStarted
-                Illegal,         // AgentBlocked
-                Illegal,         // AgentComplete
-                Illegal,         // AgentFailed
-                Illegal,         // ReceiveFirstEnvelope
-                Illegal,         // CoordinatorAbort
-                Illegal,         // CoordinatorSuspend
-                Illegal,         // CoordinatorResume
-                Illegal,         // CoordinatorMigrate
-                Illegal,         // MigrationSucceeded
-                Illegal,         // MigrationSucceededBlocked
-                Illegal,         // MigrationFailed
-                Illegal,         // IntegrationSucceeded
-                Illegal,         // IntegrationFailed
-                Illegal,         // ConflictDetected
-                Ok(Closed),      // ConflictResolved
-                Ok(Failed),      // ConflictUnresolvable
-                Illegal,         // TimeoutExceeded
-                Illegal,         // BudgetExceeded
-                Illegal,         // CreationError
+                Illegal,    // AgentReady
+                Illegal,    // AgentStarted
+                Illegal,    // AgentBlocked
+                Illegal,    // AgentComplete
+                Illegal,    // AgentFailed
+                Illegal,    // ReceiveFirstEnvelope
+                Illegal,    // CoordinatorAbort
+                Illegal,    // CoordinatorSuspend
+                Illegal,    // CoordinatorResume
+                Illegal,    // CoordinatorMigrate
+                Illegal,    // MigrationSucceeded
+                Illegal,    // MigrationSucceededBlocked
+                Illegal,    // MigrationFailed
+                Illegal,    // IntegrationSucceeded
+                Illegal,    // IntegrationFailed
+                Illegal,    // ConflictDetected
+                Ok(Closed), // ConflictResolved
+                Ok(Failed), // ConflictUnresolvable
+                Illegal,    // TimeoutExceeded
+                Illegal,    // BudgetExceeded
+                Illegal,    // CreationError
             ],
         ),
     ];
@@ -899,13 +936,37 @@ fn workspace_valid_transition_count() {
     use WorkspaceTrigger::*;
 
     let all_triggers = [
-        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
-        ReceiveFirstEnvelope, CoordinatorAbort, CoordinatorSuspend, CoordinatorResume,
-        CoordinatorMigrate, MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
-        IntegrationSucceeded, IntegrationFailed, ConflictDetected, ConflictResolved,
-        ConflictUnresolvable, TimeoutExceeded, BudgetExceeded, CreationError,
+        AgentReady,
+        AgentStarted,
+        AgentBlocked,
+        AgentComplete,
+        AgentFailed,
+        ReceiveFirstEnvelope,
+        CoordinatorAbort,
+        CoordinatorSuspend,
+        CoordinatorResume,
+        CoordinatorMigrate,
+        MigrationSucceeded,
+        MigrationSucceededBlocked,
+        MigrationFailed,
+        IntegrationSucceeded,
+        IntegrationFailed,
+        ConflictDetected,
+        ConflictResolved,
+        ConflictUnresolvable,
+        TimeoutExceeded,
+        BudgetExceeded,
+        CreationError,
     ];
-    let non_terminal = [Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted];
+    let non_terminal = [
+        Idle,
+        Active,
+        Blocked,
+        Suspended,
+        Migrating,
+        Integrating,
+        Conflicted,
+    ];
 
     let valid_count: usize = non_terminal
         .iter()
@@ -913,7 +974,10 @@ fn workspace_valid_transition_count() {
         .filter(|r| r.is_ok())
         .count();
 
-    assert_eq!(valid_count, 30, "exactly 30 valid transitions in workspace FSM");
+    assert_eq!(
+        valid_count, 30,
+        "exactly 30 valid transitions in workspace FSM"
+    );
 }
 
 #[test]
@@ -938,7 +1002,13 @@ fn envelope_valid_transition_count() {
     use EnvelopeState::*;
     use EnvelopeTrigger::*;
 
-    let all_triggers = [Submit, ValidationPassed, ValidationFailed, Deliver, Acknowledge];
+    let all_triggers = [
+        Submit,
+        ValidationPassed,
+        ValidationFailed,
+        Deliver,
+        Acknowledge,
+    ];
     let non_terminal = [Created, Validated, Delivered];
 
     let valid_count: usize = non_terminal
@@ -947,7 +1017,10 @@ fn envelope_valid_transition_count() {
         .filter(|r| r.is_ok())
         .count();
 
-    assert_eq!(valid_count, 4, "exactly 4 valid transitions in envelope FSM");
+    assert_eq!(
+        valid_count, 4,
+        "exactly 4 valid transitions in envelope FSM"
+    );
 }
 
 #[test]
@@ -956,11 +1029,27 @@ fn terminal_states_produce_no_valid_successors() {
     use WorkspaceTrigger::*;
 
     let all_triggers = [
-        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
-        ReceiveFirstEnvelope, CoordinatorAbort, CoordinatorSuspend, CoordinatorResume,
-        CoordinatorMigrate, MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
-        IntegrationSucceeded, IntegrationFailed, ConflictDetected, ConflictResolved,
-        ConflictUnresolvable, TimeoutExceeded, BudgetExceeded, CreationError,
+        AgentReady,
+        AgentStarted,
+        AgentBlocked,
+        AgentComplete,
+        AgentFailed,
+        ReceiveFirstEnvelope,
+        CoordinatorAbort,
+        CoordinatorSuspend,
+        CoordinatorResume,
+        CoordinatorMigrate,
+        MigrationSucceeded,
+        MigrationSucceededBlocked,
+        MigrationFailed,
+        IntegrationSucceeded,
+        IntegrationFailed,
+        ConflictDetected,
+        ConflictResolved,
+        ConflictUnresolvable,
+        TimeoutExceeded,
+        BudgetExceeded,
+        CreationError,
     ];
 
     for terminal in [Closed, Failed] {
@@ -972,8 +1061,13 @@ fn terminal_states_produce_no_valid_successors() {
 
     for terminal in [TaskStatus::Integrated, TaskStatus::Cancelled] {
         for trigger in [
-            TaskTrigger::Approve, TaskTrigger::Assign, TaskTrigger::Start,
-            TaskTrigger::Complete, TaskTrigger::Fail, TaskTrigger::Integrate, TaskTrigger::Cancel,
+            TaskTrigger::Approve,
+            TaskTrigger::Assign,
+            TaskTrigger::Start,
+            TaskTrigger::Complete,
+            TaskTrigger::Fail,
+            TaskTrigger::Integrate,
+            TaskTrigger::Cancel,
         ] {
             assert!(task(terminal, trigger).is_err());
         }
@@ -981,8 +1075,10 @@ fn terminal_states_produce_no_valid_successors() {
 
     for terminal in [EnvelopeState::Acknowledged, EnvelopeState::Rejected] {
         for trigger in [
-            EnvelopeTrigger::Submit, EnvelopeTrigger::ValidationPassed,
-            EnvelopeTrigger::ValidationFailed, EnvelopeTrigger::Deliver,
+            EnvelopeTrigger::Submit,
+            EnvelopeTrigger::ValidationPassed,
+            EnvelopeTrigger::ValidationFailed,
+            EnvelopeTrigger::Deliver,
             EnvelopeTrigger::Acknowledge,
         ] {
             assert!(env(terminal, trigger).is_err());
@@ -1034,11 +1130,22 @@ fn workspace_all_triggers_from_idle() {
 
     // Invalid transitions from Idle — all should be IllegalTransition.
     let illegal = [
-        AgentReady, AgentStarted, AgentBlocked, AgentComplete, AgentFailed,
-        CoordinatorSuspend, CoordinatorResume, CoordinatorMigrate,
-        MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed,
-        IntegrationSucceeded, IntegrationFailed, ConflictDetected,
-        ConflictResolved, ConflictUnresolvable,
+        AgentReady,
+        AgentStarted,
+        AgentBlocked,
+        AgentComplete,
+        AgentFailed,
+        CoordinatorSuspend,
+        CoordinatorResume,
+        CoordinatorMigrate,
+        MigrationSucceeded,
+        MigrationSucceededBlocked,
+        MigrationFailed,
+        IntegrationSucceeded,
+        IntegrationFailed,
+        ConflictDetected,
+        ConflictResolved,
+        ConflictUnresolvable,
     ];
     for t in illegal {
         assert!(
@@ -1088,7 +1195,10 @@ fn envelope_all_triggers_from_created() {
     let illegal = [Submit, Deliver, Acknowledge];
     for t in illegal {
         assert!(
-            matches!(env(Created, t), Err(TransitionError::IllegalTransition { .. })),
+            matches!(
+                env(Created, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
             "Created + {t:?} should be IllegalTransition"
         );
     }
@@ -1099,15 +1209,34 @@ fn terminal_state_count() {
     use WorkspaceState::*;
 
     let all_states = [
-        Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted, Closed, Failed,
+        Idle,
+        Active,
+        Blocked,
+        Suspended,
+        Migrating,
+        Integrating,
+        Conflicted,
+        Closed,
+        Failed,
     ];
     let terminal_count = all_states.iter().filter(|s| s.is_terminal()).count();
-    assert_eq!(terminal_count, 2, "exactly 2 terminal workspace states: Closed and Failed");
+    assert_eq!(
+        terminal_count, 2,
+        "exactly 2 terminal workspace states: Closed and Failed"
+    );
 
     // Verify which ones are terminal.
     assert!(Closed.is_terminal());
     assert!(Failed.is_terminal());
-    for s in [Idle, Active, Blocked, Suspended, Migrating, Integrating, Conflicted] {
+    for s in [
+        Idle,
+        Active,
+        Blocked,
+        Suspended,
+        Migrating,
+        Integrating,
+        Conflicted,
+    ] {
         assert!(!s.is_terminal(), "{s:?} should not be terminal");
     }
 }

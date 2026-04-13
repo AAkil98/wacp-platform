@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::error::StorageError;
 
@@ -209,11 +209,9 @@ impl TrailIndex {
     pub fn last_sequence(&self) -> Result<Option<u64>, StorageError> {
         let result: Option<i64> = self
             .conn
-            .query_row(
-                "SELECT MAX(sequence_number) FROM trail_index",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT MAX(sequence_number) FROM trail_index", [], |row| {
+                row.get(0)
+            })
             .optional()?
             .flatten();
         Ok(result.map(|v| v as u64))

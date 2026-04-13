@@ -26,7 +26,13 @@ async fn agent_send_recv() {
         .unwrap();
 
     let msg = server.recv().await.unwrap();
-    assert!(matches!(msg, AgentInbound::EmitSignal { signal_type: SignalType::Ready, .. }));
+    assert!(matches!(
+        msg,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Ready,
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
@@ -72,8 +78,20 @@ async fn multiple_agents() {
     let msg1 = server1.recv().await.unwrap();
     let msg2 = server2.recv().await.unwrap();
 
-    assert!(matches!(msg1, AgentInbound::EmitSignal { signal_type: SignalType::Ready, .. }));
-    assert!(matches!(msg2, AgentInbound::EmitSignal { signal_type: SignalType::Started, .. }));
+    assert!(matches!(
+        msg1,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Ready,
+            ..
+        }
+    ));
+    assert!(matches!(
+        msg2,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Started,
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
@@ -133,14 +151,38 @@ fn proto_types_generated() {
 fn error_mapping_all_categories() {
     use tonic::Code;
 
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::PermissionDenied), Code::PermissionDenied);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::IllegalTransition), Code::FailedPrecondition);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::ValidationFailed), Code::InvalidArgument);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::BudgetExceeded), Code::ResourceExhausted);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::Timeout), Code::DeadlineExceeded);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::NotFound), Code::NotFound);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::DeliveryFailed), Code::Unavailable);
-    assert_eq!(error_category_to_grpc_code(ErrorCategory::Internal), Code::Internal);
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::PermissionDenied),
+        Code::PermissionDenied
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::IllegalTransition),
+        Code::FailedPrecondition
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::ValidationFailed),
+        Code::InvalidArgument
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::BudgetExceeded),
+        Code::ResourceExhausted
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::Timeout),
+        Code::DeadlineExceeded
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::NotFound),
+        Code::NotFound
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::DeliveryFailed),
+        Code::Unavailable
+    );
+    assert_eq!(
+        error_category_to_grpc_code(ErrorCategory::Internal),
+        Code::Internal
+    );
 }
 
 #[test]
@@ -205,25 +247,22 @@ async fn agent_svc_bind_forwards_and_returns() {
         auth_token: "tok-1".into(),
         client_request_id: "r1".into(),
     };
-    let (result, forwarded) = tokio::join!(
-        svc.bind(tonic::Request::new(req)),
-        async {
-            match rx.recv().await.unwrap() {
-                AgentRequest::Bind { request, reply } => {
-                    reply
-                        .send(Ok(pb::BindResponse {
-                            workspace_id: "ws-1".into(),
-                            state: pb::WorkspaceState::Active.into(),
-                            role: "worker".into(),
-                            ..Default::default()
-                        }))
-                        .ok();
-                    request
-                }
-                other => panic!("expected Bind, got {other:?}"),
+    let (result, forwarded) = tokio::join!(svc.bind(tonic::Request::new(req)), async {
+        match rx.recv().await.unwrap() {
+            AgentRequest::Bind { request, reply } => {
+                reply
+                    .send(Ok(pb::BindResponse {
+                        workspace_id: "ws-1".into(),
+                        state: pb::WorkspaceState::Active.into(),
+                        role: "worker".into(),
+                        ..Default::default()
+                    }))
+                    .ok();
+                request
             }
+            other => panic!("expected Bind, got {other:?}"),
         }
-    );
+    });
     assert_eq!(forwarded.workspace_id, "ws-1");
     assert_eq!(forwarded.auth_token, "tok-1");
     let resp = result.unwrap().into_inner();
@@ -266,24 +305,21 @@ async fn agent_svc_send_envelope_forwards_and_returns() {
         payload: b"data".to_vec(),
         ..Default::default()
     };
-    let (result, _) = tokio::join!(
-        svc.send_envelope(tonic::Request::new(req)),
-        async {
-            match rx.recv().await.unwrap() {
-                AgentRequest::SendEnvelope { request, reply, .. } => {
-                    assert_eq!(request.to_workspace, "ws-target");
-                    assert_eq!(request.r#type, "feedback");
-                    reply
-                        .send(Ok(pb::SendEnvelopeResponse {
-                            envelope_id: "env-1".into(),
-                            ..Default::default()
-                        }))
-                        .ok();
-                }
-                other => panic!("expected SendEnvelope, got {other:?}"),
+    let (result, _) = tokio::join!(svc.send_envelope(tonic::Request::new(req)), async {
+        match rx.recv().await.unwrap() {
+            AgentRequest::SendEnvelope { request, reply, .. } => {
+                assert_eq!(request.to_workspace, "ws-target");
+                assert_eq!(request.r#type, "feedback");
+                reply
+                    .send(Ok(pb::SendEnvelopeResponse {
+                        envelope_id: "env-1".into(),
+                        ..Default::default()
+                    }))
+                    .ok();
             }
+            other => panic!("expected SendEnvelope, got {other:?}"),
         }
-    );
+    });
     assert_eq!(result.unwrap().into_inner().envelope_id, "env-1");
 }
 
@@ -303,10 +339,7 @@ async fn agent_svc_send_envelope_error_propagated() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap_err().code(),
-        tonic::Code::PermissionDenied
-    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
 }
 
 #[tokio::test]
@@ -317,21 +350,16 @@ async fn agent_svc_emit_signal_forwards_and_returns() {
         reason: "starting".into(),
         ..Default::default()
     };
-    let (result, _) = tokio::join!(
-        svc.emit_signal(tonic::Request::new(req)),
-        async {
-            match rx.recv().await.unwrap() {
-                AgentRequest::EmitSignal { request, reply, .. } => {
-                    assert_eq!(request.r#type, pb::SignalType::Ready as i32);
-                    assert_eq!(request.reason, "starting");
-                    reply
-                        .send(Ok(pb::EmitSignalResponse::default()))
-                        .ok();
-                }
-                other => panic!("expected EmitSignal, got {other:?}"),
+    let (result, _) = tokio::join!(svc.emit_signal(tonic::Request::new(req)), async {
+        match rx.recv().await.unwrap() {
+            AgentRequest::EmitSignal { request, reply, .. } => {
+                assert_eq!(request.r#type, pb::SignalType::Ready as i32);
+                assert_eq!(request.reason, "starting");
+                reply.send(Ok(pb::EmitSignalResponse::default())).ok();
             }
+            other => panic!("expected EmitSignal, got {other:?}"),
         }
-    );
+    });
     assert!(result.is_ok());
 }
 
@@ -351,10 +379,7 @@ async fn agent_svc_emit_signal_error_propagated() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap_err().code(),
-        tonic::Code::InvalidArgument
-    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
 }
 
 #[tokio::test]
@@ -365,24 +390,21 @@ async fn agent_svc_create_checkpoint_forwards_and_returns() {
         payload: b"output".to_vec(),
         ..Default::default()
     };
-    let (result, _) = tokio::join!(
-        svc.create_checkpoint(tonic::Request::new(req)),
-        async {
-            match rx.recv().await.unwrap() {
-                AgentRequest::CreateCheckpoint { request, reply, .. } => {
-                    assert_eq!(request.r#type, "artifact");
-                    reply
-                        .send(Ok(pb::CreateCheckpointResponse {
-                            checkpoint_id: "cp-1".into(),
-                            content_hash: "sha256-abc".into(),
-                            ..Default::default()
-                        }))
-                        .ok();
-                }
-                other => panic!("expected CreateCheckpoint, got {other:?}"),
+    let (result, _) = tokio::join!(svc.create_checkpoint(tonic::Request::new(req)), async {
+        match rx.recv().await.unwrap() {
+            AgentRequest::CreateCheckpoint { request, reply, .. } => {
+                assert_eq!(request.r#type, "artifact");
+                reply
+                    .send(Ok(pb::CreateCheckpointResponse {
+                        checkpoint_id: "cp-1".into(),
+                        content_hash: "sha256-abc".into(),
+                        ..Default::default()
+                    }))
+                    .ok();
             }
+            other => panic!("expected CreateCheckpoint, got {other:?}"),
         }
-    );
+    });
     let resp = result.unwrap().into_inner();
     assert_eq!(resp.checkpoint_id, "cp-1");
     assert_eq!(resp.content_hash, "sha256-abc");
@@ -404,10 +426,7 @@ async fn agent_svc_create_checkpoint_error_propagated() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap_err().code(),
-        tonic::Code::ResourceExhausted
-    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::ResourceExhausted);
 }
 
 #[tokio::test]
@@ -454,9 +473,7 @@ async fn agent_svc_query_trail_empty() {
         async {
             match rx.recv().await.unwrap() {
                 AgentRequest::QueryTrail { reply, .. } => {
-                    reply
-                        .send(Ok(pb::QueryTrailResponse::default()))
-                        .ok();
+                    reply.send(Ok(pb::QueryTrailResponse::default())).ok();
                 }
                 _ => panic!("expected QueryTrail"),
             }
@@ -606,10 +623,7 @@ async fn highway_svc_authenticate_error_propagated() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap_err().code(),
-        tonic::Code::Unauthenticated
-    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::Unauthenticated);
 }
 
 #[tokio::test]
@@ -637,10 +651,7 @@ async fn highway_svc_inject_envelope_forwards_and_returns() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap().into_inner().envelope_id,
-        "env-inj-1"
-    );
+    assert_eq!(result.unwrap().into_inner().envelope_id, "env-inj-1");
 }
 
 #[tokio::test]
@@ -659,10 +670,7 @@ async fn highway_svc_inject_envelope_error_propagated() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap_err().code(),
-        tonic::Code::FailedPrecondition
-    );
+    assert_eq!(result.unwrap_err().code(), tonic::Code::FailedPrecondition);
 }
 
 #[tokio::test]
@@ -918,10 +926,7 @@ async fn highway_svc_get_checkpoint_success() {
             }
         }
     );
-    assert_eq!(
-        result.unwrap().into_inner().payload,
-        b"artifact data"
-    );
+    assert_eq!(result.unwrap().into_inner().payload, b"artifact data");
 }
 
 #[tokio::test]

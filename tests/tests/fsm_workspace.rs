@@ -15,7 +15,11 @@ fn workspace_fsm_idle_to_active() {
 #[test]
 fn workspace_fsm_full_lifecycle() {
     // Idle → Active
-    let s = WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    let s = WorkspaceFsm::transition(
+        WorkspaceState::Idle,
+        &WorkspaceTrigger::ReceiveFirstEnvelope,
+    )
+    .unwrap();
     assert_eq!(s, WorkspaceState::Active);
 
     // Active → Integrating
@@ -31,10 +35,7 @@ fn workspace_fsm_full_lifecycle() {
 
 #[test]
 fn workspace_fsm_illegal_transition_rejected() {
-    let result = WorkspaceFsm::transition(
-        WorkspaceState::Idle,
-        &WorkspaceTrigger::AgentComplete,
-    );
+    let result = WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::AgentComplete);
     assert!(matches!(
         result,
         Err(TransitionError::IllegalTransition { .. })
@@ -43,7 +44,8 @@ fn workspace_fsm_illegal_transition_rejected() {
 
 #[test]
 fn workspace_fsm_terminal_rejects_all() {
-    let s = WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::CoordinatorAbort).unwrap();
+    let s = WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::CoordinatorAbort)
+        .unwrap();
     assert_eq!(s, WorkspaceState::Failed);
     assert!(s.is_terminal());
 

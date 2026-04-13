@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
-use crate::messages::{AgentInbound, AgentOutbound};
 use crate::TransportError;
+use crate::messages::{AgentInbound, AgentOutbound};
 
 /// Server-side agent session for in-process transport.
 pub struct InProcessAgentSession {

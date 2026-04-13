@@ -17,7 +17,7 @@ use wacp_taxonomy::Taxonomy;
 use wacp_trail::InMemoryTrailStorage;
 use wacp_transport::wacp_v1::agent_service_client::AgentServiceClient;
 use wacp_transport::wacp_v1::highway_service_client::HighwayServiceClient;
-use wacp_transport::{start_grpc_server, AgentRequest, GrpcServerConfig, HighwayRequest};
+use wacp_transport::{AgentRequest, GrpcServerConfig, HighwayRequest, start_grpc_server};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
 

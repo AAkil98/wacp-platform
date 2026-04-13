@@ -29,13 +29,7 @@ fn gate_created_human_approves() {
 fn gate_timeout_auto_approve() {
     let mut gc = GateController::new(5_000, GateFallback::AutoApprove);
 
-    let event = gc.open_gate(
-        TaskId::from("task-1"),
-        "Task".into(),
-        "desc",
-        None,
-        None,
-    );
+    let event = gc.open_gate(TaskId::from("task-1"), "Task".into(), "desc", None, None);
 
     let resolution = gc.timeout(&event.gate_id);
     assert!(resolution.is_some());
@@ -46,13 +40,7 @@ fn gate_timeout_auto_approve() {
 fn gate_timeout_cancel() {
     let mut gc = GateController::new(5_000, GateFallback::Cancel);
 
-    let event = gc.open_gate(
-        TaskId::from("task-2"),
-        "Task 2".into(),
-        "desc",
-        None,
-        None,
-    );
+    let event = gc.open_gate(TaskId::from("task-2"), "Task 2".into(), "desc", None, None);
 
     let resolution = gc.timeout(&event.gate_id);
     assert!(resolution.is_some());

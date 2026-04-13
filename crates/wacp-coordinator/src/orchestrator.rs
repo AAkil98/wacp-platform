@@ -37,7 +37,11 @@ pub struct Coordinator {
 
 impl Coordinator {
     /// Create a new coordinator with a root workspace.
-    pub fn new(root_id: WorkspaceId, owner: UserId, event_tx: mpsc::Sender<WorkspaceEvent>) -> Self {
+    pub fn new(
+        root_id: WorkspaceId,
+        owner: UserId,
+        event_tx: mpsc::Sender<WorkspaceEvent>,
+    ) -> Self {
         Self {
             tree: WorkspaceTree::new(root_id, owner),
             task_graph: TaskGraph::new(),
@@ -142,13 +146,9 @@ impl Coordinator {
         let ws_id = request.workspace_id.clone();
 
         // Read current state from tree for precondition check
-        let current_state = self
-            .tree
-            .get(&ws_id)
-            .map(|n| n.status)
-            .ok_or_else(|| {
-                crate::migration::MigrationError::WorkspaceNotFound(ws_id.to_string())
-            })?;
+        let current_state = self.tree.get(&ws_id).map(|n| n.status).ok_or_else(|| {
+            crate::migration::MigrationError::WorkspaceNotFound(ws_id.to_string())
+        })?;
 
         self.migration
             .start(request, current_state, old_agent, now_ms)?;
@@ -189,7 +189,10 @@ impl Coordinator {
         error: String,
         step: u32,
     ) -> Option<crate::migration::MigrationContext> {
-        let ctx = self.migration.fail(workspace_id.as_ref(), error, step).ok()?;
+        let ctx = self
+            .migration
+            .fail(workspace_id.as_ref(), error, step)
+            .ok()?;
 
         if let Some(handle) = self.workspace_handles.get(workspace_id.as_ref()) {
             let _ = handle

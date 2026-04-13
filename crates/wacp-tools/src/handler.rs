@@ -183,9 +183,15 @@ mod tests {
 
     #[test]
     fn error_code_display() {
-        assert_eq!(ToolErrorCode::ValidationFailed.to_string(), "validation_failed");
+        assert_eq!(
+            ToolErrorCode::ValidationFailed.to_string(),
+            "validation_failed"
+        );
         assert_eq!(ToolErrorCode::Timeout.to_string(), "timeout");
-        assert_eq!(ToolErrorCode::ExecutionFailed.to_string(), "execution_failed");
+        assert_eq!(
+            ToolErrorCode::ExecutionFailed.to_string(),
+            "execution_failed"
+        );
         assert_eq!(ToolErrorCode::InternalError.to_string(), "internal_error");
         assert_eq!(ToolErrorCode::Unavailable.to_string(), "unavailable");
         assert_eq!(ToolErrorCode::Overloaded.to_string(), "overloaded");
@@ -233,7 +239,10 @@ mod tests {
     #[test]
     fn error_display_format() {
         let e = ToolError::validation("missing required field 'path'");
-        assert_eq!(e.to_string(), "validation_failed: missing required field 'path'");
+        assert_eq!(
+            e.to_string(),
+            "validation_failed: missing required field 'path'"
+        );
     }
 
     // --- ToolContext ---
@@ -255,9 +264,8 @@ mod tests {
 
     #[tokio::test]
     async fn fn_handler_success() {
-        let handler = |_ctx: &ToolContext, args: serde_json::Value| async move {
-            Ok(json!({"echo": args}))
-        };
+        let handler =
+            |_ctx: &ToolContext, args: serde_json::Value| async move { Ok(json!({"echo": args})) };
         let ctx = test_context();
         let result = handler.execute(&ctx, json!({"x": 1})).await.unwrap();
         assert_eq!(result, json!({"echo": {"x": 1}}));

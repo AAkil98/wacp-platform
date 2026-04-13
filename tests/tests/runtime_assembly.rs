@@ -6,9 +6,8 @@ use wacp_coordinator::Coordinator;
 use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::Taxonomy;
-use wacp_trail::{compute_chain_hash, ChainHash, InMemoryTrailStorage, TrailStorage};
+use wacp_trail::{ChainHash, InMemoryTrailStorage, TrailStorage, compute_chain_hash};
 use wacp_types::*;
-
 
 /// Replicate Runtime::init_in_memory from individual crates.
 fn assemble_runtime() -> (
@@ -23,11 +22,7 @@ fn assemble_runtime() -> (
     let permissions = PermissionEngine::new(&taxonomy);
 
     let (tx, rx) = tokio::sync::mpsc::channel(256);
-    let coordinator = Coordinator::new(
-        WorkspaceId::from("ws-root"),
-        UserId::from("system"),
-        tx,
-    );
+    let coordinator = Coordinator::new(WorkspaceId::from("ws-root"), UserId::from("system"), tx);
 
     (coordinator, taxonomy, permissions, rx)
 }
@@ -45,12 +40,14 @@ async fn full_initialization_sequence() {
     assert!(coord.tree.get(&WorkspaceId::from("ws-root")).is_some());
 
     // Permission engine evaluates base actions
-    assert!(engine
-        .evaluate(&wacp_permissions::Action::EmitSignal {
-            role: "worker".into(),
-            signal_type: SignalType::Ready,
-        })
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&wacp_permissions::Action::EmitSignal {
+                role: "worker".into(),
+                signal_type: SignalType::Ready,
+            })
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -62,7 +59,9 @@ async fn init_dispatch_activate_shutdown() {
 
     // Activate ws-1
     let envelope = make_envelope("dir-1", "ws-root", "ws-1", "directive");
-    coord.route_envelope(&WorkspaceId::from("ws-1"), envelope).await;
+    coord
+        .route_envelope(&WorkspaceId::from("ws-1"), envelope)
+        .await;
     drain_events(&mut coord, &mut rx, 5, 200).await;
 
     assert_eq!(
@@ -91,7 +90,8 @@ fn recovery_roundtrip_with_trail() {
     let mut trail = InMemoryTrailStorage::new();
     let genesis = ChainHash::GENESIS;
     let h1 = {
-        let bytes = br#"{"event_type":"workspace_created","workspace_id":"ws-1","new_state":"idle"}"#;
+        let bytes =
+            br#"{"event_type":"workspace_created","workspace_id":"ws-1","new_state":"idle"}"#;
         let h = compute_chain_hash(&genesis, bytes);
         trail.append(bytes, h.as_ref()).unwrap();
         h
@@ -134,12 +134,14 @@ checkpoint_types: []
     assert!(taxonomy.is_valid_role("reviewer"));
 
     // Reviewer can emit signals inherited from observer
-    assert!(engine
-        .evaluate(&wacp_permissions::Action::EmitSignal {
-            role: "reviewer",
-            signal_type: SignalType::Ready,
-        })
-        .is_ok());
+    assert!(
+        engine
+            .evaluate(&wacp_permissions::Action::EmitSignal {
+                role: "reviewer",
+                signal_type: SignalType::Ready,
+            })
+            .is_ok()
+    );
 
     // "review" is a registered envelope type
     assert!(taxonomy.is_valid_envelope_type("review"));

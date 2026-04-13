@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
@@ -41,14 +41,22 @@ struct JsonRpcError {
 
 impl JsonRpcResponse {
     fn success(id: Option<serde_json::Value>, result: serde_json::Value) -> Self {
-        Self { jsonrpc: "2.0", result: Some(result), error: None, id }
+        Self {
+            jsonrpc: "2.0",
+            result: Some(result),
+            error: None,
+            id,
+        }
     }
 
     fn error(id: Option<serde_json::Value>, code: i32, message: impl Into<String>) -> Self {
         Self {
             jsonrpc: "2.0",
             result: None,
-            error: Some(JsonRpcError { code, message: message.into() }),
+            error: Some(JsonRpcError {
+                code,
+                message: message.into(),
+            }),
             id,
         }
     }
@@ -93,20 +101,32 @@ async fn handle_socket(mut socket: WebSocket, backend: Arc<dyn GatewayBackend>) 
             Ok(req) => req,
             Err(e) => {
                 let resp = JsonRpcResponse::error(None, -32700, format!("Parse error: {e}"));
-                let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
+                let _ = socket
+                    .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                    .await;
                 continue;
             }
         };
 
         if request.jsonrpc != "2.0" {
-            let resp = JsonRpcResponse::error(request.id, -32600, "Invalid Request: jsonrpc must be '2.0'");
-            let _ = socket.send(Message::Text(serde_json::to_string(&resp).unwrap().into())).await;
+            let resp = JsonRpcResponse::error(
+                request.id,
+                -32600,
+                "Invalid Request: jsonrpc must be '2.0'",
+            );
+            let _ = socket
+                .send(Message::Text(serde_json::to_string(&resp).unwrap().into()))
+                .await;
             continue;
         }
 
         // Dispatch method
         let response = dispatch_method(&request, &backend).await;
-        let _ = socket.send(Message::Text(serde_json::to_string(&response).unwrap().into())).await;
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&response).unwrap().into(),
+            ))
+            .await;
     }
 }
 
@@ -119,38 +139,51 @@ async fn dispatch_method(
 
     match request.method.as_str() {
         "submit_goal" => {
-            let description = params.get("description").and_then(|v| v.as_str()).unwrap_or("");
-            match backend.submit_goal(wacp_v1::SubmitGoalRequest {
-                description: description.into(),
-                context: vec![],
-                client_request_id: String::new(),
-            }).await {
-                Ok(resp) => JsonRpcResponse::success(id, serde_json::json!({
-                    "goal_id": resp.goal_id,
-                    "workspace_id": resp.root_workspace_id,
-                })),
+            let description = params
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            match backend
+                .submit_goal(wacp_v1::SubmitGoalRequest {
+                    description: description.into(),
+                    context: vec![],
+                    client_request_id: String::new(),
+                })
+                .await
+            {
+                Ok(resp) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
+                        "goal_id": resp.goal_id,
+                        "workspace_id": resp.root_workspace_id,
+                    }),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
 
-        "get_ready_tasks" => {
-            match backend.get_ready_tasks().await {
-                Ok(resp) => {
-                    let tasks: Vec<serde_json::Value> = resp.tasks.iter().map(|t| {
+        "get_ready_tasks" => match backend.get_ready_tasks().await {
+            Ok(resp) => {
+                let tasks: Vec<serde_json::Value> = resp.tasks.iter().map(|t| {
                         serde_json::json!({"task_id": t.task_id, "name": t.name, "status": t.status})
                     }).collect();
-                    JsonRpcResponse::success(id, serde_json::json!(tasks))
-                }
-                Err(e) => JsonRpcResponse::error(id, -32000, e.message),
+                JsonRpcResponse::success(id, serde_json::json!(tasks))
             }
-        }
+            Err(e) => JsonRpcResponse::error(id, -32000, e.message),
+        },
 
         "get_workspace" => {
-            let ws_id = params.get("workspace_id").and_then(|v| v.as_str()).unwrap_or("");
+            let ws_id = params
+                .get("workspace_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             match backend.get_workspace(ws_id).await {
-                Ok(resp) => JsonRpcResponse::success(id, serde_json::json!({
-                    "workspace_id": resp.id, "state": resp.state, "role": resp.role,
-                })),
+                Ok(resp) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
+                        "workspace_id": resp.id, "state": resp.state, "role": resp.role,
+                    }),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
@@ -158,44 +191,70 @@ async fn dispatch_method(
         "dispatch" => {
             let task_id = params.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
             let role = params.get("role").and_then(|v| v.as_str()).unwrap_or("");
-            match backend.dispatch(wacp_v1::DispatchRequest {
-                task_id: task_id.into(),
-                role: role.into(),
-                directive_payload: vec![],
-                tools: vec![],
-                budget: None,
-                client_request_id: String::new(),
-            }).await {
-                Ok(resp) => JsonRpcResponse::success(id, serde_json::json!({
-                    "workspace_id": resp.workspace_id, "task_id": resp.task_id,
-                })),
+            match backend
+                .dispatch(wacp_v1::DispatchRequest {
+                    task_id: task_id.into(),
+                    role: role.into(),
+                    directive_payload: vec![],
+                    tools: vec![],
+                    budget: None,
+                    client_request_id: String::new(),
+                })
+                .await
+            {
+                Ok(resp) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
+                        "workspace_id": resp.workspace_id, "task_id": resp.task_id,
+                    }),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
 
         "abort_workspace" => {
-            let ws_id = params.get("workspace_id").and_then(|v| v.as_str()).unwrap_or("");
+            let ws_id = params
+                .get("workspace_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let reason = params.get("reason").and_then(|v| v.as_str()).unwrap_or("");
-            match backend.abort_workspace(wacp_v1::AbortWorkspaceRequest {
-                workspace_id: ws_id.into(), reason: reason.into(), client_request_id: String::new(),
-            }).await {
+            match backend
+                .abort_workspace(wacp_v1::AbortWorkspaceRequest {
+                    workspace_id: ws_id.into(),
+                    reason: reason.into(),
+                    client_request_id: String::new(),
+                })
+                .await
+            {
                 Ok(_) => JsonRpcResponse::success(id, serde_json::json!({"ok": true})),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
 
         "inject_envelope" => {
-            let ws_id = params.get("workspace_id").and_then(|v| v.as_str()).unwrap_or("");
-            let env_type = params.get("type").and_then(|v| v.as_str()).unwrap_or("directive");
+            let ws_id = params
+                .get("workspace_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let env_type = params
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("directive");
             let payload = params.get("payload").and_then(|v| v.as_str()).unwrap_or("");
-            match backend.inject_envelope(wacp_v1::InjectEnvelopeRequest {
-                to_workspace: ws_id.into(),
-                r#type: env_type.into(),
-                payload: payload.as_bytes().to_vec(),
-                priority: 0,
-                client_request_id: String::new(),
-            }).await {
-                Ok(resp) => JsonRpcResponse::success(id, serde_json::json!({"envelope_id": resp.envelope_id})),
+            match backend
+                .inject_envelope(wacp_v1::InjectEnvelopeRequest {
+                    to_workspace: ws_id.into(),
+                    r#type: env_type.into(),
+                    payload: payload.as_bytes().to_vec(),
+                    priority: 0,
+                    client_request_id: String::new(),
+                })
+                .await
+            {
+                Ok(resp) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({"envelope_id": resp.envelope_id}),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
@@ -205,50 +264,69 @@ async fn dispatch_method(
             req.limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as u32;
             match backend.query_trail(req).await {
                 Ok(resp) => {
-                    let entries: Vec<serde_json::Value> = resp.entries.iter().map(|e| {
-                        serde_json::json!({"id": e.id, "event_type": e.event_type})
-                    }).collect();
+                    let entries: Vec<serde_json::Value> = resp
+                        .entries
+                        .iter()
+                        .map(|e| serde_json::json!({"id": e.id, "event_type": e.event_type}))
+                        .collect();
                     JsonRpcResponse::success(id, serde_json::json!(entries))
                 }
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
 
-        "get_allocatable" => {
-            match backend.get_allocatable().await {
-                Ok(resp) => {
-                    let b = resp.remaining.unwrap_or_default();
-                    JsonRpcResponse::success(id, serde_json::json!({
+        "get_allocatable" => match backend.get_allocatable().await {
+            Ok(resp) => {
+                let b = resp.remaining.unwrap_or_default();
+                JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
                         "max_tokens": b.max_tokens, "max_cost_micros": b.max_cost_micros,
-                    }))
-                }
-                Err(e) => JsonRpcResponse::error(id, -32000, e.message),
+                    }),
+                )
             }
-        }
+            Err(e) => JsonRpcResponse::error(id, -32000, e.message),
+        },
 
         "trigger_integration" => {
-            let ws_id = params.get("workspace_id").and_then(|v| v.as_str()).unwrap_or("");
-            match backend.trigger_integration(wacp_v1::TriggerIntegrationRequest {
-                workspace_id: ws_id.into(), client_request_id: String::new(),
-            }).await {
-                Ok(resp) => JsonRpcResponse::success(id, serde_json::json!({
-                    "result": resp.result, "detail": resp.detail,
-                })),
+            let ws_id = params
+                .get("workspace_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            match backend
+                .trigger_integration(wacp_v1::TriggerIntegrationRequest {
+                    workspace_id: ws_id.into(),
+                    client_request_id: String::new(),
+                })
+                .await
+            {
+                Ok(resp) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
+                        "result": resp.result, "detail": resp.detail,
+                    }),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
 
         "subscribe_session_trail" => {
-            let session_id = params.get("session_id").and_then(|v| v.as_str()).unwrap_or("");
+            let session_id = params
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if session_id.is_empty() {
                 return JsonRpcResponse::error(id, -32602, "session_id is required");
             }
             // Validate the session exists via the workspace backend.
             match backend.get_workspace(session_id).await {
-                Ok(_) => JsonRpcResponse::success(id, serde_json::json!({
-                    "subscribed": true,
-                    "session_id": session_id,
-                })),
+                Ok(_) => JsonRpcResponse::success(
+                    id,
+                    serde_json::json!({
+                        "subscribed": true,
+                        "session_id": session_id,
+                    }),
+                ),
                 Err(e) => JsonRpcResponse::error(id, -32000, e.message),
             }
         }
@@ -269,7 +347,8 @@ mod tests {
 
     #[test]
     fn jsonrpc_success_format() {
-        let resp = JsonRpcResponse::success(Some(serde_json::json!(1)), serde_json::json!({"ok": true}));
+        let resp =
+            JsonRpcResponse::success(Some(serde_json::json!(1)), serde_json::json!({"ok": true}));
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["jsonrpc"], "2.0");
         assert_eq!(json["result"]["ok"], true);
@@ -290,7 +369,8 @@ mod tests {
 
     #[test]
     fn jsonrpc_notification_has_no_id() {
-        let resp = JsonRpcResponse::notification("trail_entry", serde_json::json!({"event": "test"}));
+        let resp =
+            JsonRpcResponse::notification("trail_entry", serde_json::json!({"event": "test"}));
         let json = serde_json::to_value(&resp).unwrap();
         assert!(json.get("id").is_none());
     }

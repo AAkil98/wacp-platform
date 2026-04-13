@@ -85,9 +85,8 @@ pub async fn execute_in_process(
         "config": config,
     });
 
-    let input_bytes = serde_json::to_vec(&input).map_err(|e| {
-        ToolError::internal(format!("failed to serialize input: {e}"))
-    })?;
+    let input_bytes = serde_json::to_vec(&input)
+        .map_err(|e| ToolError::internal(format!("failed to serialize input: {e}")))?;
 
     let mut child = tokio::process::Command::new(program)
         .stdin(std::process::Stdio::piped())
@@ -99,9 +98,10 @@ pub async fn execute_in_process(
 
     // Write input to stdin
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(&input_bytes).await.map_err(|e| {
-            ToolError::internal(format!("failed to write to stdin: {e}"))
-        })?;
+        stdin
+            .write_all(&input_bytes)
+            .await
+            .map_err(|e| ToolError::internal(format!("failed to write to stdin: {e}")))?;
         // Drop stdin to signal EOF
     }
 
@@ -118,11 +118,8 @@ pub async fn execute_in_process(
 
     if output.status.success() {
         // Parse stdout as JSON result
-        serde_json::from_slice(&output.stdout).map_err(|e| {
-            ToolError::internal(format!(
-                "process output is not valid JSON: {e}"
-            ))
-        })
+        serde_json::from_slice(&output.stdout)
+            .map_err(|e| ToolError::internal(format!("process output is not valid JSON: {e}")))
     } else {
         // Non-zero exit → error
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -164,7 +161,10 @@ mod tests {
 
     #[test]
     fn override_none_wins() {
-        assert_eq!(select_policy(true, Some(SandboxLevel::None)), SandboxLevel::None);
+        assert_eq!(
+            select_policy(true, Some(SandboxLevel::None)),
+            SandboxLevel::None
+        );
     }
 
     #[test]
@@ -187,7 +187,11 @@ mod tests {
 
     #[test]
     fn sandbox_level_serde_roundtrip() {
-        let levels = vec![SandboxLevel::None, SandboxLevel::Process, SandboxLevel::Container];
+        let levels = vec![
+            SandboxLevel::None,
+            SandboxLevel::Process,
+            SandboxLevel::Container,
+        ];
         for level in levels {
             let json = serde_json::to_string(&level).unwrap();
             let parsed: SandboxLevel = serde_json::from_str(&json).unwrap();
@@ -197,9 +201,18 @@ mod tests {
 
     #[test]
     fn sandbox_level_serde_snake_case() {
-        assert_eq!(serde_json::to_string(&SandboxLevel::None).unwrap(), r#""none""#);
-        assert_eq!(serde_json::to_string(&SandboxLevel::Process).unwrap(), r#""process""#);
-        assert_eq!(serde_json::to_string(&SandboxLevel::Container).unwrap(), r#""container""#);
+        assert_eq!(
+            serde_json::to_string(&SandboxLevel::None).unwrap(),
+            r#""none""#
+        );
+        assert_eq!(
+            serde_json::to_string(&SandboxLevel::Process).unwrap(),
+            r#""process""#
+        );
+        assert_eq!(
+            serde_json::to_string(&SandboxLevel::Container).unwrap(),
+            r#""container""#
+        );
     }
 
     // --- Process execution ---

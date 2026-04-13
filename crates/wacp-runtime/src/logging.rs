@@ -18,8 +18,8 @@ pub enum LoggingError {
 
 /// Initialize the global tracing subscriber. Must be called once, before any other subsystem.
 pub fn init_logging(config: &LoggingConfig) -> Result<(), LoggingError> {
-    let env_filter = EnvFilter::try_new(&config.level)
-        .map_err(|e| LoggingError::InvalidLevel(e.to_string()))?;
+    let env_filter =
+        EnvFilter::try_new(&config.level).map_err(|e| LoggingError::InvalidLevel(e.to_string()))?;
 
     let builder = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
@@ -34,10 +34,7 @@ pub fn init_logging(config: &LoggingConfig) -> Result<(), LoggingError> {
         }
         ("json", "file") => {
             let file = open_log_file(&config.file)?;
-            builder
-                .json()
-                .with_writer(Mutex::new(file))
-                .init();
+            builder.json().with_writer(Mutex::new(file)).init();
         }
         ("pretty", "stderr") => {
             builder.pretty().with_writer(std::io::stderr).init();

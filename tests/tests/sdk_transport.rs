@@ -18,7 +18,10 @@ async fn agent_bind_via_in_process() {
 
     let msg = server.recv().await.unwrap();
     match msg {
-        AgentInbound::Bind { workspace_id, auth_token } => {
+        AgentInbound::Bind {
+            workspace_id,
+            auth_token,
+        } => {
             assert_eq!(workspace_id, WorkspaceId::from("ws-sdk-1"));
             assert_eq!(auth_token, "sdk-token");
         }
@@ -36,7 +39,9 @@ async fn agent_bind_via_in_process() {
         .unwrap();
 
     let resp = client.recv().await.unwrap();
-    assert!(matches!(resp, AgentOutbound::BindResponse { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-sdk-1")));
+    assert!(
+        matches!(resp, AgentOutbound::BindResponse { workspace_id, .. } if workspace_id == WorkspaceId::from("ws-sdk-1"))
+    );
 }
 
 #[tokio::test]
@@ -54,7 +59,13 @@ async fn signal_checkpoint_lifecycle() {
         .unwrap();
 
     let msg = server.recv().await.unwrap();
-    assert!(matches!(msg, AgentInbound::EmitSignal { signal_type: SignalType::Ready, .. }));
+    assert!(matches!(
+        msg,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Ready,
+            ..
+        }
+    ));
 
     // Create checkpoint
     client
@@ -70,7 +81,9 @@ async fn signal_checkpoint_lifecycle() {
         .unwrap();
 
     let msg = server.recv().await.unwrap();
-    assert!(matches!(msg, AgentInbound::CreateCheckpoint { checkpoint_type, .. } if checkpoint_type == "artifact"));
+    assert!(
+        matches!(msg, AgentInbound::CreateCheckpoint { checkpoint_type, .. } if checkpoint_type == "artifact")
+    );
 
     // Signal complete
     client
@@ -83,7 +96,13 @@ async fn signal_checkpoint_lifecycle() {
         .unwrap();
 
     let msg = server.recv().await.unwrap();
-    assert!(matches!(msg, AgentInbound::EmitSignal { signal_type: SignalType::Complete, .. }));
+    assert!(matches!(
+        msg,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Complete,
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
@@ -110,8 +129,20 @@ async fn concurrent_agents_separate_transports() {
     let m1 = s1.recv().await.unwrap();
     let m2 = s2.recv().await.unwrap();
 
-    assert!(matches!(m1, AgentInbound::EmitSignal { signal_type: SignalType::Ready, .. }));
-    assert!(matches!(m2, AgentInbound::EmitSignal { signal_type: SignalType::Started, .. }));
+    assert!(matches!(
+        m1,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Ready,
+            ..
+        }
+    ));
+    assert!(matches!(
+        m2,
+        AgentInbound::EmitSignal {
+            signal_type: SignalType::Started,
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
@@ -149,7 +180,11 @@ async fn query_trail_via_transport() {
 
     let msg = server.recv().await.unwrap();
     match msg {
-        AgentInbound::QueryTrail { workspace_id, event_type, limit } => {
+        AgentInbound::QueryTrail {
+            workspace_id,
+            event_type,
+            limit,
+        } => {
             assert_eq!(workspace_id, Some(WorkspaceId::from("ws-1")));
             assert_eq!(event_type, Some("signal_emitted".into()));
             assert_eq!(limit, 50);

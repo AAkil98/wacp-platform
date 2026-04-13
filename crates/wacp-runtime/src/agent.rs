@@ -1,6 +1,6 @@
+use wacp_transport::TransportError;
 use wacp_transport::in_process::InProcessAgentClient;
 use wacp_transport::messages::{AgentInbound, AgentOutbound};
-use wacp_transport::TransportError;
 use wacp_types::*;
 
 /// Test agent — wraps in-process transport for clean API in tests.

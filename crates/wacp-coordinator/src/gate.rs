@@ -91,11 +91,7 @@ impl GateController {
     }
 
     /// Resolve a gate via human response. Returns None if already resolved.
-    pub fn resolve(
-        &mut self,
-        gate_id: &GateId,
-        decision: GateDecision,
-    ) -> Option<GateResolution> {
+    pub fn resolve(&mut self, gate_id: &GateId, decision: GateDecision) -> Option<GateResolution> {
         let gate = self.pending.remove(gate_id.as_ref())?;
         let _ = gate; // consumed
 

@@ -22,7 +22,11 @@ impl StreamHandle {
         model: String,
         request_id: Option<String>,
     ) -> Self {
-        Self { inner: stream, model, request_id }
+        Self {
+            inner: stream,
+            model,
+            request_id,
+        }
     }
 
     /// Consume the handle and return the underlying stream.
@@ -99,7 +103,9 @@ pub fn parse_anthropic_event(event_type: &str, data: &str) -> Option<StreamEvent
             match delta_type {
                 "text_delta" => {
                     let text = delta.get("text")?.as_str()?;
-                    Some(StreamEvent::ContentDelta { delta: text.to_string() })
+                    Some(StreamEvent::ContentDelta {
+                        delta: text.to_string(),
+                    })
                 }
                 "input_json_delta" => {
                     let partial = delta.get("partial_json")?.as_str()?;
@@ -119,8 +125,14 @@ pub fn parse_anthropic_event(event_type: &str, data: &str) -> Option<StreamEvent
             if block_type == "tool_use" {
                 Some(StreamEvent::ToolCallDelta {
                     index: json.get("index")?.as_u64()? as u32,
-                    id: content_block.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    name: content_block.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    id: content_block
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    name: content_block
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
                     arguments_delta: None,
                 })
             } else {
@@ -129,9 +141,15 @@ pub fn parse_anthropic_event(event_type: &str, data: &str) -> Option<StreamEvent
         }
         "message_delta" => {
             if let Some(usage) = json.get("usage") {
-                let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let output = usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
                 Some(StreamEvent::Usage {
-                    usage: TokenUsage { input_tokens: 0, output_tokens: output },
+                    usage: TokenUsage {
+                        input_tokens: 0,
+                        output_tokens: output,
+                    },
                 })
             } else {
                 None
@@ -139,9 +157,15 @@ pub fn parse_anthropic_event(event_type: &str, data: &str) -> Option<StreamEvent
         }
         "message_start" => {
             if let Some(usage) = json.get("message").and_then(|m| m.get("usage")) {
-                let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let input = usage
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
                 Some(StreamEvent::Usage {
-                    usage: TokenUsage { input_tokens: input, output_tokens: 0 },
+                    usage: TokenUsage {
+                        input_tokens: input,
+                        output_tokens: 0,
+                    },
                 })
             } else {
                 None
@@ -158,11 +182,20 @@ pub fn parse_openai_event(data: &str) -> Option<StreamEvent> {
 
     // Check for usage in the response (sent in the final chunk)
     if let Some(usage) = json.get("usage") {
-        let input = usage.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-        let output = usage.get("completion_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+        let input = usage
+            .get("prompt_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let output = usage
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
         if input > 0 || output > 0 {
             return Some(StreamEvent::Usage {
-                usage: TokenUsage { input_tokens: input, output_tokens: output },
+                usage: TokenUsage {
+                    input_tokens: input,
+                    output_tokens: output,
+                },
             });
         }
     }
@@ -174,7 +207,9 @@ pub fn parse_openai_event(data: &str) -> Option<StreamEvent> {
     // Text content
     if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
         if !content.is_empty() {
-            return Some(StreamEvent::ContentDelta { delta: content.to_string() });
+            return Some(StreamEvent::ContentDelta {
+                delta: content.to_string(),
+            });
         }
     }
 
@@ -184,8 +219,16 @@ pub fn parse_openai_event(data: &str) -> Option<StreamEvent> {
             return Some(StreamEvent::ToolCallDelta {
                 index: tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                 id: tc.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                name: tc.get("function").and_then(|f| f.get("name")).and_then(|v| v.as_str()).map(|s| s.to_string()),
-                arguments_delta: tc.get("function").and_then(|f| f.get("arguments")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                name: tc
+                    .get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                arguments_delta: tc
+                    .get("function")
+                    .and_then(|f| f.get("arguments"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             });
         }
     }
@@ -218,14 +261,22 @@ pub fn parse_ndjson_event(data: &str) -> Option<StreamEvent> {
     // Content delta
     if let Some(response) = json.get("response").and_then(|v| v.as_str()) {
         if !response.is_empty() {
-            return Some(StreamEvent::ContentDelta { delta: response.to_string() });
+            return Some(StreamEvent::ContentDelta {
+                delta: response.to_string(),
+            });
         }
     }
 
     // Also handle "message" format (Ollama chat API)
-    if let Some(content) = json.get("message").and_then(|m| m.get("content")).and_then(|v| v.as_str()) {
+    if let Some(content) = json
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|v| v.as_str())
+    {
         if !content.is_empty() {
-            return Some(StreamEvent::ContentDelta { delta: content.to_string() });
+            return Some(StreamEvent::ContentDelta {
+                delta: content.to_string(),
+            });
         }
     }
 
@@ -290,7 +341,9 @@ mod tests {
 
     #[test]
     fn stream_event_content_delta_serde() {
-        let event = StreamEvent::ContentDelta { delta: "hello".into() };
+        let event = StreamEvent::ContentDelta {
+            delta: "hello".into(),
+        };
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["type"], "content_delta");
         assert_eq!(json["delta"], "hello");
@@ -299,7 +352,10 @@ mod tests {
     #[test]
     fn stream_event_usage_serde() {
         let event = StreamEvent::Usage {
-            usage: TokenUsage { input_tokens: 100, output_tokens: 50 },
+            usage: TokenUsage {
+                input_tokens: 100,
+                output_tokens: 50,
+            },
         };
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["type"], "usage");
@@ -321,7 +377,12 @@ mod tests {
             "content_block_delta",
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"#,
         );
-        assert_eq!(event, Some(StreamEvent::ContentDelta { delta: "Hello".into() }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::ContentDelta {
+                delta: "Hello".into()
+            })
+        );
     }
 
     #[test]
@@ -330,12 +391,15 @@ mod tests {
             "content_block_start",
             r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call_1","name":"read_file","input":{}}}"#,
         );
-        assert_eq!(event, Some(StreamEvent::ToolCallDelta {
-            index: 1,
-            id: Some("call_1".into()),
-            name: Some("read_file".into()),
-            arguments_delta: None,
-        }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::ToolCallDelta {
+                index: 1,
+                id: Some("call_1".into()),
+                name: Some("read_file".into()),
+                arguments_delta: None,
+            })
+        );
     }
 
     #[test]
@@ -344,7 +408,13 @@ mod tests {
             "content_block_delta",
             r#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}"#,
         );
-        assert!(matches!(event, Some(StreamEvent::ToolCallDelta { arguments_delta: Some(_), .. })));
+        assert!(matches!(
+            event,
+            Some(StreamEvent::ToolCallDelta {
+                arguments_delta: Some(_),
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -353,9 +423,15 @@ mod tests {
             "message_delta",
             r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42}}"#,
         );
-        assert_eq!(event, Some(StreamEvent::Usage {
-            usage: TokenUsage { input_tokens: 0, output_tokens: 42 },
-        }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::Usage {
+                usage: TokenUsage {
+                    input_tokens: 0,
+                    output_tokens: 42
+                },
+            })
+        );
     }
 
     #[test]
@@ -364,9 +440,15 @@ mod tests {
             "message_start",
             r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":100,"output_tokens":0}}}"#,
         );
-        assert_eq!(event, Some(StreamEvent::Usage {
-            usage: TokenUsage { input_tokens: 100, output_tokens: 0 },
-        }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::Usage {
+                usage: TokenUsage {
+                    input_tokens: 100,
+                    output_tokens: 0
+                },
+            })
+        );
     }
 
     #[test]
@@ -385,10 +467,13 @@ mod tests {
 
     #[test]
     fn openai_content_delta() {
-        let event = parse_openai_event(
-            r#"{"choices":[{"index":0,"delta":{"content":"Hello"}}]}"#,
+        let event = parse_openai_event(r#"{"choices":[{"index":0,"delta":{"content":"Hello"}}]}"#);
+        assert_eq!(
+            event,
+            Some(StreamEvent::ContentDelta {
+                delta: "Hello".into()
+            })
         );
-        assert_eq!(event, Some(StreamEvent::ContentDelta { delta: "Hello".into() }));
     }
 
     #[test]
@@ -396,12 +481,15 @@ mod tests {
         let event = parse_openai_event(
             r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read_file","arguments":"{\"path\":"}}]}}]}"#,
         );
-        assert_eq!(event, Some(StreamEvent::ToolCallDelta {
-            index: 0,
-            id: Some("call_1".into()),
-            name: Some("read_file".into()),
-            arguments_delta: Some("{\"path\":".into()),
-        }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::ToolCallDelta {
+                index: 0,
+                id: Some("call_1".into()),
+                name: Some("read_file".into()),
+                arguments_delta: Some("{\"path\":".into()),
+            })
+        );
     }
 
     #[test]
@@ -409,9 +497,15 @@ mod tests {
         let event = parse_openai_event(
             r#"{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50}}"#,
         );
-        assert_eq!(event, Some(StreamEvent::Usage {
-            usage: TokenUsage { input_tokens: 100, output_tokens: 50 },
-        }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::Usage {
+                usage: TokenUsage {
+                    input_tokens: 100,
+                    output_tokens: 50
+                },
+            })
+        );
     }
 
     #[test]
@@ -427,17 +521,26 @@ mod tests {
     #[test]
     fn ndjson_content_delta() {
         let event = parse_ndjson_event(r#"{"response":"Hello","done":false}"#);
-        assert_eq!(event, Some(StreamEvent::ContentDelta { delta: "Hello".into() }));
+        assert_eq!(
+            event,
+            Some(StreamEvent::ContentDelta {
+                delta: "Hello".into()
+            })
+        );
     }
 
     #[test]
     fn ndjson_done_with_usage() {
-        let event = parse_ndjson_event(
-            r#"{"done":true,"prompt_eval_count":50,"eval_count":30}"#,
+        let event = parse_ndjson_event(r#"{"done":true,"prompt_eval_count":50,"eval_count":30}"#);
+        assert_eq!(
+            event,
+            Some(StreamEvent::Usage {
+                usage: TokenUsage {
+                    input_tokens: 50,
+                    output_tokens: 30
+                },
+            })
         );
-        assert_eq!(event, Some(StreamEvent::Usage {
-            usage: TokenUsage { input_tokens: 50, output_tokens: 30 },
-        }));
     }
 
     #[test]
@@ -448,10 +551,12 @@ mod tests {
 
     #[test]
     fn ndjson_chat_format() {
-        let event = parse_ndjson_event(
-            r#"{"message":{"role":"assistant","content":"Hi"},"done":false}"#,
+        let event =
+            parse_ndjson_event(r#"{"message":{"role":"assistant","content":"Hi"},"done":false}"#);
+        assert_eq!(
+            event,
+            Some(StreamEvent::ContentDelta { delta: "Hi".into() })
         );
-        assert_eq!(event, Some(StreamEvent::ContentDelta { delta: "Hi".into() }));
     }
 
     #[test]

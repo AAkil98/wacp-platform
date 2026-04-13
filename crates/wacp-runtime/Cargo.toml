@@ -29,10 +29,6 @@ prometheus = { workspace = true }
 sha2 = { workspace = true }
 axum = { workspace = true }
 
-[[bin]]
-name = "wacp-mock-runtime"
-path = "src/bin/mock.rs"
-
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = "3"

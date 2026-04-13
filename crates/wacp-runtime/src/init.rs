@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
-use wacp_coordinator::{Coordinator, DispatchRequest};
+use wacp_coordinator::{Coordinator, DispatchRequest, GateController, GateFallback};
 use wacp_permissions::PermissionEngine;
 use wacp_recovery::RecoveryEngine;
 use wacp_taxonomy::{Taxonomy, VerticalManifest};
@@ -85,6 +85,12 @@ pub struct Runtime {
 
     // Trail index for historical trail queries.
     trail_index: TrailIndex,
+
+    // Gate controller for pending task approval gates.
+    gate_controller: GateController,
+
+    // Escalation ID -> workspace ID mapping for routing responses.
+    escalation_index: HashMap<String, String>,
 
     // Monotonic counters for ID generation.
     next_goal_id: u64,
@@ -250,6 +256,8 @@ impl Runtime {
             checkpoint_storage,
             checkpoint_index: HashMap::new(),
             trail_index,
+            gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
+            escalation_index: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -297,6 +305,8 @@ impl Runtime {
             checkpoint_storage: Arc::new(InMemoryCheckpointStorage::new()),
             checkpoint_index: HashMap::new(),
             trail_index,
+            gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
+            escalation_index: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -389,8 +399,11 @@ impl Runtime {
                         .map(|n| n.owner.to_string())
                         .unwrap_or_default();
                     self.stream_seq += 1;
+                    let esc_id = format!("esc-{}", self.stream_seq);
+                    self.escalation_index
+                        .insert(esc_id.clone(), signal.workspace_id.to_string());
                     let esc_ev = Ok(wacp_v1::EscalationEvent {
-                        escalation_id: format!("esc-{}", self.stream_seq),
+                        escalation_id: esc_id,
                         workspace_id: signal.workspace_id.to_string(),
                         owner,
                         context: signal.context.clone().unwrap_or_default(),
@@ -856,18 +869,120 @@ impl Runtime {
                 let response = wacp_transport::wacp_v1::TaskGraphView { tasks: vec![] };
                 let _ = reply.send(Ok(response));
             }
-            HighwayRequest::InjectEnvelope { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::unimplemented(
-                    "envelope injection via gRPC pending full wiring",
-                )));
+            HighwayRequest::InjectEnvelope { request, reply } => {
+                let to_ws = WorkspaceId::from(request.to_workspace.as_str());
+
+                if self.coordinator.tree.get(&to_ws).is_none() {
+                    let _ = reply.send(Err(tonic::Status::not_found(format!(
+                        "target workspace '{}' not found",
+                        request.to_workspace
+                    ))));
+                    return;
+                }
+
+                let env_id = self.next_envelope_id;
+                self.next_envelope_id += 1;
+                let envelope_id = EnvelopeId::from(format!("env-{env_id}"));
+
+                let priority = match request.priority {
+                    2 => EnvelopePriority::Urgent,
+                    3 => EnvelopePriority::Blocking,
+                    _ => EnvelopePriority::Normal,
+                };
+
+                let envelope = Envelope {
+                    id: envelope_id.clone(),
+                    from_workspace: WorkspaceId::from("highway"),
+                    to_workspace: to_ws.clone(),
+                    envelope_type: request.r#type,
+                    payload: request.payload,
+                    in_reply_to: None,
+                    timestamp: 0,
+                    priority,
+                    origin: EnvelopeOrigin::Human,
+                    state: EnvelopeState::Created,
+                };
+
+                self.notify_envelope_subs(to_ws.as_ref(), &envelope);
+
+                if self.coordinator.route_envelope(&to_ws, envelope).await {
+                    let response = wacp_transport::wacp_v1::InjectEnvelopeResponse {
+                        envelope_id: envelope_id.to_string(),
+                        timestamp: None,
+                        client_request_id: request.client_request_id,
+                    };
+                    let _ = reply.send(Ok(response));
+                } else {
+                    let _ = reply.send(Err(tonic::Status::unavailable(format!(
+                        "workspace '{}' is not running",
+                        to_ws
+                    ))));
+                }
             }
-            HighwayRequest::RespondToGate { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::unimplemented("gate response pending")));
+            HighwayRequest::RespondToGate { request, reply } => {
+                let gate_id = GateId::from(request.gate_id.as_str());
+                let decision = match request.decision {
+                    1 => GateDecision::Approve,
+                    2 => GateDecision::Reject,
+                    3 => GateDecision::Modify,
+                    _ => GateDecision::Approve,
+                };
+
+                let applied = self.gate_controller.resolve(&gate_id, decision).is_some();
+
+                let response = wacp_transport::wacp_v1::GateResponseAck {
+                    gate_id: request.gate_id,
+                    applied,
+                    client_request_id: request.client_request_id,
+                };
+                let _ = reply.send(Ok(response));
             }
-            HighwayRequest::RespondToEscalation { reply, .. } => {
-                let _ = reply.send(Err(tonic::Status::unimplemented(
-                    "escalation response pending",
-                )));
+            HighwayRequest::RespondToEscalation { request, reply } => {
+                let ws_id_str = self.escalation_index.remove(&request.escalation_id);
+
+                let applied = if let Some(ws_id_str) = ws_id_str {
+                    let ws_id = WorkspaceId::from(ws_id_str.as_str());
+                    match request.action {
+                        Some(wacp_transport::wacp_v1::escalation_response::Action::Feedback(
+                            env_proto,
+                        )) => {
+                            let env_id = self.next_envelope_id;
+                            self.next_envelope_id += 1;
+                            let envelope = Envelope {
+                                id: EnvelopeId::from(format!("env-{env_id}")),
+                                from_workspace: WorkspaceId::from("highway"),
+                                to_workspace: ws_id.clone(),
+                                envelope_type: env_proto.r#type,
+                                payload: env_proto.payload,
+                                in_reply_to: None,
+                                timestamp: 0,
+                                priority: EnvelopePriority::Normal,
+                                origin: EnvelopeOrigin::Human,
+                                state: EnvelopeState::Created,
+                            };
+                            self.notify_envelope_subs(ws_id.as_ref(), &envelope);
+                            self.coordinator.route_envelope(&ws_id, envelope).await
+                        }
+                        Some(wacp_transport::wacp_v1::escalation_response::Action::Abort(true)) => {
+                            self.coordinator.abort_workspace(&ws_id).await
+                        }
+                        Some(
+                            wacp_transport::wacp_v1::escalation_response::Action::DelegateToCoordinator(
+                                true,
+                            ),
+                        ) => true,
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
+
+                let response = wacp_transport::wacp_v1::EscalationResponseAck {
+                    escalation_id: request.escalation_id,
+                    applied,
+                    client_request_id: request.client_request_id,
+                };
+                let _ = reply.send(Ok(response));
             }
             HighwayRequest::QueryTrail { request, reply } => {
                 let response = self.query_trail_index(

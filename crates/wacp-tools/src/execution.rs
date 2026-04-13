@@ -105,6 +105,10 @@ async fn invoke_with_timeout(
 ) -> Result<serde_json::Value, ToolError> {
     let duration = Duration::from_millis(timeout_ms);
 
+    if cancel.is_cancelled() {
+        return Err(ToolError::cancelled());
+    }
+
     let handler_future = async {
         // Catch panics from both future creation AND future execution.
         // AssertUnwindSafe + FutureExt::catch_unwind catches panics during .await.

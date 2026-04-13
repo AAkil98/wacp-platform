@@ -109,20 +109,22 @@ impl GatewayBackend for MockBackend {
         &self,
         id: &str,
     ) -> Result<wacp_transport::wacp_v1::WorkspaceView, GatewayError> {
-        let mut view = wacp_transport::wacp_v1::WorkspaceView::default();
-        view.id = id.into();
-        view.state = 1; // Active
-        view.role = "worker".into();
-        Ok(view)
+        Ok(wacp_transport::wacp_v1::WorkspaceView {
+            id: id.into(),
+            state: 1, // Active
+            role: "worker".into(),
+            ..Default::default()
+        })
     }
 
     async fn inject_envelope(
         &self,
         _req: wacp_transport::wacp_v1::InjectEnvelopeRequest,
     ) -> Result<wacp_transport::wacp_v1::InjectEnvelopeResponse, GatewayError> {
-        let mut resp = wacp_transport::wacp_v1::InjectEnvelopeResponse::default();
-        resp.envelope_id = "env-mock-1".into();
-        Ok(resp)
+        Ok(wacp_transport::wacp_v1::InjectEnvelopeResponse {
+            envelope_id: "env-mock-1".into(),
+            ..Default::default()
+        })
     }
 
     async fn trigger_integration(

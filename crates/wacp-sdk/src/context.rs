@@ -158,7 +158,7 @@ impl AgentContext {
         let mut inbox = self.agent.inbox().await?;
         let target_id = envelope_result.id.clone();
 
-        let response = tokio::time::timeout(Duration::from_millis(timeout), async {
+        tokio::time::timeout(Duration::from_millis(timeout), async {
             while let Some(item) = inbox.next().await {
                 let env = item?;
                 if env.in_reply_to == target_id {
@@ -169,9 +169,7 @@ impl AgentContext {
             Err(Error::StreamEnded)
         })
         .await
-        .map_err(|_| Error::QueryTimeout(timeout))?;
-
-        response
+        .map_err(|_| Error::QueryTimeout(timeout))?
     }
 
     /// Send an envelope to a target workspace.

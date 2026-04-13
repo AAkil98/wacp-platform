@@ -61,7 +61,8 @@ impl JsonRpcResponse {
         }
     }
 
-    fn _notification(method: &str, params: serde_json::Value) -> Self {
+    #[cfg(test)]
+    fn notification(method: &str, params: serde_json::Value) -> Self {
         Self {
             jsonrpc: "2.0",
             result: Some(serde_json::json!({"method": method, "params": params})),

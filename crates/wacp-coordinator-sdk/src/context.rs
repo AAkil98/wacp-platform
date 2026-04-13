@@ -283,6 +283,7 @@ impl CoordinatorContext {
     }
 
     /// Stream signals from child workspaces.
+    #[allow(clippy::result_large_err)]
     pub async fn signals(
         &mut self,
         filter: SignalFilter,

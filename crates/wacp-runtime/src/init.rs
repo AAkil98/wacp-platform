@@ -866,7 +866,44 @@ impl Runtime {
                 let _ = reply.send(Ok(response));
             }
             HighwayRequest::GetTaskGraph { reply } => {
-                let response = wacp_transport::wacp_v1::TaskGraphView { tasks: vec![] };
+                let mut tasks = Vec::new();
+                let roots = self.coordinator.task_graph.roots();
+                let mut visited = std::collections::HashSet::new();
+                let mut queue = std::collections::VecDeque::from_iter(roots.into_iter().cloned());
+
+                while let Some(tid) = queue.pop_front() {
+                    if !visited.insert(tid.to_string()) {
+                        continue;
+                    }
+                    if let Some(task) = self.coordinator.task_graph.get(&tid) {
+                        let status = match task.status {
+                            TaskStatus::Draft => 1,
+                            TaskStatus::Pending => 2,
+                            TaskStatus::Assigned => 3,
+                            TaskStatus::InProgress => 4,
+                            TaskStatus::Completed => 5,
+                            TaskStatus::Failed => 6,
+                            TaskStatus::Integrated => 7,
+                            TaskStatus::Cancelled => 8,
+                        };
+                        tasks.push(wacp_transport::wacp_v1::Task {
+                            id: task.id.to_string(),
+                            name: task.name.clone(),
+                            description: task.description.clone(),
+                            depends_on: task.depends_on.iter().map(|d| d.to_string()).collect(),
+                            parent_task: task.parent_task.as_ref().map(|p| p.to_string()).unwrap_or_default(),
+                            status,
+                            workspace_ref: task.workspace_ref.as_ref().map(|w| w.to_string()).unwrap_or_default(),
+                            workspace_history: task.workspace_history.iter().map(|w| w.to_string()).collect(),
+                            checkpoint_ref: task.checkpoint_ref.as_ref().map(|c| c.to_string()).unwrap_or_default(),
+                        });
+                        for dep in self.coordinator.task_graph.dependents(&tid) {
+                            queue.push_back(dep.clone());
+                        }
+                    }
+                }
+
+                let response = wacp_transport::wacp_v1::TaskGraphView { tasks };
                 let _ = reply.send(Ok(response));
             }
             HighwayRequest::InjectEnvelope { request, reply } => {

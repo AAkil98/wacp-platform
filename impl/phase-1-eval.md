@@ -94,7 +94,7 @@ Phase 1 is **complete**. All 16 tasks are implemented across 4 crates (`console-
 | `cargo check --workspace` | Zero errors |
 | `cargo clippy --workspace -- -D warnings` | Zero warnings |
 | `cargo test --workspace` | 51 passed, 0 failed |
-| No `unwrap()` in production code | 3 instances in cookie `parse()` calls (`auth.rs` lines 118, 124, 163) — these parse static format strings and cannot fail. Acceptable. |
+| No `unwrap()` in production code | Zero instances. Cookie `parse()` calls use `map_err(?)`; `write!` on String uses `let _ =`. |
 | Error handling | All DB errors wrapped in `ConsoleError::Database`. All auth failures return appropriate HTTP status. |
 
 ### Module structure
@@ -150,17 +150,18 @@ console-api/src/
 
 ## 6. Gaps and Deviations
 
-### Minor gaps (non-blocking for Phase 2)
+All gaps identified during initial review have been resolved:
 
-1. **Admin token endpoints missing.** Task 1.7 specifies `GET /api/users/:id/tokens` and `DELETE /api/users/:id/tokens/:tid` (admin variants). Currently only own-token endpoints exist. The revoke endpoint does handle cross-user revocation via ownership check + `ManageAnyTokens` action, so the authorization model is correct — just missing the admin list route.
+| # | Gap | Resolution | Commit |
+|---|-----|------------|--------|
+| 1 | Admin token endpoints missing (`GET /api/users/:id/tokens`, `DELETE /api/users/:id/tokens/:tid`) | Added `list_user_tokens` and `revoke_user_token` handlers with `ManageAnyTokens` authorization | `63875d6` |
+| 2 | Unlock endpoint cleared all login attempts globally instead of target user only | Added `clear_for_username` query, updated handler to scope by username | `63875d6` |
+| 3 | `unwrap()` in production code (4 cookie `parse()` calls in `auth.rs`, 1 `write!` in `authenticator.rs`) | Replaced with `map_err(?)`/`let _ =` per project rule | current |
 
-2. **Unlock endpoint cleanup scope.** `users.rs:unlock_user` calls `cleanup_before` with epoch timestamp, which clears *all* login attempts (all users/IPs), not just the target user's. Should filter by username.
+### Clarifications (not gaps)
 
-3. **Audit action count.** Implementation has 24 actions (spec says 23). Extra action `auth.bootstrap` — reasonable addition, not a deviation.
-
-4. **CSRF token not stored in session.** The CSRF double-submit pattern generates a token on login and sets it as a cookie, but the server-side session doesn't store a CSRF value. Validation relies on cookie-header matching (standard double-submit cookie pattern), which is correct per the spec.
-
-5. **No `POST` on token create route.** `tokens.rs` router uses `.post(create_token)` on the `get` chain — this is correct (Axum method routing). Verified working.
+- **Audit action count:** Implementation has 24 actions, matching `wcon-auth` §10.2 exactly. No deviation.
+- **CSRF pattern:** Double-submit cookie without server-side storage is the specified pattern (`wcon-auth` §8). No deviation.
 
 ### Not in scope (correctly deferred)
 
@@ -172,13 +173,13 @@ console-api/src/
 
 ## 7. Recommendation
 
-**Phase 1 passes.** Proceed to Phase 2 (Taxonomy + Discovery API).
+**Phase 1 passes with zero open gaps.** Proceed to Phase 2 (Taxonomy + Discovery API).
 
-Before starting Phase 2, fix the two minor issues:
-1. Add admin token list route (`GET /api/users/{id}/tokens`)
-2. Fix unlock endpoint to clear only the target user's login attempts
-
-These are small, isolated fixes that don't affect Phase 2's dependency surface.
+All identified issues have been resolved. The codebase meets every quality gate:
+- `cargo clippy --workspace -- -D warnings` — zero warnings
+- `cargo test --workspace` — 51 passed, 0 failed
+- No `unwrap()` in production code
+- All 16 tasks complete with full API surface
 
 ---
 

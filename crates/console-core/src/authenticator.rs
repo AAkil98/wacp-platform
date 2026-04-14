@@ -16,7 +16,8 @@ pub fn hash_token(token: &str) -> String {
     let result = hasher.finalize();
     result.iter().fold(String::with_capacity(64), |mut s, b| {
         use std::fmt::Write;
-        write!(s, "{b:02x}").unwrap();
+        // write! to String is infallible
+        let _ = write!(s, "{b:02x}");
         s
     })
 }

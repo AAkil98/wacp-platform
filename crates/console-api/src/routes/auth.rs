@@ -115,13 +115,13 @@ async fn login(
             "wcon_sid={session_token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400"
         )
         .parse()
-        .unwrap(),
+        .map_err(|_| ApiError::from(ConsoleError::Internal("invalid session cookie header".into())))?,
     );
     headers.append(
         SET_COOKIE,
         format!("wcon_csrf={csrf_token}; Secure; SameSite=Strict; Path=/; Max-Age=86400")
             .parse()
-            .unwrap(),
+            .map_err(|_| ApiError::from(ConsoleError::Internal("invalid csrf cookie header".into())))?,
     );
 
     let response_body = serde_json::json!({
@@ -159,13 +159,13 @@ async fn logout(
         SET_COOKIE,
         "wcon_sid=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0"
             .parse()
-            .unwrap(),
+            .map_err(|_| ApiError::from(ConsoleError::Internal("invalid cookie header".into())))?,
     );
     resp_headers.append(
         SET_COOKIE,
         "wcon_csrf=; Secure; SameSite=Strict; Path=/; Max-Age=0"
             .parse()
-            .unwrap(),
+            .map_err(|_| ApiError::from(ConsoleError::Internal("invalid cookie header".into())))?,
     );
 
     Ok((resp_headers, axum::http::StatusCode::NO_CONTENT))

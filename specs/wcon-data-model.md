@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [data-model, persistence, schema, core, verticals, auth]
 depends_on: [wcon-architecture, wcon-auth]
 ---
@@ -864,4 +864,4 @@ These invariants supplement those in `wcon-auth` §13. The data-model-specific i
 | wacp-protocol | WACP Protocol Specification | defines runtime message types (ResourceBudget, workspace state, task status) |
 | wacp-taxonomy | WACP Taxonomy crate | defines `VerticalManifest` struct and nested types (authoritative schema for §6.1) |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

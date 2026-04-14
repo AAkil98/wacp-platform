@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [profiles, lifecycle, validation, configuration, tool-policies, ownership]
 depends_on: [wcon-auth, wcon-data-model, wcon-discovery]
 ---
@@ -652,4 +652,4 @@ Every write operation (create, update, delete, clone, import, rollback, bulk-del
 | wcon-vision | Product Vision | establishes profile portability (G5) and validation-before-launch (G6) as goals |
 | wacp-protocol | WACP Protocol Specification | defines ResourceBudget, directive envelope, workspace role binding |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

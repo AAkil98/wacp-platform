@@ -1,7 +1,7 @@
 # WACP Console — Seed Context
 
-> Compressed summary of the full design for implementation. Read this before writing code.
-> For detail on any topic, follow the spec references.
+> Compressed summary of the full design and implementation plan. Read this before writing code.
+> For detail on any topic, follow the spec references. For task-level implementation detail, see `IMPLEMENTATION.md`.
 
 ## What This Is
 
@@ -228,6 +228,25 @@ REST + WebSocket. All endpoints except `/api/health` and `POST /api/auth/login` 
 
 **Full ADR text:** `SPEC_BUILD.md`
 
+## Implementation Plan
+
+**Document:** `IMPLEMENTATION.md`
+
+Eight phases, 73+ tasks, every task traced to a spec reference. No stubs — every phase delivers production code.
+
+| Phase | What | Key deliverables |
+|-------|------|-----------------|
+| **0** | Scaffold + mock runtime | Rust workspace (6 crates), frontend project, SQLite migrations (9 tables), mock runtime (gRPC + REST with fixture verticals), CI pipeline, Clap CLI |
+| **1** | Auth + database | sqlx query layer, Authenticator/Authorizer traits, auth endpoints, user management, API tokens, rate limiting, bootstrap, audit log, settings, health, Argon2id, error model |
+| **2** | Taxonomy + discovery API | YAML parser, REST client, TaxonomyIndex builder with ArcSwap, 20+ discovery endpoints, search, reload, pagination, per-service health checks, OpenAPI generation |
+| **3** | Profiles API | Validation engine (14 error codes + 2 warnings), CRUD with versioning, per-user name uniqueness, ownership/visibility, YAML export/import with `format_version: 1`, clone |
+| **4** | Sessions + highway | State machine, 12-check validation, gRPC client pool (3 channels), launch flow, session monitor (4 streams), refusal synthesis, WebSocket server (7 channels), gate/escalation/injection endpoints, cancel, recovery |
+| **5** | Frontend: shell + auth + discovery + profiles | OpenAPI codegen, TanStack Query hooks, app shell, login, 4-tab discovery browser, profile studio + library, settings, admin screens (users, audit log), theme |
+| **6** | Frontend: sessions + oversight | WebSocket hook, 6-step wizard, dynamic context form, oversight dashboard (trail, gates, escalations, refusals, workspace tree, injection, quality report), notifications, keyboard shortcuts |
+| **7** | Distribution + E2E | rust-embed single binary, cargo-dist (5 channels), Docker, Playwright E2E (5 suites), cargo-deny, LICENSE, README, performance verification |
+
+**Each phase has a deliverables checklist** — checkmark each item as it lands. No phase is complete until all its deliverables are checked.
+
 ## Design Specs (all final)
 
 | # | ID | Title |
@@ -245,4 +264,4 @@ REST + WebSocket. All endpoints except `/api/health` and `POST /api/auth/login` 
 | 11 | `wcon-test` | Test Strategy |
 | 12 | `wcon-auth` | Authentication & Authorization |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

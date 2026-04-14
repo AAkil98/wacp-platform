@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [vision, product, foundation]
 ---
 
@@ -191,4 +191,4 @@ The Console does not depend on cloud APIs, external databases, or third-party se
 | wacp-taxonomy | WACP Taxonomy crate | upstream source of `VerticalManifest` served via REST |
 | SPEC_BUILD.md | Project build log | records ADR-001 (runtime as vertical registry) which is cited throughout this spec |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

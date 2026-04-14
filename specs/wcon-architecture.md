@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [architecture, system-design, core, dual-transport]
 depends_on: [wcon-vision, wcon-glossary]
 ---
@@ -615,4 +615,4 @@ New backend services follow the same pattern as existing ones: a service struct 
 | wacp-transport | WACP Transport crate | defines REST handlers for `GET /v1/verticals[/{id}]` |
 | SPEC_BUILD.md | Project build log | records ADR-001 (runtime as vertical registry) cited throughout this spec |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

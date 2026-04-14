@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-11T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [discovery, taxonomy, indexing, search, verticals]
 depends_on: [wcon-architecture, wcon-data-model]
 ---
@@ -769,4 +769,4 @@ For every `VerticalEntry(V).tool_policies[T]`, there is exactly one `ToolEntry(T
 | wacp-taxonomy | WACP Taxonomy crate | defines `VerticalManifest` struct and nested types served over REST |
 | wacp-transport | WACP Transport crate | defines REST handlers for `GET /v1/verticals[/{id}]` |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

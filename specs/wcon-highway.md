@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-10T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [highway, oversight, gates, escalations, refusals, real-time]
 depends_on: [wcon-architecture, wcon-sessions]
 ---
@@ -816,4 +816,4 @@ The Console has no API endpoint or UI affordance that resolves a refusal directl
 | wcon-vision | Product Vision | establishes unified oversight (G4) and real-time trail streaming (SC7) as goals |
 | wacp-protocol | WACP Protocol Specification | defines HighwayService gRPC API, gate types, escalation mechanism, trail structure |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-10T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [api, rest, websocket, contract, auth]
 depends_on: [wcon-auth, wcon-discovery, wcon-profiles, wcon-sessions, wcon-highway]
 ---
@@ -1124,4 +1124,4 @@ Every row counts distinct (method, path-template) pairs. `WebSocket /api/session
 | wcon-architecture | System Architecture | defines HTTP server, WebSocket server, communication patterns (§3, §4.1) |
 | wcon-data-model | Data Model | defines settings schema (§5), profile schema (§3), session schema (§4) |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

@@ -4,7 +4,7 @@
 
 - **Prefix:** wcon
 - **Type:** application
-- **Authors:** AAkil98
+- **Authors:** AKIL Abderrahim, Claude Opus 4.6
 
 The prefix namespaces all spec IDs, branch names, and artifact identifiers across the project. The type (protocol, application, or library) informs which spec categories are most relevant but does not restrict which commands are available — all commands are opt-in regardless of project type.
 

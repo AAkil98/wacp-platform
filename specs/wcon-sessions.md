@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-10T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [sessions, lifecycle, orchestration, coordination, vertical-context, ownership]
 depends_on: [wcon-auth, wcon-architecture, wcon-profiles, wcon-discovery]
 ---
@@ -912,4 +912,4 @@ Every state-changing session operation (create, launch, cancel, gate resolve, es
 | wacp-protocol | WACP Protocol Specification | defines workspace lifecycle, task lifecycle, trail, CoordinatorService, AgentService, HighwayService |
 | wacp-taxonomy | WACP Taxonomy crate | defines `VerticalManifest.context_schema` and `ContextField` types consumed by step 4 |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

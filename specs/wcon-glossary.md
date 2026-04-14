@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-09T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [glossary, terminology, foundation]
 ---
 
@@ -601,4 +601,4 @@ Both WACP and the Console use "tool" to mean the same thing: a capability descri
 | wacp-ecosystem/swe | SWE Vertical | source of vertical, agent profile, autonomy definitions |
 | wcon-auth | Authentication & Authorization | defines auth terms introduced in this revision (§5, §7, §8) |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

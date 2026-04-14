@@ -3,7 +3,7 @@ id: wcon-auth
 type: design
 status: final
 created: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [auth, security, identity, authorization, audit]
 depends_on: [wcon-vision, wcon-glossary, wcon-architecture]
 ---
@@ -542,4 +542,4 @@ When OIDC is added:
 | wcon-ui | UI Design | login screen, admin panel, permission-gated affordances |
 | TECH_STACK_PROPOSAL.md | Tech Stack Proposal | §10 Q2 — the decision that multi-user auth ships in Phase 1 |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

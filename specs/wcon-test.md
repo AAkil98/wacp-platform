@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-10T00:00:00
 revised: 2026-04-11T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [testing, quality, ci, verticals]
 depends_on: [wcon-architecture, wcon-api, wcon-auth, wcon-profiles, wcon-sessions, wcon-highway, wcon-data-model]
 ---
@@ -974,4 +974,4 @@ Tests that pass locally must pass in CI, and vice versa. The CI environment mirr
 | wcon-highway | Highway Integration | defines gate resolution (§4), escalation handling (§5), refusal events (§4A), event enrichment (§7) tested across all layers |
 | wcon-ui | UI Design | defines wizard steps, oversight dashboard panels, and context badges tested by frontend unit tests and E2E flows |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

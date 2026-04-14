@@ -4,7 +4,7 @@ type: design
 status: final
 created: 2026-04-10T00:00:00
 revised: 2026-04-14T00:00:00
-authors: [AAkil98]
+authors: [AKIL Abderrahim, Claude Opus 4.6]
 tags: [ui, design, frontend, interaction, vertical-context, auth]
 depends_on: [wcon-auth, wcon-api]
 ---
@@ -1129,4 +1129,4 @@ The frontend never presents UI affordances that would override a tool-layer refu
 | wcon-architecture | System Architecture | defines frontend surfaces (§4.2) |
 | wcon-vision | Product Vision | establishes desktop-first (NG6), four core capabilities (§2), vertical-agnosticism (BC4) |
 
-*WACP Console -- authored by AAkil98*
+*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*

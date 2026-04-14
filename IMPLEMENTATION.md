@@ -254,7 +254,7 @@ No phase runs in parallel — each builds on the previous. Within a phase, tasks
 
 ## Phase 4 — Sessions + Highway Backend
 
-**Goal:** Sessions launch against the mock runtime, stream real-time events via WebSocket, handle gates/escalations/refusals, and cancel cleanly. The full backend API is complete.
+**Goal:** Sessions launch end-to-end against the real runtime (validated via mock runtime in integration tests), stream real-time events via WebSocket, handle gates/escalations/refusals, and cancel cleanly. The full backend API is complete.
 
 **Depends on:** Phase 3 (sessions reference profiles)
 

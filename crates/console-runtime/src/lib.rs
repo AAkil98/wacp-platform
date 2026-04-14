@@ -3,6 +3,7 @@ pub mod proto {
     tonic::include_proto!("wacp.v1");
 }
 
+pub mod grpc_pool;
 pub mod rest_client;
 
 // Re-export upstream taxonomy types used throughout the console.

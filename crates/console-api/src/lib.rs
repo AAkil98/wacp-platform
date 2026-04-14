@@ -1,5 +1,6 @@
 pub mod error;
 pub mod middleware;
+pub mod routes;
 
 use axum::Router;
 use console_db::DbPool;
@@ -13,9 +14,17 @@ pub struct AppState {
     pub db: DbPool,
 }
 
-/// Builds the full API router with per-request tracing.
+/// Builds the full API router with per-request tracing and all endpoints.
 pub fn api_router(state: AppState) -> Router {
+    let shared = Arc::new(state);
+
     Router::new()
+        .merge(routes::health::router())
+        .merge(routes::auth::router())
+        .merge(routes::users::router())
+        .merge(routes::tokens::router())
+        .merge(routes::audit::router())
+        .merge(routes::settings::router())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {
@@ -35,5 +44,5 @@ pub fn api_router(state: AppState) -> Router {
                     },
                 ),
         )
-        .with_state(Arc::new(state))
+        .with_state(shared)
 }

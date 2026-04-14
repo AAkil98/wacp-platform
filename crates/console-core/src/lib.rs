@@ -10,6 +10,7 @@ pub mod rate_limit;
 pub mod settings;
 pub mod taxonomy;
 pub mod taxonomy_builder;
+pub mod taxonomy_parser;
 
 pub use auth::{AuthenticatedUser, ConsoleRole};
 pub use config::ConsoleConfig;

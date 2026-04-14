@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use console_api::{AppState, api_router};
 use console_core::ConsoleConfig;
 use console_core::config::RuntimeConfig;
-use console_core::taxonomy_builder;
+use console_core::{taxonomy_builder, taxonomy_parser};
 use console_db::{create_pool_from_path, run_migrations};
 use console_runtime::rest_client;
 use std::net::SocketAddr;
@@ -112,7 +112,7 @@ async fn main() -> anyhow::Result<()> {
             info!("database migrations applied");
 
             // Build taxonomy index from runtime REST API.
-            let taxonomy_index = match build_taxonomy(&config.runtime.rest_address).await {
+            let taxonomy_index = match build_taxonomy(&config.runtime.rest_address, &pool).await {
                 Ok(idx) => idx,
                 Err(e) => {
                     warn!(error = %e, "failed to load taxonomy from runtime — starting with empty index");
@@ -230,12 +230,26 @@ fn resolve_data_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-/// Build the taxonomy index from the runtime REST API.
+/// Build the taxonomy index from protocol taxonomy YAML + runtime REST API.
 async fn build_taxonomy(
     rest_address: &str,
+    db: &console_db::DbPool,
 ) -> Result<console_core::taxonomy::TaxonomyIndex, String> {
+    // Load protocol taxonomy from filesystem (if configured).
+    let taxonomy_path = console_core::settings::get(db, "taxonomy.path")
+        .await
+        .ok()
+        .and_then(|s| s.value.as_str().map(String::from))
+        .unwrap_or_default();
+    let protocol_taxonomy = taxonomy_parser::load_protocol_taxonomy(&taxonomy_path);
+
+    // Load vertical manifests from runtime REST API.
     let result = rest_client::load_verticals(rest_address).await?;
-    let build = taxonomy_builder::build_index(None, &result.manifests, &result.failed);
+    let build = taxonomy_builder::build_index(
+        protocol_taxonomy.as_ref(),
+        &result.manifests,
+        &result.failed,
+    );
     for w in &build.warnings {
         warn!(warning = %w, "taxonomy build warning");
     }

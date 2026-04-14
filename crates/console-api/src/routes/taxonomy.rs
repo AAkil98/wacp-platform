@@ -7,7 +7,7 @@ use axum::{Json, Router, routing::post};
 use std::sync::Arc;
 
 use console_core::authorizer::{self, Action};
-use console_core::taxonomy_builder;
+use console_core::{taxonomy_builder, taxonomy_parser};
 use console_runtime::rest_client;
 
 use crate::AppState;
@@ -29,6 +29,10 @@ async fn reload(
     // otherwise fall back to the default.
     let rest_address = get_rest_address(&state).await;
 
+    // Load protocol taxonomy from filesystem.
+    let taxonomy_path = get_taxonomy_path(&state).await;
+    let protocol_taxonomy = taxonomy_parser::load_protocol_taxonomy(&taxonomy_path);
+
     let load_result = match rest_client::load_verticals(&rest_address).await {
         Ok(r) => r,
         Err(e) => {
@@ -42,7 +46,7 @@ async fn reload(
     };
 
     let build = taxonomy_builder::build_index(
-        None,
+        protocol_taxonomy.as_ref(),
         &load_result.manifests,
         &load_result.failed,
     );
@@ -69,6 +73,16 @@ async fn reload(
         "counts": counts,
         "warnings": build.warnings,
     })))
+}
+
+async fn get_taxonomy_path(state: &AppState) -> String {
+    if let Ok(setting) = console_core::settings::get(&state.db, "taxonomy.path").await
+        && let Some(path) = setting.value.as_str()
+        && !path.is_empty()
+    {
+        return path.to_string();
+    }
+    String::new()
 }
 
 async fn get_rest_address(state: &AppState) -> String {

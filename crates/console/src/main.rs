@@ -127,7 +127,11 @@ async fn main() -> anyhow::Result<()> {
             );
             let taxonomy = Arc::new(ArcSwap::from_pointee(taxonomy_index));
 
-            let state = AppState { db: pool, taxonomy };
+            let state = AppState {
+                db: pool,
+                taxonomy,
+                runtime_config: config.runtime.clone(),
+            };
             let app = api_router(state);
 
             let listener = TcpListener::bind(config.listen_addr).await?;

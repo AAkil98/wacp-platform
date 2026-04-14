@@ -17,6 +17,8 @@ pub struct AppState {
     pub db: DbPool,
     /// The taxonomy index, atomically swappable for reload.
     pub taxonomy: Arc<ArcSwap<TaxonomyIndex>>,
+    /// Runtime connection addresses for health checks.
+    pub runtime_config: console_core::config::RuntimeConfig,
 }
 
 /// Builds the full API router with per-request tracing and all endpoints.

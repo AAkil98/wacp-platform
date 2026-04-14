@@ -3,7 +3,9 @@ pub mod middleware;
 pub mod pagination;
 pub mod routes;
 
+use arc_swap::ArcSwap;
 use axum::Router;
+use console_core::taxonomy::TaxonomyIndex;
 use console_db::DbPool;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
@@ -13,6 +15,8 @@ use tracing::Level;
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbPool,
+    /// The taxonomy index, atomically swappable for reload.
+    pub taxonomy: Arc<ArcSwap<TaxonomyIndex>>,
 }
 
 /// Builds the full API router with per-request tracing and all endpoints.
@@ -26,6 +30,10 @@ pub fn api_router(state: AppState) -> Router {
         .merge(routes::tokens::router())
         .merge(routes::audit::router())
         .merge(routes::settings::router())
+        .merge(routes::discovery::router())
+        .merge(routes::verticals::router())
+        .merge(routes::search::router())
+        .merge(routes::taxonomy::router())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {

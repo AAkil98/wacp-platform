@@ -1,14 +1,18 @@
+use arc_swap::ArcSwap;
 use clap::{Parser, Subcommand};
 use console_api::{AppState, api_router};
 use console_core::ConsoleConfig;
 use console_core::config::RuntimeConfig;
+use console_core::taxonomy_builder;
 use console_db::{create_pool_from_path, run_migrations};
+use console_runtime::rest_client;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[derive(Parser)]
 #[command(name = "wacp-console", about = "WACP Console — coordination workbench")]
@@ -107,7 +111,23 @@ async fn main() -> anyhow::Result<()> {
             run_migrations(&pool).await?;
             info!("database migrations applied");
 
-            let state = AppState { db: pool };
+            // Build taxonomy index from runtime REST API.
+            let taxonomy_index = match build_taxonomy(&config.runtime.rest_address).await {
+                Ok(idx) => idx,
+                Err(e) => {
+                    warn!(error = %e, "failed to load taxonomy from runtime — starting with empty index");
+                    taxonomy_builder::build_index(None, &[], &[]).index
+                }
+            };
+            info!(
+                roles = taxonomy_index.roles.len(),
+                tools = taxonomy_index.tools.len(),
+                verticals = taxonomy_index.verticals.len(),
+                "taxonomy index ready"
+            );
+            let taxonomy = Arc::new(ArcSwap::from_pointee(taxonomy_index));
+
+            let state = AppState { db: pool, taxonomy };
             let app = api_router(state);
 
             let listener = TcpListener::bind(config.listen_addr).await?;
@@ -204,6 +224,18 @@ fn resolve_data_dir() -> PathBuf {
     directories::ProjectDirs::from("", "", "wacp-console")
         .map(|dirs| dirs.data_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Build the taxonomy index from the runtime REST API.
+async fn build_taxonomy(
+    rest_address: &str,
+) -> Result<console_core::taxonomy::TaxonomyIndex, String> {
+    let result = rest_client::load_verticals(rest_address).await?;
+    let build = taxonomy_builder::build_index(None, &result.manifests, &result.failed);
+    for w in &build.warnings {
+        warn!(warning = %w, "taxonomy build warning");
+    }
+    Ok(build.index)
 }
 
 async fn shutdown_signal() {

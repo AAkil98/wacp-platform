@@ -1,6 +1,10 @@
 pub mod audit;
 pub mod auth;
+pub mod discovery;
 pub mod health;
+pub mod search;
 pub mod settings;
+pub mod taxonomy;
 pub mod tokens;
 pub mod users;
+pub mod verticals;

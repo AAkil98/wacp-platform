@@ -10,6 +10,7 @@ use crate::error::ConsoleError;
 pub enum Action {
     // Discovery
     BrowseTaxonomy,
+    ReloadTaxonomy,
     // Profiles
     ListOwnProfiles,
     ListAllProfiles,
@@ -95,7 +96,7 @@ fn is_allowed(role: ConsoleRole, action: Action) -> bool {
         CreateProfile | EditOwnProfile | DeleteOwnProfile | ImportProfile
         | CreateSession | CancelOwnSession | ApproveOwnGates
         | HandleOwnEscalations | InjectOwnDirectives
-        | CreateOwnToken | RevokeOwnToken | ViewSettings => {
+        | CreateOwnToken | RevokeOwnToken | ViewSettings | ReloadTaxonomy => {
             matches!(role, Operator | Admin)
         }
 

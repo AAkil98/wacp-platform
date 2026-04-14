@@ -9,6 +9,8 @@ import { ProfilesPage } from "./surfaces/profiles/ProfilesPage";
 import { SessionsPage } from "./surfaces/sessions/SessionsPage";
 import { OversightPage } from "./surfaces/oversight/OversightPage";
 import { SettingsPage } from "./surfaces/settings/SettingsPage";
+import { UsersPage } from "./surfaces/admin/UsersPage";
+import { AuditLogPage } from "./surfaces/admin/AuditLogPage";
 import { useAuthStore } from "./store/auth";
 
 const queryClient = new QueryClient({
@@ -43,8 +45,8 @@ export function App() {
             <Route path="/sessions/:id/oversight" element={<OversightPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* Admin routes use same Layout — permission checked in component */}
-            <Route path="/admin/users" element={<div>User Management (Phase 5)</div>} />
-            <Route path="/admin/audit" element={<div>Audit Log (Phase 5)</div>} />
+            <Route path="/admin/users" element={<UsersPage />} />
+            <Route path="/admin/audit" element={<AuditLogPage />} />
           </Route>
 
           <Route path="/" element={<Navigate to="/discovery" replace />} />

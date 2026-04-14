@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod auth;
+pub mod bootstrap;
 pub mod authenticator;
 pub mod authorizer;
 pub mod config;

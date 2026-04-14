@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 console-db = { workspace = true }
+directories = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }

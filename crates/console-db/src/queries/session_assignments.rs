@@ -99,6 +99,22 @@ pub async fn set_workspace_id(
     Ok(result.rows_affected() > 0)
 }
 
+/// Find non-terminal sessions that reference a given profile.
+pub async fn find_active_sessions_for_profile(
+    pool: &DbPool,
+    profile_id: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT sa.session_id FROM session_assignments sa
+         JOIN sessions s ON s.id = sa.session_id
+         WHERE sa.profile_id = ? AND s.state NOT IN ('completed', 'failed', 'cancelled')",
+    )
+    .bind(profile_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
 pub async fn count_assigned(pool: &DbPool, session_id: &str) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM session_assignments

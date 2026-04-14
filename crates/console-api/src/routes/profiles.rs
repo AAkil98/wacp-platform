@@ -397,14 +397,28 @@ async fn delete_profile(
     log_audit(&state.db, AuditEntry {
         user_id: auth.user_id.clone(),
         action: AuditAction::ProfileDelete,
-        target_id: id,
+        target_id: id.clone(),
         detail: None,
         ip: ctx.ip,
         user_agent: ctx.user_agent,
     }).await.ok();
 
-    // TODO: Check for non-terminal session assignments and return warnings.
-    Ok(Json(serde_json::json!({ "warnings": [] })))
+    // Check for non-terminal session assignments and return warnings.
+    let affected = console_db::queries::session_assignments::find_active_sessions_for_profile(
+        &state.db, &id,
+    )
+    .await
+    .unwrap_or_default();
+
+    let warnings: Vec<serde_json::Value> = affected
+        .iter()
+        .map(|sid| serde_json::json!({
+            "session_id": sid,
+            "message": format!("Session '{sid}' uses this profile in a non-terminal state"),
+        }))
+        .collect();
+
+    Ok(Json(serde_json::json!({ "warnings": warnings })))
 }
 
 // --- Versions ---

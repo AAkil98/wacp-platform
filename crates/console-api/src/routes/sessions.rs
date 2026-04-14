@@ -238,7 +238,6 @@ async fn get_session(
 // --- Patch (update config, configuring state only) ---
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 struct UpdateSessionRequest {
     name: Option<String>,
     context: Option<serde_json::Value>,
@@ -276,7 +275,33 @@ async fn update_session(
             .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
     }
 
-    // TODO: update name, budgets when needed
+    if let Some(name) = &body.name {
+        sqlx::query("UPDATE sessions SET name = ? WHERE id = ? AND state = 'configuring'")
+            .bind(name)
+            .bind(&id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    }
+
+    if body.budget_max_cost_micros.is_some()
+        || body.budget_max_tokens.is_some()
+        || body.budget_max_wall_time_ms.is_some()
+    {
+        sqlx::query(
+            "UPDATE sessions SET budget_max_cost_micros = COALESCE(?, budget_max_cost_micros),
+             budget_max_tokens = COALESCE(?, budget_max_tokens),
+             budget_max_wall_time_ms = COALESCE(?, budget_max_wall_time_ms)
+             WHERE id = ? AND state = 'configuring'",
+        )
+        .bind(body.budget_max_cost_micros)
+        .bind(body.budget_max_tokens)
+        .bind(body.budget_max_wall_time_ms)
+        .bind(&id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    }
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

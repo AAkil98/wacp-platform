@@ -62,6 +62,18 @@ fn build_spec() -> serde_json::Value {
     add_op(&mut paths, "/api/verticals/{id}/checkpoint-types", "get", "verticals", "Get vertical checkpoint types", &[200, 401, 403]);
     add_op(&mut paths, "/api/verticals/{id}/quality-criteria", "get", "verticals", "Get quality criteria", &[200, 401, 403]);
 
+    // Phase 3: Profiles
+    add_op(&mut paths, "/api/profiles", "get", "profiles", "List profiles", &[200, 401]);
+    add_op(&mut paths, "/api/profiles", "post", "profiles", "Create profile", &[201, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}", "get", "profiles", "Get profile", &[200, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}", "put", "profiles", "Update profile", &[200, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}", "delete", "profiles", "Delete profile", &[200, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}/versions", "get", "profiles", "List profile versions", &[200, 401]);
+    add_op(&mut paths, "/api/profiles/{id}/rollback", "post", "profiles", "Rollback profile", &[200, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}/clone", "post", "profiles", "Clone profile", &[201, 401, 403]);
+    add_op(&mut paths, "/api/profiles/{id}/export", "get", "profiles", "Export profile (YAML)", &[200, 401]);
+    add_op(&mut paths, "/api/profiles/import", "post", "profiles", "Import profile (YAML)", &[201, 401, 403]);
+    // Search + Taxonomy
     add_op(&mut paths, "/api/search", "get", "search", "Search taxonomy", &[200, 401, 403]);
     add_op(&mut paths, "/api/taxonomy/reload", "post", "taxonomy", "Reload taxonomy", &[200, 401, 403]);
 
@@ -81,6 +93,7 @@ fn build_spec() -> serde_json::Value {
             { "name": "audit", "description": "Audit log" },
             { "name": "settings", "description": "Application settings" },
             { "name": "health", "description": "Health checks" },
+            { "name": "profiles", "description": "Agent profile lifecycle" },
             { "name": "discovery", "description": "Taxonomy discovery and browsing" },
             { "name": "verticals", "description": "Per-vertical sub-resources" },
             { "name": "search", "description": "Cross-entity search" },
@@ -147,6 +160,6 @@ mod tests {
         let op_count: usize = paths.values().map(|p| {
             p.as_object().map_or(0, |m| m.len())
         }).sum();
-        assert_eq!(op_count, 40, "expected 40 operations, got {op_count}");
+        assert_eq!(op_count, 50, "expected 50 operations, got {op_count}");
     }
 }

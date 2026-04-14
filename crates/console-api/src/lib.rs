@@ -1,5 +1,6 @@
 pub mod error;
 pub mod middleware;
+pub mod pagination;
 pub mod routes;
 
 use axum::Router;

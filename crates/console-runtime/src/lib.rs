@@ -3,6 +3,8 @@ pub mod proto {
     tonic::include_proto!("wacp.v1");
 }
 
+pub mod rest_client;
+
 // Re-export upstream taxonomy types used throughout the console.
 pub use wacp_taxonomy::{
     CheckpointField, CheckpointSchema, ContextField, FieldType, ProfileSummary, QualityCriterion,

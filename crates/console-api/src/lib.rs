@@ -1,4 +1,5 @@
 pub mod error;
+pub mod middleware;
 
 use axum::Router;
 use console_db::DbPool;

@@ -1,0 +1,1 @@
+{"root":["./src/App.test.tsx","./src/App.tsx","./src/main.tsx","./src/test-setup.ts","./src/surfaces/auth/LoginPage.tsx","./src/surfaces/discovery/DiscoveryPage.tsx","./src/surfaces/oversight/OversightPage.tsx","./src/surfaces/profiles/ProfilesPage.tsx","./src/surfaces/sessions/SessionsPage.tsx","./src/surfaces/settings/SettingsPage.tsx"],"version":"6.0.2"}

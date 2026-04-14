@@ -171,10 +171,21 @@ fn init_tracing() {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,tonic=info,tower_http=debug"));
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt::layer())
-        .init();
+    let json_mode = std::env::var("WACP_LOG_FORMAT")
+        .map(|v| v == "json")
+        .unwrap_or(false);
+
+    if json_mode {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().json().flatten_event(true))
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer())
+            .init();
+    }
 }
 
 /// Resolves the database path: explicit flag → XDG data dir → current directory.

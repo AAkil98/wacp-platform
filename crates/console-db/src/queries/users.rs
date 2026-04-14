@@ -59,6 +59,7 @@ pub async fn list_users(
     query.fetch_all(pool).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_user(
     pool: &DbPool,
     id: &str,

@@ -31,6 +31,7 @@ struct KnownKey {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum ValueType {
     String,
     Integer,

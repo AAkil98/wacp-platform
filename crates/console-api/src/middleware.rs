@@ -34,15 +34,16 @@ impl FromRequestParts<Arc<AppState>> for Auth {
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
         // Try bearer token first (from Authorization header)
-        if let Some(auth_header) = parts.headers.get("authorization") {
-            if let Ok(value) = auth_header.to_str() {
-                if let Some(token) = value.strip_prefix("Bearer ") {
-                    return authenticator::authenticate_bearer(&state.db, token)
-                        .await
-                        .map(Auth)
-                        .map_err(ApiError::from);
-                }
-            }
+        if let Some(token) = parts
+            .headers
+            .get("authorization")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+        {
+            return authenticator::authenticate_bearer(&state.db, token)
+                .await
+                .map(Auth)
+                .map_err(ApiError::from);
         }
 
         // Try session cookie

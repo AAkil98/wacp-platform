@@ -28,6 +28,7 @@ pub async fn get_by_token_hash(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_session(
     pool: &DbPool,
     id: &str,

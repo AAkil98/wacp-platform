@@ -7,6 +7,7 @@
 use tonic::{Request, Response, Status};
 
 // Server-side generated traits (built with build_server = true).
+#[allow(dead_code)]
 mod proto {
     tonic::include_proto!("wacp.v1");
 }

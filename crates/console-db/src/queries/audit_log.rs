@@ -15,6 +15,7 @@ pub struct AuditLogRow {
     pub user_agent: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_entry(
     pool: &DbPool,
     id: &str,
@@ -47,6 +48,7 @@ pub async fn insert_entry(
 
 /// Paginated audit log query with optional filters.
 /// Uses cursor-based pagination: pass `before_timestamp` for the next page.
+#[allow(clippy::too_many_arguments)]
 pub async fn list_entries(
     pool: &DbPool,
     user_id: Option<&str>,

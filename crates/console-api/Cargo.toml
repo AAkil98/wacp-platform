@@ -25,6 +25,11 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 subtle = { workspace = true }
 utoipa = { workspace = true }
+serde_yaml_ng = { workspace = true }
+
+[[bin]]
+name = "gen-openapi"
+path = "src/bin/gen_openapi.rs"
 
 [dev-dependencies]
 rstest = { workspace = true }

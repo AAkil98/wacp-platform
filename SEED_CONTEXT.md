@@ -1,13 +1,39 @@
 # WACP Console — Seed Context
 
-> Compressed summary of the full design and implementation plan. Read this before writing code.
+> Compressed summary of the full design, current implementation state, and next steps.
 > For detail on any topic, follow the spec references. For task-level implementation detail, see `IMPLEMENTATION.md`.
+> For the wiring strategy, see `impl/wiring-strategy.md`.
 
 ## What This Is
 
 A full-stack coordination workbench for the WACP ecosystem. Users discover agent roles and capabilities, create and manage agent profiles, launch coordination sessions against a live WACP runtime, and oversee agent work in real-time. The Console is a **client** of the runtime — it connects via gRPC and REST, never modifies protocol behavior, never executes LLM calls.
 
 **Spec:** `wcon-vision`
+
+## Current State (Post Phase 6)
+
+**Backend:** 66 REST endpoints across 12 tags, 99 unit tests, zero clippy warnings. Rust workspace with 6 crates (`console`, `console-api`, `console-core`, `console-db`, `console-runtime`, `console-test-support`).
+
+**Frontend:** 37 TypeScript files, 9,367 lines. React 19 + Vite 6 + TanStack Query + Zustand. Builds to 376KB JS / 14KB CSS.
+
+**What works end-to-end (no runtime needed):** Auth (login, logout, session, CSRF, API tokens, bootstrap, rate limiting), user management, audit log, settings, taxonomy discovery (if runtime REST is reachable), profile CRUD with validation/versioning/export/import/clone, health checks.
+
+**What is structurally complete but hollow (needs runtime wiring):** Session launch (transitions state in SQLite, doesn't create workspaces), gate/escalation/inject actions (write audit log, don't forward to runtime), WebSocket (accepts connection, sends welcome, then idle), cross-session pending endpoints (return empty arrays), session cancellation cleanup (empty match arms), startup recovery (query exists, not wired).
+
+**What doesn't exist yet:** Session monitor (Tokio task per session, 4 gRPC stream subscribers), refusal synthesis, event enrichment, notification synthesis.
+
+### Phase evaluations
+
+All six phases passed evaluation. Reports at `impl/phase-{1..6}-eval.md`.
+
+| Phase | Tests | Endpoints | Key deliverables |
+|-------|-------|-----------|-----------------|
+| 1 | 51 → | 21 | Auth, users, tokens, audit, settings, health, bootstrap, rate limiting |
+| 2 | 71 → | 40 | Taxonomy index, discovery endpoints, search, reload, pagination, OpenAPI |
+| 3 | 87 → | 50 | Profile validation (14 codes + 2 warnings), CRUD, versioning, YAML export/import |
+| 4 | 99 | 66 | Session state machine, validation (12 codes), gRPC pool, CRUD, highway actions, WebSocket |
+| 5 | +3 FE | — | API types codegen, Zustand stores, app shell, login, discovery browser (4 tabs), profiles, settings, admin |
+| 6 | — | — | WebSocket hook, 6-step wizard, oversight dashboard (8 panels), notifications |
 
 ## Four Surfaces
 
@@ -77,130 +103,44 @@ Four endpoints, three independent Tonic channels + one REST client:
 
 **Spec:** `wcon-data-model`
 
-## Taxonomy & Discovery
+## Next Step: Wiring Strategy
 
-The taxonomy index is built from two sources:
-1. **Protocol taxonomy** — YAML files on disk (base/derived roles, protocol-level types). Path: `taxonomy.path` setting.
-2. **Vertical manifests** — fetched from runtime REST API (ADR-001). Seven verticals: SWE, DevOps, MLOps, Finance, Healthcare, Analytics, DataSci.
+**Document:** `impl/wiring-strategy.md`
 
-Each vertical has: `defining_constraint`, `context_schema`, `tool_policies`, `checkpoint_types`, `quality_criteria`, `task_types`, `workflows`, `default_profiles`, `tools`.
+Phase 7 (distribution) is postponed. The next work is wiring the Console to the real WACP runtime. The strategy has 7 steps:
 
-**Tool-role mapping is vertical-coarse** — every role in a vertical lists every tool in that vertical. Fine-grained per-role tool mappings deferred until upstream manifest extends.
+| Step | What | Effort |
+|------|------|--------|
+| **W0** | Merge `wacp/` and `wacp-console/` into one workspace | ~4h |
+| **W1** | gRPC pool → AppState (instantiate, connect, inject) | ~2h |
+| **W2** | Real launch flow (CreateSession → SubmitGoal → Dispatch → SendEnvelope) | ~1d |
+| **W3** | Session monitor (4 gRPC stream subscribers, event aggregation, WebSocket broadcast) | ~2d |
+| **W4** | Highway forwarding (gate/escalation/inject → real gRPC calls) | ~4h |
+| **W5** | Cancellation cleanup + startup recovery | ~4h |
+| **W6** | Cross-session pending endpoints from monitor state | ~2h |
 
-**Stub entries:** `VerticalEntry.load_error: Option<String>` for verticals whose manifest failed to load.
+**Critical path:** W3 (session monitor) — the hardest piece. Everything else is mechanical wiring.
 
-**Spec:** `wcon-discovery`, `wcon-data-model` §6
+**Before writing any wiring code:** Start the real runtime (`cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml`), verify REST taxonomy loading works, confirm auth/profiles/settings work standalone.
 
-## Profiles
+### Monorepo Decision
 
-A profile bundles: role reference, LLM config (provider, model, temperature, max_tokens), autonomy preset (autonomous/assisted/supervised), tool allowlist/denylist, budget caps, user metadata.
+The two repos are not independent. They share proto contracts, type crates, and must version-lock. Merge is recommended — ~4 hours of mechanical work (move files, update Cargo.toml paths, fix proto build path, consolidate CI). The architectural boundary stays: two binaries, gRPC between them. The merge is about development ergonomics.
 
-**Validation** on every write: role must exist, tools must belong to same vertical as role (vertical-coarse), effective tool set non-empty. Policy-gated tools save with non-blocking `TOOL_HAS_RUNTIME_POLICY` warning.
+### Hollow Code Inventory
 
-**Name uniqueness:** per-user. Two different users can have identically-named profiles. Shared profiles display as `"{owner}'s {name}"` (derived at read time, not stored).
+8 scaffolded components that need real gRPC calls:
 
-**Ownership:** `owner_user_id` set at creation, immutable. `visibility`: private (default) or shared.
-
-**Export:** YAML with `format_version: 1` (ADR-007). No `id`, `version`, `owner_user_id`, or `visibility` in export.
-
-**Spec:** `wcon-profiles`, `wcon-data-model` §3
-
-## Sessions
-
-**States:** configuring → validating → launching → active → completed/failed/cancelled. Cancel from any non-terminal state.
-
-**Launch flow:** CreateSession → SubmitGoal → per-slot Dispatch + SendEnvelope (directive with LLM config, tools, system_prompt, context passthrough) → subscribe to 4 gRPC streams.
-
-**Slot derivation:** Mode A (stage-aware, future) or Mode B (role-aware fallback, current). Mode B: one slot per distinct role in the vertical.
-
-**Vertical context:** session-level JSON from the vertical's `context_schema`. Supplied at step 4 of wizard, stored in `sessions.context`, delivered to runtime at dispatch.
-
-**Cancellation cleanup:** from configuring/validating = no-op; from launching = best-effort workspace abort; from active = CoordinatorService.AbortWorkspace.
-
-**Recovery:** on backend restart, query active sessions, call CoordinatorService.GetWorkspace + GetTaskGraph, re-subscribe streams.
-
-**Spec:** `wcon-sessions`, `wcon-data-model` §4
-
-## Highway (Oversight)
-
-Four gRPC streams per session → session monitor → 7 WebSocket channels to frontend:
-
-| Channel | Source | Synthesized? |
-|---------|--------|-------------|
-| `trail` | StreamTrail | No |
-| `gates` | StreamGates | No |
-| `escalations` | StreamEscalations | No |
-| `refusals` | Trail entries with refusal codes | Yes |
-| `workspaces` | StreamWorkspaceChanges | No |
-| `session` | Aggregated workspace states | Yes |
-| `notification` | Cross-cutting events | Yes |
-
-**Tool-layer refusals:** runtime-enforced, arrive as trail entries. Console synthesizes `RefusalEvent` with policy metadata from taxonomy index. Four kinds: requires_checkpoint, requires_gate, budget_limited, classification_gated.
-
-**Authorization scoping:** cross-session endpoints filtered by session ownership. Operators see own sessions only. Admins see all.
-
-**Spec:** `wcon-highway`
-
-## Authentication & Authorization
-
-**Identity:** local users, Argon2id, SQLite. No external IdP in Phase 1.
-
-**Browser auth:** cookie (`wcon_sid`), HttpOnly, Secure, SameSite=Strict, rotated on login.
-
-**API auth:** bearer token (`Authorization: Bearer wcon_t_...`), hashed at rest.
-
-**Roles:** admin ⊃ operator ⊃ viewer. Personas: admin → Administrator, operator → Practitioner/Overseer, viewer → Explorer.
-
-**Bootstrap:** first launch generates one-time credential → forced password change → no default credentials ever.
-
-**CSRF:** double-submit cookie on all state-changing cookie-authenticated requests. API tokens exempt.
-
-**Rate limiting:** per-IP (20/15min) + per-account (5 failed/15min) with auto-unlock.
-
-**Audit:** append-only log of every mutation. 23 action types. Admin-readable.
-
-**Spec:** `wcon-auth`
-
-## API Surface
-
-REST + WebSocket. All endpoints except `/api/health` and `POST /api/auth/login` require authentication.
-
-**Key endpoint families:**
-
-| Family | Path prefix | Spec section |
-|--------|------------|-------------|
-| Discovery | `/api/roles`, `/api/tools`, `/api/verticals`, `/api/search` | `wcon-api` §6–7 |
-| Profiles | `/api/profiles` | `wcon-api` §7 |
-| Sessions | `/api/sessions` | `wcon-api` §8 |
-| Gates/Escalations/Injection | `/api/sessions/:id/gates`, `escalations`, `inject` | `wcon-api` §9 |
-| Auth | `/api/auth/*` | `wcon-api` §3.5 |
-| Users (admin) | `/api/users/*` | `wcon-api` §3.6 |
-| Tokens | `/api/tokens/*` | `wcon-api` §3.7 |
-| Audit log (admin) | `/api/audit-log` | `wcon-api` §3.8 |
-| Settings | `/api/settings` | `wcon-api` §10 |
-| Health | `/api/health` | `wcon-api` §11 |
-| WebSocket | `/api/sessions/:id/ws` | `wcon-api` §12 |
-
-**Pagination:** cursor-based. **Error model:** `{ error, code, message, detail }`.
-
-**Health:** per-service checks — `runtime_agent`, `runtime_highway`, `runtime_coordinator`, `runtime_rest`.
-
-**Spec:** `wcon-api`
-
-## Testing Strategy
-
-| Layer | Tool | Fixture |
-|-------|------|---------|
-| Backend unit | `cargo test` + rstest + insta | In-memory SQLite, inline taxonomy data |
-| Frontend unit | Vitest + RTL + MSW | Mocked API responses |
-| Integration | In-process Tonic/Axum mock runtime | `fixture-simple` (SWE-like) + `fixture-complex` (Finance-like) |
-| E2E | Playwright | Full binary + mock runtime sidecar |
-
-**Two fixture verticals:** `fixture-simple` (no context, no policies — SWE baseline) and `fixture-complex` (required context, tool policies, vertical checkpoints — Finance/Healthcare-like).
-
-**Mock runtime** uses the same `wacp-taxonomy::VerticalManifest` struct as real runtime (compile-time schema fidelity).
-
-**Spec:** `wcon-test`
+| Component | Current state | What it needs |
+|-----------|--------------|---------------|
+| gRPC pool | Built, never instantiated | Add to AppState, connect on startup |
+| Launch flow | SQLite state transitions only | 5-step gRPC sequence |
+| Session monitor | Doesn't exist | Tokio task with 4 stream subscribers |
+| Gate resolution | Audit log only | `HighwayService::RespondToGate` |
+| Escalation response | Audit log only | `HighwayService::RespondToEscalation` |
+| Directive injection | Audit log only | `HighwayService::InjectEnvelope` |
+| Cancel cleanup | Empty match arms | `CoordinatorService::AbortWorkspace` |
+| Startup recovery | Query exists, not wired | Verify workspaces, re-subscribe streams |
 
 ## Key Invariants
 
@@ -228,24 +168,30 @@ REST + WebSocket. All endpoints except `/api/health` and `POST /api/auth/login` 
 
 **Full ADR text:** `SPEC_BUILD.md`
 
-## Implementation Plan
+## Workspace Layout
 
-**Document:** `IMPLEMENTATION.md`
-
-Eight phases, 73+ tasks, every task traced to a spec reference. No stubs — every phase delivers production code.
-
-| Phase | What | Key deliverables |
-|-------|------|-----------------|
-| **0** | Scaffold + mock runtime | Rust workspace (6 crates), frontend project, SQLite migrations (9 tables), mock runtime (gRPC + REST with fixture verticals), CI pipeline, Clap CLI |
-| **1** | Auth + database | sqlx query layer, Authenticator/Authorizer traits, auth endpoints, user management, API tokens, rate limiting, bootstrap, audit log, settings, health, Argon2id, error model |
-| **2** | Taxonomy + discovery API | YAML parser, REST client, TaxonomyIndex builder with ArcSwap, 20+ discovery endpoints, search, reload, pagination, per-service health checks, OpenAPI generation |
-| **3** | Profiles API | Validation engine (14 error codes + 2 warnings), CRUD with versioning, per-user name uniqueness, ownership/visibility, YAML export/import with `format_version: 1`, clone |
-| **4** | Sessions + highway | State machine, 12-check validation, gRPC client pool (3 channels), launch flow, session monitor (4 streams), refusal synthesis, WebSocket server (7 channels), gate/escalation/injection endpoints, cancel, recovery |
-| **5** | Frontend: shell + auth + discovery + profiles | OpenAPI codegen, TanStack Query hooks, app shell, login, 4-tab discovery browser, profile studio + library, settings, admin screens (users, audit log), theme |
-| **6** | Frontend: sessions + oversight | WebSocket hook, 6-step wizard, dynamic context form, oversight dashboard (trail, gates, escalations, refusals, workspace tree, injection, quality report), notifications, keyboard shortcuts |
-| **7** | Distribution + E2E | rust-embed single binary, cargo-dist (5 channels), Docker, Playwright E2E (5 suites), cargo-deny, LICENSE, README, performance verification |
-
-**Each phase has a deliverables checklist** — checkmark each item as it lands. No phase is complete until all its deliverables are checked.
+```
+wacp-console/
+├── Cargo.toml                  # workspace root (6 member crates)
+├── rust-toolchain.toml         # pin Rust stable
+├── openapi.yaml                # generated (66 operations, 12 tags)
+├── crates/
+│   ├── console/                # binary — CLI, tracing, startup, taxonomy build
+│   ├── console-api/            # Axum routes, handlers, OpenAPI, pagination, WebSocket
+│   ├── console-core/           # domain logic: auth, profiles, sessions, taxonomy, validation
+│   ├── console-db/             # sqlx types, queries, migrations
+│   ├── console-runtime/        # gRPC pool, REST client, proto codegen, upstream re-exports
+│   └── console-test-support/   # mock runtime (gRPC + REST), fixtures
+├── migrations/                 # sqlx SQL migration files (9 tables)
+├── frontend/                   # Vite + React 19 + TypeScript SPA
+│   ├── src/api/                # types.ts (generated), client.ts, hooks/
+│   ├── src/store/              # auth.ts, ui.ts, session.ts (Zustand)
+│   ├── src/components/         # Layout, Sidebar, AdminGuard, Notifications
+│   ├── src/realtime/           # useSessionStream.ts (WebSocket hook)
+│   └── src/surfaces/           # auth, discovery, profiles, sessions, oversight, settings, admin
+├── specs/                      # 12 finalized design specs
+└── impl/                       # phase evals, wiring strategy
+```
 
 ## Design Specs (all final)
 

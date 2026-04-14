@@ -22,6 +22,8 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/tokens", get(list_tokens).post(create_token))
         .route("/api/tokens/{id}", delete(revoke_token))
+        .route("/api/users/{user_id}/tokens", get(list_user_tokens))
+        .route("/api/users/{user_id}/tokens/{id}", delete(revoke_user_token))
 }
 
 async fn list_tokens(
@@ -112,6 +114,58 @@ async fn revoke_token(
     } else {
         authorizer::authorize(&auth, Action::ManageAnyTokens).map_err(ApiError::from)?;
     }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    api_tokens::revoke_token(&state.db, &id, &now)
+        .await
+        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+
+    log_audit(&state.db, AuditEntry {
+        user_id: auth.user_id.clone(),
+        action: AuditAction::TokenRevoke,
+        target_id: id,
+        detail: None,
+        ip: ctx.ip,
+        user_agent: ctx.user_agent,
+    }).await.ok();
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// Admin: list tokens for a specific user.
+async fn list_user_tokens(
+    State(state): State<Arc<AppState>>,
+    auth: Auth,
+    Path(user_id): Path<String>,
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    authorizer::authorize(&auth, Action::ManageAnyTokens).map_err(ApiError::from)?;
+
+    let rows = api_tokens::list_by_user(&state.db, &user_id)
+        .await
+        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+
+    let result: Vec<serde_json::Value> = rows.into_iter().map(|t| serde_json::json!({
+        "id": t.id,
+        "name": t.name,
+        "user_id": t.user_id,
+        "created_at": t.created_at,
+        "expires_at": t.expires_at,
+        "last_used_at": t.last_used_at,
+    })).collect();
+
+    Ok(Json(result))
+}
+
+/// Admin: revoke a specific user's token.
+async fn revoke_user_token(
+    State(state): State<Arc<AppState>>,
+    auth: Auth,
+    ctx: RequestContext,
+    headers: HeaderMap,
+    Path((_user_id, id)): Path<(String, String)>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    validate_csrf(&headers, is_bearer_auth(&headers)).map_err(ApiError::from)?;
+    authorizer::authorize(&auth, Action::ManageAnyTokens).map_err(ApiError::from)?;
 
     let now = chrono::Utc::now().to_rfc3339();
     api_tokens::revoke_token(&state.db, &id, &now)

@@ -56,6 +56,15 @@ pub async fn count_failed_by_username(
     Ok(row.0)
 }
 
+/// Delete all failed attempts for a specific username (admin unlock).
+pub async fn clear_for_username(pool: &DbPool, username: &str) -> Result<u64, sqlx::Error> {
+    let result = sqlx::query("DELETE FROM login_attempts WHERE username = ? AND success = 0")
+        .bind(username)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
 /// Delete attempts older than the given timestamp.
 pub async fn cleanup_before(pool: &DbPool, before: &str) -> Result<u64, sqlx::Error> {
     let result = sqlx::query("DELETE FROM login_attempts WHERE attempted_at < ?")

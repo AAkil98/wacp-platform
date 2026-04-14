@@ -265,16 +265,15 @@ async fn unlock_user(
     validate_csrf(&headers, is_bearer_auth(&headers)).map_err(ApiError::from)?;
     authorizer::authorize(&auth, Action::DisableUser).map_err(ApiError::from)?;
 
-    // Unlocking clears login_attempts for the user
+    // Unlocking clears failed login_attempts for the target user
     let user = users::get_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?
         .ok_or_else(|| ApiError::not_found("user", &id))?;
 
-    // Delete login attempts for this username to unlock
-    let cutoff = "1970-01-01T00:00:00Z"; // Delete all
-    console_db::queries::login_attempts::cleanup_before(&state.db, cutoff).await.ok();
-    let _ = user.username; // used above
+    console_db::queries::login_attempts::clear_for_username(&state.db, &user.username)
+        .await
+        .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

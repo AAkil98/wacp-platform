@@ -68,32 +68,30 @@ async fn list_profiles(
     .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
     let index = state.taxonomy.load();
-    let result: Vec<serde_json::Value> = rows
-        .iter()
-        .map(|p| {
-            let display_name = derive_display_name(p, &auth.user_id);
-            let role_name = index
-                .get_role(&p.role_ref)
-                .map(|r| r.name.as_str())
-                .unwrap_or(&p.role_ref);
-            let vertical = index.get_role(&p.role_ref).and_then(|r| r.vertical.clone());
+    let mut result: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
+    for p in &rows {
+        let display_name = derive_display_name(p, &auth.user_id, &state.db).await;
+        let role_name = index
+            .get_role(&p.role_ref)
+            .map(|r| r.name.as_str())
+            .unwrap_or(&p.role_ref);
+        let vertical = index.get_role(&p.role_ref).and_then(|r| r.vertical.clone());
 
-            serde_json::json!({
-                "id": p.id,
-                "name": p.name,
-                "display_name": display_name,
-                "description": p.description,
-                "role_ref": p.role_ref,
-                "role_name": role_name,
-                "vertical": vertical,
-                "autonomy": p.autonomy,
-                "visibility": p.visibility,
-                "owner_user_id": p.owner_user_id,
-                "version": p.version,
-                "created_at": p.created_at,
-            })
-        })
-        .collect();
+        result.push(serde_json::json!({
+            "id": p.id,
+            "name": p.name,
+            "display_name": display_name,
+            "description": p.description,
+            "role_ref": p.role_ref,
+            "role_name": role_name,
+            "vertical": vertical,
+            "autonomy": p.autonomy,
+            "visibility": p.visibility,
+            "owner_user_id": p.owner_user_id,
+            "version": p.version,
+            "created_at": p.created_at,
+        }));
+    }
 
     Ok(Json(result))
 }
@@ -233,7 +231,7 @@ async fn get_profile(
     check_profile_read_access(&auth, &profile)?;
 
     let index = state.taxonomy.load();
-    let display_name = derive_display_name(&profile, &auth.user_id);
+    let display_name = derive_display_name(&profile, &auth.user_id, &state.db).await;
     let role = index.get_role(&profile.role_ref);
     let vertical = role.and_then(|r| r.vertical.clone());
 
@@ -723,12 +721,19 @@ async fn import_profile(
 
 // --- Helpers ---
 
-fn derive_display_name(profile: &profiles::ProfileRow, viewer_user_id: &str) -> String {
+async fn derive_display_name(
+    profile: &profiles::ProfileRow,
+    viewer_user_id: &str,
+    db: &console_db::DbPool,
+) -> String {
     if profile.visibility == "shared" && profile.owner_user_id != viewer_user_id {
-        // For shared profiles viewed by non-owners, we'd ideally look up owner's display_name.
-        // Since we don't have it in the profile row, use a placeholder pattern.
-        // The list handler should join with users table for full fidelity.
-        format!("{}'s {}", profile.owner_user_id, profile.name)
+        let owner_name = console_db::queries::users::get_by_id(db, &profile.owner_user_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|u| u.display_name)
+            .unwrap_or_else(|| profile.owner_user_id.clone());
+        format!("{owner_name}'s {}", profile.name)
     } else {
         profile.name.clone()
     }

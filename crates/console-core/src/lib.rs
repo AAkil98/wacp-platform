@@ -6,6 +6,7 @@ pub mod authorizer;
 pub mod config;
 pub mod error;
 pub mod password;
+pub mod rate_limit;
 pub mod settings;
 
 pub use auth::{AuthenticatedUser, ConsoleRole};

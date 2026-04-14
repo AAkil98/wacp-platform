@@ -1,3 +1,5 @@
+pub mod error;
+
 use axum::Router;
 use console_db::DbPool;
 use std::sync::Arc;

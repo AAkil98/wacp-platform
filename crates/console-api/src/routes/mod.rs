@@ -2,6 +2,7 @@ pub mod audit;
 pub mod auth;
 pub mod discovery;
 pub mod health;
+pub mod profiles;
 pub mod search;
 pub mod settings;
 pub mod taxonomy;

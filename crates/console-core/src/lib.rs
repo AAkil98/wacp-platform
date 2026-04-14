@@ -7,6 +7,8 @@ pub mod config;
 pub mod error;
 pub mod password;
 pub mod rate_limit;
+pub mod profile_validation;
+pub mod profile_yaml;
 pub mod settings;
 pub mod taxonomy;
 pub mod taxonomy_builder;

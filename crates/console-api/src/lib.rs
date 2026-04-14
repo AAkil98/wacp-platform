@@ -33,6 +33,7 @@ pub fn api_router(state: AppState) -> Router {
         .merge(routes::tokens::router())
         .merge(routes::audit::router())
         .merge(routes::settings::router())
+        .merge(routes::profiles::router())
         .merge(routes::discovery::router())
         .merge(routes::verticals::router())
         .merge(routes::search::router())

@@ -104,6 +104,26 @@ paths:
       summary: Get envelope type
       tags:
       - discovery
+  /api/escalations/pending:
+    get:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+      summary: Pending escalations
+      tags:
+      - highway
+  /api/gates/pending:
+    get:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+      summary: Pending gates
+      tags:
+      - highway
   /api/health:
     get:
       responses:
@@ -223,6 +243,16 @@ paths:
       summary: List profile versions
       tags:
       - profiles
+  /api/refusals/pending:
+    get:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+      summary: Pending refusals
+      tags:
+      - highway
   /api/roles:
     get:
       responses:
@@ -259,6 +289,158 @@ paths:
       summary: Search taxonomy
       tags:
       - search
+  /api/sessions:
+    get:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+      summary: List sessions
+      tags:
+      - sessions
+    post:
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Create session
+      tags:
+      - sessions
+  /api/sessions/{id}:
+    get:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Get session
+      tags:
+      - sessions
+    patch:
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Update session config
+      tags:
+      - sessions
+  /api/sessions/{id}/assignments:
+    put:
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Set assignments
+      tags:
+      - sessions
+  /api/sessions/{id}/cancel:
+    post:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Cancel session
+      tags:
+      - sessions
+  /api/sessions/{id}/clone:
+    post:
+      responses:
+        '201':
+          description: Created
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Clone session
+      tags:
+      - sessions
+  /api/sessions/{id}/launch:
+    post:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Launch session
+      tags:
+      - sessions
+  /api/sessions/{id}/ws:
+    get:
+      responses:
+        '101':
+          description: Response
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: WebSocket upgrade
+      tags:
+      - sessions
+  /api/sessions/{sid}/escalations/{eid}:
+    post:
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Respond to escalation
+      tags:
+      - highway
+  /api/sessions/{sid}/gates/batch-resolve:
+    post:
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Batch resolve gates
+      tags:
+      - highway
+  /api/sessions/{sid}/gates/{gid}:
+    post:
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Resolve gate
+      tags:
+      - highway
+  /api/sessions/{sid}/inject:
+    post:
+      responses:
+        '204':
+          description: No content
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Forbidden
+      summary: Inject directive
+      tags:
+      - highway
   /api/settings:
     get:
       responses:
@@ -585,6 +767,10 @@ tags:
   name: settings
 - description: Health checks
   name: health
+- description: Session lifecycle and coordination
+  name: sessions
+- description: Gates, escalations, refusals, directives
+  name: highway
 - description: Agent profile lifecycle
   name: profiles
 - description: Taxonomy discovery and browsing

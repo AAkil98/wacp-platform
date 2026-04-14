@@ -38,6 +38,9 @@ pub fn api_router(state: AppState) -> Router {
         .merge(routes::verticals::router())
         .merge(routes::search::router())
         .merge(routes::taxonomy::router())
+        .merge(routes::sessions::router())
+        .merge(routes::highway::router())
+        .merge(routes::ws::router())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &axum::http::Request<_>| {

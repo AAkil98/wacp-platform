@@ -73,6 +73,26 @@ fn build_spec() -> serde_json::Value {
     add_op(&mut paths, "/api/profiles/{id}/clone", "post", "profiles", "Clone profile", &[201, 401, 403]);
     add_op(&mut paths, "/api/profiles/{id}/export", "get", "profiles", "Export profile (YAML)", &[200, 401]);
     add_op(&mut paths, "/api/profiles/import", "post", "profiles", "Import profile (YAML)", &[201, 401, 403]);
+    // Phase 4: Sessions
+    add_op(&mut paths, "/api/sessions", "get", "sessions", "List sessions", &[200, 401]);
+    add_op(&mut paths, "/api/sessions", "post", "sessions", "Create session", &[201, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}", "get", "sessions", "Get session", &[200, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}", "patch", "sessions", "Update session config", &[204, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}/assignments", "put", "sessions", "Set assignments", &[204, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}/launch", "post", "sessions", "Launch session", &[200, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}/cancel", "post", "sessions", "Cancel session", &[200, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{id}/clone", "post", "sessions", "Clone session", &[201, 401, 403]);
+    // Phase 4: Highway actions
+    add_op(&mut paths, "/api/sessions/{sid}/gates/{gid}", "post", "highway", "Resolve gate", &[204, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{sid}/gates/batch-resolve", "post", "highway", "Batch resolve gates", &[200, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{sid}/escalations/{eid}", "post", "highway", "Respond to escalation", &[204, 401, 403]);
+    add_op(&mut paths, "/api/sessions/{sid}/inject", "post", "highway", "Inject directive", &[204, 401, 403]);
+    // Phase 4: Cross-session
+    add_op(&mut paths, "/api/gates/pending", "get", "highway", "Pending gates", &[200, 401]);
+    add_op(&mut paths, "/api/escalations/pending", "get", "highway", "Pending escalations", &[200, 401]);
+    add_op(&mut paths, "/api/refusals/pending", "get", "highway", "Pending refusals", &[200, 401]);
+    // Phase 4: WebSocket
+    add_op(&mut paths, "/api/sessions/{id}/ws", "get", "sessions", "WebSocket upgrade", &[101, 401, 403]);
     // Search + Taxonomy
     add_op(&mut paths, "/api/search", "get", "search", "Search taxonomy", &[200, 401, 403]);
     add_op(&mut paths, "/api/taxonomy/reload", "post", "taxonomy", "Reload taxonomy", &[200, 401, 403]);
@@ -93,6 +113,8 @@ fn build_spec() -> serde_json::Value {
             { "name": "audit", "description": "Audit log" },
             { "name": "settings", "description": "Application settings" },
             { "name": "health", "description": "Health checks" },
+            { "name": "sessions", "description": "Session lifecycle and coordination" },
+            { "name": "highway", "description": "Gates, escalations, refusals, directives" },
             { "name": "profiles", "description": "Agent profile lifecycle" },
             { "name": "discovery", "description": "Taxonomy discovery and browsing" },
             { "name": "verticals", "description": "Per-vertical sub-resources" },
@@ -160,6 +182,6 @@ mod tests {
         let op_count: usize = paths.values().map(|p| {
             p.as_object().map_or(0, |m| m.len())
         }).sum();
-        assert_eq!(op_count, 50, "expected 50 operations, got {op_count}");
+        assert_eq!(op_count, 66, "expected 66 operations, got {op_count}");
     }
 }

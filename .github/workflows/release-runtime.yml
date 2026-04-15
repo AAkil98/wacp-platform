@@ -1,8 +1,8 @@
-name: Release
+name: Release — wacp-runtime
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["wacp-runtime-v*"]
 
 permissions:
   contents: write
@@ -11,22 +11,28 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+# Tags ending in `-test` (e.g., `wacp-runtime-v0.0.0-test`) are scratch tags
+# used to validate the workflow end-to-end without producing real archives
+# or GitHub Releases. The native-binary build matrix and the GitHub
+# Release step are skipped; only the `docker` job runs, so the full
+# OIDC + ghcr.io push path is exercised in ~5 min rather than ~40 min
+# (§10.4 of the merge plan). Cleanup runbook: merge-plan §10.4.
+
 jobs:
   build:
     name: Build — ${{ matrix.target }}
+    if: ${{ !endsWith(github.ref_name, '-test') }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Tier 1
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             archive: tar.gz
           - target: aarch64-apple-darwin
             runner: macos-latest
             archive: tar.gz
-          # Tier 2
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             archive: zip
@@ -43,7 +49,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-${{ matrix.target }}
+          key: release-runtime-${{ matrix.target }}
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
 
       - name: Install cross
         if: matrix.cross
@@ -53,22 +64,15 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --bin wacp-runtime --target ${{ matrix.target }}
+            cross build --release -p wacp-runtime --target ${{ matrix.target }}
           else
-            cargo build --release --bin wacp-runtime --target ${{ matrix.target }}
+            cargo build --release -p wacp-runtime --target ${{ matrix.target }}
           fi
 
-      - name: Strip binary (unix)
-        if: runner.os != 'Windows'
+      - name: Strip binary (unix, native)
+        if: runner.os != 'Windows' && !matrix.cross
         shell: bash
-        run: |
-          BIN="target/${{ matrix.target }}/release/wacp-runtime"
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            # cross-compiled — may not have the right strip; skip
-            true
-          else
-            strip "$BIN"
-          fi
+        run: strip "target/${{ matrix.target }}/release/wacp-runtime"
 
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
@@ -77,7 +81,7 @@ jobs:
           STEM="wacp-runtime-${{ github.ref_name }}-${{ matrix.target }}"
           mkdir -p "staging/$STEM"
           cp "target/${{ matrix.target }}/release/wacp-runtime" "staging/$STEM/"
-          cp LICENSE NOTICE "staging/$STEM/"
+          cp wacp/LICENSE wacp/NOTICE "staging/$STEM/"
           tar czf "$STEM.tar.gz" -C staging "$STEM"
           sha256sum "$STEM.tar.gz" > "$STEM.tar.gz.sha256"
 
@@ -88,18 +92,19 @@ jobs:
           STEM="wacp-runtime-${{ github.ref_name }}-${{ matrix.target }}"
           mkdir -p "staging/$STEM"
           cp "target/${{ matrix.target }}/release/wacp-runtime.exe" "staging/$STEM/"
-          cp LICENSE NOTICE "staging/$STEM/"
+          cp wacp/LICENSE wacp/NOTICE "staging/$STEM/"
           cd staging && 7z a "../$STEM.zip" "$STEM" && cd ..
           sha256sum "$STEM.zip" > "$STEM.zip.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}
+          name: release-runtime-${{ matrix.target }}
           path: wacp-runtime-${{ github.ref_name }}-${{ matrix.target }}.*
           if-no-files-found: error
 
   publish:
     name: GitHub Release
+    if: ${{ !endsWith(github.ref_name, '-test') }}
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -121,9 +126,14 @@ jobs:
 
   docker:
     name: Docker → GHCR
+    # No -test guard here: runs on scratch tags too so the OCI push path
+    # is what gets validated. See §10.4.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
         with:
@@ -136,12 +146,14 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/wacp-runtime
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=match,pattern=wacp-runtime-v(\d+\.\d+\.\d+.*),group=1
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - uses: docker/build-push-action@v6
         with:
           context: .
+          file: wacp/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: true

@@ -1,0 +1,26 @@
+name: CI — lint
+
+# Workspace-wide formatting check. Runs on every push/PR: cargo fmt applies
+# uniformly across all 23 members and isn't scoped by path, unlike the
+# per-subproject ci-wacp.yml / ci-console.yml build and test jobs.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: cargo fmt --check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format check
+        run: cargo fmt --check --all

@@ -1,0 +1,116 @@
+name: CI — console
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "wacp-console/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/ci-console.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "wacp-console/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/ci-console.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust — console crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+
+      # rust-embed scans wacp-console/frontend/dist/ at cargo-build time.
+      # Build the SPA here so the wacp-console binary compiles. The
+      # dedicated `frontend` job below covers lint/typecheck/test; this
+      # step only exists to satisfy the embed path.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+      - name: Build frontend (for rust-embed)
+        working-directory: wacp-console/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build
+        run: |
+          cargo build \
+            -p wacp-console -p console-api -p console-core \
+            -p console-db -p console-runtime -p console-test-support
+
+      - name: Clippy
+        run: |
+          cargo clippy \
+            -p wacp-console -p console-api -p console-core \
+            -p console-db -p console-runtime -p console-test-support \
+            -- -D warnings
+
+      - name: Test
+        run: |
+          cargo test \
+            -p wacp-console -p console-api -p console-core \
+            -p console-db -p console-runtime -p console-test-support
+
+      - name: OpenAPI drift check
+        run: |
+          cargo run -p console-api --bin gen-openapi > wacp-console/openapi.yaml.gen
+          diff wacp-console/openapi.yaml wacp-console/openapi.yaml.gen \
+            || (echo "wacp-console/openapi.yaml is stale — regenerate with: cargo run -p console-api --bin gen-openapi > wacp-console/openapi.yaml" && exit 1)
+          rm wacp-console/openapi.yaml.gen
+
+  frontend:
+    name: Frontend — lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wacp-console/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

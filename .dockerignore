@@ -1,0 +1,34 @@
+# Build artifacts
+target/
+**/node_modules/
+**/dist/
+
+# VCS / editor / OS
+.git/
+.github/
+.idea/
+.vscode/
+.DS_Store
+*~
+*.swp
+*.swo
+
+# Local-only Claude Code context
+.claude/
+
+# Per-contributor scratch
+draft.md
+
+# Databases / runtime state
+*.db
+*.db-wal
+*.db-shm
+.wacp-data/
+
+# Python build artifacts
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+build/

@@ -1,0 +1,63 @@
+# WACP Platform — dev compose
+#
+# Brings up the runtime and console together with compose DNS wiring.
+# Both services build from per-subdir Dockerfiles with the umbrella root
+# as the build context (see `.dockerignore`).
+#
+# Usage:
+#   docker compose up --build
+#
+# Ports:
+#   Runtime: 9090 (agent), 9091 (highway), 9092 (coordinator),
+#            9093 (REST), 9094 (health)
+#   Console: 8080 (HTTP)
+
+services:
+  wacp-runtime:
+    build:
+      context: .
+      dockerfile: wacp/Dockerfile
+    image: wacp-runtime:local
+    container_name: wacp-runtime
+    ports:
+      - "9090:9090"
+      - "9091:9091"
+      - "9092:9092"
+      - "9093:9093"
+      - "9094:9094"
+    volumes:
+      - wacp-runtime-data:/var/lib/wacp
+    healthcheck:
+      test: ["CMD", "wacp-runtime", "validate"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+  wacp-console:
+    build:
+      context: .
+      dockerfile: wacp-console/Dockerfile
+    image: wacp-console:local
+    container_name: wacp-console
+    depends_on:
+      wacp-runtime:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # Defaults from the Dockerfile are compose-ready; override here only
+      # when the runtime service is renamed or exposed on non-default ports.
+      WACP_CONSOLE_LISTEN: "[::]:8080"
+      WACP_RUNTIME_AGENT_ADDRESS: "wacp-runtime:9090"
+      WACP_RUNTIME_HIGHWAY_ADDRESS: "wacp-runtime:9091"
+      WACP_RUNTIME_COORDINATOR_ADDRESS: "wacp-runtime:9092"
+      WACP_RUNTIME_REST_ADDRESS: "http://wacp-runtime:9093"
+    volumes:
+      - wacp-console-data:/var/lib/wacp-console
+    restart: unless-stopped
+
+volumes:
+  wacp-runtime-data:
+  wacp-console-data:

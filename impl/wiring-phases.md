@@ -56,7 +56,7 @@ W1 (pool → AppState)
 
 ## 3. Phase Breakdown
 
-### W1 — gRPC Pool → AppState   *(DONE — commit TBD by post-commit amendment)*
+### W1 — gRPC Pool → AppState   *(DONE — commit `17cff22`)*
 
 **Estimate:** 2 hours (actual: ~1h30 end-to-end). **Coding spec:** `wcon-w1-grpc-pool`.
 

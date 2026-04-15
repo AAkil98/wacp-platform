@@ -4,7 +4,10 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -22,11 +25,11 @@ use crate::middleware::{Auth, RequestContext, is_bearer_auth, validate_csrf};
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/sessions", get(list_sessions).post(create_session))
+        .route("/api/sessions/{id}", get(get_session).patch(update_session))
         .route(
-            "/api/sessions/{id}",
-            get(get_session).patch(update_session),
+            "/api/sessions/{id}/assignments",
+            axum::routing::put(set_assignments),
         )
-        .route("/api/sessions/{id}/assignments", axum::routing::put(set_assignments))
         .route("/api/sessions/{id}/launch", post(launch_session))
         .route("/api/sessions/{id}/cancel", post(cancel_session))
         .route("/api/sessions/{id}/clone", post(clone_session))
@@ -42,7 +45,9 @@ struct ListParams {
     cursor: Option<String>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 async fn list_sessions(
     State(state): State<Arc<AppState>>,
@@ -165,14 +170,19 @@ async fn create_session(
             .ok();
     }
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionCreate,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"vertical": row.vertical, "workflow": row.workflow})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionCreate,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"vertical": row.vertical, "workflow": row.workflow})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -402,9 +412,15 @@ async fn launch_session(
     let now = chrono::Utc::now().to_rfc3339();
 
     // Transition to validating
-    sessions::transition_state(&state.db, &id, session_state::CONFIGURING, session_state::VALIDATING, &now)
-        .await
-        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    sessions::transition_state(
+        &state.db,
+        &id,
+        session_state::CONFIGURING,
+        session_state::VALIDATING,
+        &now,
+    )
+    .await
+    .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
     // Validate
     let index = state.taxonomy.load();
@@ -422,9 +438,15 @@ async fn launch_session(
 
     if !result.is_valid() {
         // Back to configuring
-        sessions::transition_state(&state.db, &id, session_state::VALIDATING, session_state::CONFIGURING, &now)
-            .await
-            .ok();
+        sessions::transition_state(
+            &state.db,
+            &id,
+            session_state::VALIDATING,
+            session_state::CONFIGURING,
+            &now,
+        )
+        .await
+        .ok();
         return Err(ApiError::from(ConsoleError::Validation {
             message: "Session validation failed".into(),
             violations: result
@@ -442,25 +464,42 @@ async fn launch_session(
     }
 
     // Transition to launching
-    sessions::transition_state(&state.db, &id, session_state::VALIDATING, session_state::LAUNCHING, &now)
-        .await
-        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    sessions::transition_state(
+        &state.db,
+        &id,
+        session_state::VALIDATING,
+        session_state::LAUNCHING,
+        &now,
+    )
+    .await
+    .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
     // The actual gRPC launch sequence (4.6) runs here.
     // For now, transition directly to active — the launch flow will be
     // implemented as a separate task that calls the gRPC pool.
-    sessions::transition_state(&state.db, &id, session_state::LAUNCHING, session_state::ACTIVE, &now)
-        .await
-        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    sessions::transition_state(
+        &state.db,
+        &id,
+        session_state::LAUNCHING,
+        session_state::ACTIVE,
+        &now,
+    )
+    .await
+    .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionLaunch,
-        target_id: id.clone(),
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionLaunch,
+            target_id: id.clone(),
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "id": id,
@@ -486,10 +525,13 @@ async fn cancel_session(
 
     check_session_write_access(&auth, &session)?;
 
-    let cancel_action = session_state::cancel_action_for_state(&session.state)
-        .ok_or_else(|| ApiError::from(ConsoleError::Conflict(
-            format!("Session in '{}' state cannot be cancelled", session.state),
-        )))?;
+    let cancel_action =
+        session_state::cancel_action_for_state(&session.state).ok_or_else(|| {
+            ApiError::from(ConsoleError::Conflict(format!(
+                "Session in '{}' state cannot be cancelled",
+                session.state
+            )))
+        })?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let previous_state = sessions::cancel(&state.db, &id, &now)
@@ -515,14 +557,19 @@ async fn cancel_session(
         }
     }
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionCancel,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"from_state": previous_state})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionCancel,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"from_state": previous_state})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "id": id,
@@ -597,14 +644,19 @@ async fn clone_session(
             .ok();
     }
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionCreate,
-        target_id: new_id.clone(),
-        detail: Some(serde_json::json!({"cloned_from": id})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionCreate,
+            target_id: new_id.clone(),
+            detail: Some(serde_json::json!({"cloned_from": id})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok((
         axum::http::StatusCode::CREATED,

@@ -6,11 +6,11 @@
 //!   checkpoint types, quality criteria.
 
 use std::collections::HashMap;
+use wacp_taxonomy::VerticalManifest;
 use wacp_taxonomy::{
     CheckpointField, CheckpointSchema, ContextField, FieldType, ProfileSummary, QualityCriterion,
     TaskTypeDescriptor, ToolPolicy, ToolPolicyKind, ToolSummary, WorkflowSummary,
 };
-use wacp_taxonomy::VerticalManifest;
 
 /// SWE-like vertical: minimal configuration, no policies, no required context.
 pub fn fixture_simple() -> VerticalManifest {
@@ -186,10 +186,7 @@ pub fn fixture_complex() -> VerticalManifest {
                     expires_after_ms: None,
                     gate_condition: None,
                     budget_field: None,
-                    blocked_classifications: Some(vec![
-                        "public".into(),
-                        "internal".into(),
-                    ]),
+                    blocked_classifications: Some(vec!["public".into(), "internal".into()]),
                     override_flag: Some("pii_authorized".into()),
                 },
             );
@@ -232,11 +229,7 @@ pub fn fixture_complex() -> VerticalManifest {
                             name: "category".into(),
                             field_type: FieldType::Enum,
                             description: "Risk category".into(),
-                            enum_values: Some(vec![
-                                "low".into(),
-                                "medium".into(),
-                                "high".into(),
-                            ]),
+                            enum_values: Some(vec!["low".into(), "medium".into(), "high".into()]),
                         },
                     ],
                 },
@@ -373,10 +366,26 @@ mod tests {
 
         // Verify all 4 policy kinds are represented
         let kinds: Vec<_> = m.tool_policies.values().map(|p| &p.kind).collect();
-        assert!(kinds.iter().any(|k| matches!(k, ToolPolicyKind::RequiresGate)));
-        assert!(kinds.iter().any(|k| matches!(k, ToolPolicyKind::RequiresCheckpoint)));
-        assert!(kinds.iter().any(|k| matches!(k, ToolPolicyKind::BudgetLimited)));
-        assert!(kinds.iter().any(|k| matches!(k, ToolPolicyKind::ClassificationGated)));
+        assert!(
+            kinds
+                .iter()
+                .any(|k| matches!(k, ToolPolicyKind::RequiresGate))
+        );
+        assert!(
+            kinds
+                .iter()
+                .any(|k| matches!(k, ToolPolicyKind::RequiresCheckpoint))
+        );
+        assert!(
+            kinds
+                .iter()
+                .any(|k| matches!(k, ToolPolicyKind::BudgetLimited))
+        );
+        assert!(
+            kinds
+                .iter()
+                .any(|k| matches!(k, ToolPolicyKind::ClassificationGated))
+        );
     }
 
     #[test]

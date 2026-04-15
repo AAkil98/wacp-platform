@@ -40,11 +40,7 @@ enum Commands {
         frontend_path: Option<PathBuf>,
 
         /// AgentService gRPC address
-        #[arg(
-            long,
-            env = "WACP_RUNTIME_AGENT_ADDRESS",
-            default_value = "[::1]:9090"
-        )]
+        #[arg(long, env = "WACP_RUNTIME_AGENT_ADDRESS", default_value = "[::1]:9090")]
         agent_address: String,
 
         /// HighwayService gRPC address
@@ -201,10 +197,7 @@ async fn main() -> anyhow::Result<()> {
             info!("migrations applied successfully");
         }
 
-        Commands::ResetAdminPassword {
-            database,
-            username,
-        } => {
+        Commands::ResetAdminPassword { database, username } => {
             init_tracing();
 
             let db_path = resolve_database_path(database);
@@ -294,7 +287,9 @@ async fn build_taxonomy(
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

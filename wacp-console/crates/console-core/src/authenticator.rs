@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-architecture` §8.2, `wcon-auth` §3
 
-use console_db::queries::{api_tokens, user_sessions, users};
 use console_db::DbPool;
+use console_db::queries::{api_tokens, user_sessions, users};
 use sha2::{Digest, Sha256};
 
 use crate::auth::{AuthenticatedUser, ConsoleRole};

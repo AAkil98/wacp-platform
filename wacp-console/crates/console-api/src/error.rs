@@ -1,6 +1,6 @@
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use console_core::error::{ConsoleError, Violation};
 use serde::Serialize;
 
@@ -264,11 +264,7 @@ mod tests {
                 StatusCode::FORBIDDEN,
                 "forbidden",
             ),
-            (
-                ConsoleError::LastAdmin,
-                StatusCode::FORBIDDEN,
-                "last_admin",
-            ),
+            (ConsoleError::LastAdmin, StatusCode::FORBIDDEN, "last_admin"),
             (
                 ConsoleError::RateLimited,
                 StatusCode::TOO_MANY_REQUESTS,
@@ -278,7 +274,10 @@ mod tests {
 
         for (err, expected_status, expected_code) in cases {
             let api_err = ApiError::from(err);
-            assert_eq!(api_err.status, expected_status, "status for {expected_code}");
+            assert_eq!(
+                api_err.status, expected_status,
+                "status for {expected_code}"
+            );
             assert_eq!(api_err.body.error, expected_code);
         }
     }

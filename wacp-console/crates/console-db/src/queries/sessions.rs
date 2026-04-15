@@ -119,9 +119,7 @@ pub async fn transition_state(
 ) -> Result<bool, sqlx::Error> {
     // Determine which timestamp to set based on target state.
     let sql = match to_state {
-        "active" => {
-            "UPDATE sessions SET state = ?, launched_at = ? WHERE id = ? AND state = ?"
-        }
+        "active" => "UPDATE sessions SET state = ?, launched_at = ? WHERE id = ? AND state = ?",
         "completed" | "failed" | "cancelled" => {
             "UPDATE sessions SET state = ?, closed_at = ? WHERE id = ? AND state = ?"
         }
@@ -183,28 +181,21 @@ pub async fn set_coordinator_workspace_id(
     id: &str,
     workspace_id: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE sessions SET coordinator_workspace_id = ? WHERE id = ?",
-    )
-    .bind(workspace_id)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("UPDATE sessions SET coordinator_workspace_id = ? WHERE id = ?")
+        .bind(workspace_id)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn update_context(
-    pool: &DbPool,
-    id: &str,
-    context: &str,
-) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE sessions SET context = ? WHERE id = ? AND state = 'configuring'",
-    )
-    .bind(context)
-    .bind(id)
-    .execute(pool)
-    .await?;
+pub async fn update_context(pool: &DbPool, id: &str, context: &str) -> Result<bool, sqlx::Error> {
+    let result =
+        sqlx::query("UPDATE sessions SET context = ? WHERE id = ? AND state = 'configuring'")
+            .bind(context)
+            .bind(id)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected() > 0)
 }
 

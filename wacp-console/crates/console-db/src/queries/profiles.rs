@@ -62,9 +62,8 @@ pub async fn list_visible(
     limit: i64,
     after_cursor: Option<&str>,
 ) -> Result<Vec<ProfileRow>, sqlx::Error> {
-    let mut sql = String::from(
-        "SELECT * FROM profiles WHERE is_current = 1 AND deleted_at IS NULL",
-    );
+    let mut sql =
+        String::from("SELECT * FROM profiles WHERE is_current = 1 AND deleted_at IS NULL");
     let mut binds: Vec<String> = Vec::new();
 
     if !is_admin {
@@ -97,12 +96,10 @@ pub async fn list_visible(
 
 /// List all versions of a profile (history view).
 pub async fn list_versions(pool: &DbPool, id: &str) -> Result<Vec<ProfileRow>, sqlx::Error> {
-    sqlx::query_as::<_, ProfileRow>(
-        "SELECT * FROM profiles WHERE id = ? ORDER BY version DESC",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, ProfileRow>("SELECT * FROM profiles WHERE id = ? ORDER BY version DESC")
+        .bind(id)
+        .fetch_all(pool)
+        .await
 }
 
 /// Check name uniqueness for a user (excluding soft-deleted and self).
@@ -186,22 +183,20 @@ pub async fn create_new_version(
 
 /// Soft-delete a profile (all versions).
 pub async fn soft_delete(pool: &DbPool, id: &str, now: &str) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE profiles SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(now)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE profiles SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL")
+            .bind(now)
+            .bind(id)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected() > 0)
 }
 
 /// Get the max version number for a profile.
 pub async fn max_version(pool: &DbPool, id: &str) -> Result<Option<i64>, sqlx::Error> {
-    let row: Option<(i64,)> =
-        sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(i64,)> = sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(|r| r.0))
 }

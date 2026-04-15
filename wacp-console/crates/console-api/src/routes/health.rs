@@ -59,12 +59,7 @@ async fn check_grpc(address: &str) -> &'static str {
         .trim_start_matches("http://")
         .trim_start_matches("https://");
 
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        TcpStream::connect(addr),
-    )
-    .await
-    {
+    match tokio::time::timeout(std::time::Duration::from_secs(2), TcpStream::connect(addr)).await {
         Ok(Ok(_)) => "ok",
         _ => "error",
     }

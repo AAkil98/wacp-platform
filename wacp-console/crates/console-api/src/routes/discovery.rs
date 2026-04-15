@@ -8,9 +8,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use console_core::authorizer::{self, Action};
-use console_core::taxonomy::{
-    CheckpointTypeEntry, EnvelopeTypeEntry, RoleEntry, ToolEntry,
-};
+use console_core::taxonomy::{CheckpointTypeEntry, EnvelopeTypeEntry, RoleEntry, ToolEntry};
 
 use crate::AppState;
 use crate::error::ApiError;
@@ -49,10 +47,7 @@ async fn list_roles(
     authorizer::authorize(&auth, Action::BrowseTaxonomy).map_err(ApiError::from)?;
 
     let index = state.taxonomy.load();
-    let roles = index.list_roles(
-        params.base_role.as_deref(),
-        params.vertical.as_deref(),
-    );
+    let roles = index.list_roles(params.base_role.as_deref(), params.vertical.as_deref());
     let owned: Vec<RoleEntry> = roles.into_iter().cloned().collect();
     Ok(Json(paginate(&owned, &params.pagination, |r| &r.name)))
 }

@@ -74,8 +74,12 @@ pub struct Runtime {
         Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::EscalationEvent, tonic::Status>>>,
 
     // Agent per-workspace subscribers for envelope/command delivery.
-    envelope_subs: HashMap<String, Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Envelope, tonic::Status>>>>,
-    command_subs: HashMap<String, Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Command, tonic::Status>>>>,
+    envelope_subs: HashMap<
+        String,
+        Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Envelope, tonic::Status>>>,
+    >,
+    command_subs:
+        HashMap<String, Vec<mpsc::Sender<Result<wacp_transport::wacp_v1::Command, tonic::Status>>>>,
 
     // Checkpoint content-addressable store.
     checkpoint_storage: Arc<dyn CheckpointStorage>,
@@ -880,27 +884,13 @@ impl Runtime {
                 );
                 let _ = reply.send(Ok(response));
             }
-            AgentRequest::SubscribeEnvelopes {
-                workspace_id,
-                tx,
-            } => {
-                self.envelope_subs
-                    .entry(workspace_id)
-                    .or_default()
-                    .push(tx);
+            AgentRequest::SubscribeEnvelopes { workspace_id, tx } => {
+                self.envelope_subs.entry(workspace_id).or_default().push(tx);
             }
-            AgentRequest::SubscribeCommands {
-                workspace_id,
-                tx,
-            } => {
-                self.command_subs
-                    .entry(workspace_id)
-                    .or_default()
-                    .push(tx);
+            AgentRequest::SubscribeCommands { workspace_id, tx } => {
+                self.command_subs.entry(workspace_id).or_default().push(tx);
             }
-            AgentRequest::ReadResource {
-                request, reply, ..
-            } => {
+            AgentRequest::ReadResource { request, reply, .. } => {
                 // Resolve resource_id against checkpoint storage.
                 if let Some(record) = self.checkpoint_index.get(&request.resource_id) {
                     match self.checkpoint_storage.read(&record.content_hash) {
@@ -916,9 +906,8 @@ impl Runtime {
                             )));
                         }
                         Err(e) => {
-                            let _ = reply.send(Err(tonic::Status::internal(format!(
-                                "storage error: {e}"
-                            ))));
+                            let _ = reply
+                                .send(Err(tonic::Status::internal(format!("storage error: {e}"))));
                         }
                     }
                 } else {
@@ -957,7 +946,10 @@ impl Runtime {
                 let hash = hasher.finalize();
                 let user_id = format!(
                     "user-{}",
-                    hash[..8].iter().map(|b| format!("{b:02x}")).collect::<String>()
+                    hash[..8]
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<String>()
                 );
 
                 let response = wacp_transport::wacp_v1::AuthenticateResponse {
@@ -992,11 +984,27 @@ impl Runtime {
                             name: task.name.clone(),
                             description: task.description.clone(),
                             depends_on: task.depends_on.iter().map(|d| d.to_string()).collect(),
-                            parent_task: task.parent_task.as_ref().map(|p| p.to_string()).unwrap_or_default(),
+                            parent_task: task
+                                .parent_task
+                                .as_ref()
+                                .map(|p| p.to_string())
+                                .unwrap_or_default(),
                             status,
-                            workspace_ref: task.workspace_ref.as_ref().map(|w| w.to_string()).unwrap_or_default(),
-                            workspace_history: task.workspace_history.iter().map(|w| w.to_string()).collect(),
-                            checkpoint_ref: task.checkpoint_ref.as_ref().map(|c| c.to_string()).unwrap_or_default(),
+                            workspace_ref: task
+                                .workspace_ref
+                                .as_ref()
+                                .map(|w| w.to_string())
+                                .unwrap_or_default(),
+                            workspace_history: task
+                                .workspace_history
+                                .iter()
+                                .map(|w| w.to_string())
+                                .collect(),
+                            checkpoint_ref: task
+                                .checkpoint_ref
+                                .as_ref()
+                                .map(|c| c.to_string())
+                                .unwrap_or_default(),
                         });
                         for dep in self.coordinator.task_graph.dependents(&tid) {
                             queue.push_back(dep.clone());
@@ -1194,20 +1202,18 @@ impl Runtime {
                             .values()
                             .filter(|r| r.workspace_id == ws_id.as_ref())
                             .count() as u32,
-                        created_at: self
-                            .workspace_timestamps
-                            .get(ws_id.as_ref())
-                            .map(|(created, _)| wacp_transport::wacp_v1::Timestamp {
+                        created_at: self.workspace_timestamps.get(ws_id.as_ref()).map(
+                            |(created, _)| wacp_transport::wacp_v1::Timestamp {
                                 physical_us: *created,
                                 logical: 0,
-                            }),
-                        last_activity: self
-                            .workspace_timestamps
-                            .get(ws_id.as_ref())
-                            .map(|(_, last)| wacp_transport::wacp_v1::Timestamp {
+                            },
+                        ),
+                        last_activity: self.workspace_timestamps.get(ws_id.as_ref()).map(
+                            |(_, last)| wacp_transport::wacp_v1::Timestamp {
                                 physical_us: *last,
                                 logical: 0,
-                            }),
+                            },
+                        ),
                     };
                     let _ = reply.send(Ok(response));
                 } else {
@@ -1217,8 +1223,11 @@ impl Runtime {
             HighwayRequest::GetCheckpoint { request, reply } => {
                 let response = match self.checkpoint_index.get(&request.checkpoint_id) {
                     Some(record) => {
-                        let hash_hex: String =
-                            record.content_hash.iter().map(|b| format!("{b:02x}")).collect();
+                        let hash_hex: String = record
+                            .content_hash
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect();
                         match self.checkpoint_storage.read(&record.content_hash) {
                             Ok(Some(payload)) => Ok(wacp_transport::wacp_v1::CheckpointView {
                                 metadata: Some(wacp_transport::wacp_v1::Checkpoint {
@@ -1430,9 +1439,7 @@ impl Runtime {
                     owner: UserId::from("system"),
                     originator: Originator::System,
                     directive: Envelope {
-                        id: EnvelopeId::from(
-                            format!("env-dispatch-{wsid}").as_str(),
-                        ),
+                        id: EnvelopeId::from(format!("env-dispatch-{wsid}").as_str()),
                         from_workspace: self.coordinator.tree.root().clone(),
                         to_workspace: ws_id.clone(),
                         envelope_type: "directive".into(),
@@ -1485,11 +1492,7 @@ impl Runtime {
                             .await
                             .is_ok()
                         {
-                            self.notify_command_subs(
-                                &request.workspace_id,
-                                "suspend",
-                                Vec::new(),
-                            );
+                            self.notify_command_subs(&request.workspace_id, "suspend", Vec::new());
                             Ok(wacp_transport::wacp_v1::SuspendWorkspaceResponse::default())
                         } else {
                             Err(tonic::Status::unavailable("workspace actor not running"))
@@ -1512,11 +1515,7 @@ impl Runtime {
                             .await
                             .is_ok()
                         {
-                            self.notify_command_subs(
-                                &request.workspace_id,
-                                "resume",
-                                Vec::new(),
-                            );
+                            self.notify_command_subs(&request.workspace_id, "resume", Vec::new());
                             Ok(wacp_transport::wacp_v1::ResumeWorkspaceResponse::default())
                         } else {
                             Err(tonic::Status::unavailable("workspace actor not running"))
@@ -1582,9 +1581,8 @@ impl Runtime {
                         {
                             self.coordinator.abort_workspace(ws_id).await;
                         }
-                        let _ = reply.send(Ok(
-                            wacp_transport::wacp_v1::CancelTaskResponse::default(),
-                        ));
+                        let _ =
+                            reply.send(Ok(wacp_transport::wacp_v1::CancelTaskResponse::default()));
                     }
                     Err(e) => {
                         let _ = reply.send(Err(tonic::Status::failed_precondition(format!(
@@ -1666,7 +1664,10 @@ impl Runtime {
                             let _ = reply.send(Ok(
                                 wacp_transport::wacp_v1::TriggerIntegrationResponse {
                                     result: "accepted".into(),
-                                    detail: format!("integration triggered for {}", request.workspace_id),
+                                    detail: format!(
+                                        "integration triggered for {}",
+                                        request.workspace_id
+                                    ),
                                 },
                             ));
                         } else {

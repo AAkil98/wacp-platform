@@ -67,10 +67,12 @@ async fn search(
     authorizer::authorize(&auth, Action::BrowseTaxonomy).map_err(ApiError::from)?;
 
     if params.q.len() < 2 {
-        return Err(ApiError::from(console_core::error::ConsoleError::validation(
-            "QUERY_TOO_SHORT",
-            "Search query must be at least 2 characters",
-        )));
+        return Err(ApiError::from(
+            console_core::error::ConsoleError::validation(
+                "QUERY_TOO_SHORT",
+                "Search query must be at least 2 characters",
+            ),
+        ));
     }
 
     let limit = params.limit.unwrap_or(10).min(50);
@@ -96,8 +98,12 @@ async fn search(
         results.verticals = search_verticals(&index, &query_lower, limit);
     }
     if should_search(filter_type, "vertical_checkpoint_type") {
-        results.vertical_checkpoint_types =
-            search_vertical_checkpoint_types(&index, &query_lower, params.vertical.as_deref(), limit);
+        results.vertical_checkpoint_types = search_vertical_checkpoint_types(
+            &index,
+            &query_lower,
+            params.vertical.as_deref(),
+            limit,
+        );
     }
     if should_search(filter_type, "workflow") {
         results.workflows =
@@ -208,11 +214,7 @@ fn search_tools(
     hits
 }
 
-fn search_envelope_types(
-    index: &TaxonomyIndex,
-    query: &str,
-    limit: usize,
-) -> Vec<SearchHit> {
+fn search_envelope_types(index: &TaxonomyIndex, query: &str, limit: usize) -> Vec<SearchHit> {
     let mut hits: Vec<SearchHit> = index
         .envelope_types
         .values()
@@ -233,11 +235,7 @@ fn search_envelope_types(
     hits
 }
 
-fn search_checkpoint_types(
-    index: &TaxonomyIndex,
-    query: &str,
-    limit: usize,
-) -> Vec<SearchHit> {
+fn search_checkpoint_types(index: &TaxonomyIndex, query: &str, limit: usize) -> Vec<SearchHit> {
     let mut hits: Vec<SearchHit> = index
         .checkpoint_types
         .values()
@@ -258,11 +256,7 @@ fn search_checkpoint_types(
     hits
 }
 
-fn search_verticals(
-    index: &TaxonomyIndex,
-    query: &str,
-    limit: usize,
-) -> Vec<SearchHit> {
+fn search_verticals(index: &TaxonomyIndex, query: &str, limit: usize) -> Vec<SearchHit> {
     let mut hits: Vec<SearchHit> = index
         .verticals
         .values()
@@ -301,7 +295,12 @@ fn search_vertical_checkpoint_types(
             continue;
         }
         for (name, cp) in &v.checkpoint_types {
-            let field_names = cp.fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(" ");
+            let field_names = cp
+                .fields
+                .iter()
+                .map(|f| f.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
             if let Some((rank, _)) = rank_any(&[name, &cp.description, &field_names], query) {
                 hits.push(SearchHit {
                     id: format!("{}:{}", v.id, name),
@@ -363,9 +362,7 @@ fn search_task_types(
         }
         for tt in &v.task_types {
             let keywords = tt.keywords.join(" ");
-            if let Some((rank, _)) =
-                rank_any(&[&tt.name, &tt.description, &keywords], query)
-            {
+            if let Some((rank, _)) = rank_any(&[&tt.name, &tt.description, &keywords], query) {
                 hits.push(SearchHit {
                     id: format!("{}:{}", v.id, tt.id),
                     name: tt.name.clone(),

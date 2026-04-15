@@ -9,23 +9,47 @@ mod tests {
         let now = "2026-04-14T00:00:00Z";
 
         // Empty initially
-        assert!(settings::get_setting(&pool, "ui.theme").await.unwrap().is_none());
+        assert!(
+            settings::get_setting(&pool, "ui.theme")
+                .await
+                .unwrap()
+                .is_none()
+        );
         assert!(settings::get_all_settings(&pool).await.unwrap().is_empty());
 
         // Upsert
-        settings::upsert_setting(&pool, "ui.theme", "\"dark\"", now).await.unwrap();
-        let row = settings::get_setting(&pool, "ui.theme").await.unwrap().unwrap();
+        settings::upsert_setting(&pool, "ui.theme", "\"dark\"", now)
+            .await
+            .unwrap();
+        let row = settings::get_setting(&pool, "ui.theme")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(row.value, "\"dark\"");
 
         // Update
-        settings::upsert_setting(&pool, "ui.theme", "\"light\"", now).await.unwrap();
-        let row = settings::get_setting(&pool, "ui.theme").await.unwrap().unwrap();
+        settings::upsert_setting(&pool, "ui.theme", "\"light\"", now)
+            .await
+            .unwrap();
+        let row = settings::get_setting(&pool, "ui.theme")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(row.value, "\"light\"");
 
         // Delete
         assert!(settings::delete_setting(&pool, "ui.theme").await.unwrap());
-        assert!(settings::get_setting(&pool, "ui.theme").await.unwrap().is_none());
-        assert!(!settings::delete_setting(&pool, "nonexistent").await.unwrap());
+        assert!(
+            settings::get_setting(&pool, "ui.theme")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            !settings::delete_setting(&pool, "nonexistent")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -34,9 +58,18 @@ mod tests {
         let now = "2026-04-14T00:00:00Z";
 
         // Insert
-        users::insert_user(&pool, "u1", "Admin", "Admin User", "$hash$", "admin", true, now)
-            .await
-            .unwrap();
+        users::insert_user(
+            &pool,
+            "u1",
+            "Admin",
+            "Admin User",
+            "$hash$",
+            "admin",
+            true,
+            now,
+        )
+        .await
+        .unwrap();
 
         // Get by ID
         let user = users::get_by_id(&pool, "u1").await.unwrap().unwrap();
@@ -45,7 +78,10 @@ mod tests {
         assert!(user.must_change_password);
 
         // Get by username (case-insensitive)
-        let user = users::get_by_username(&pool, "admin").await.unwrap().unwrap();
+        let user = users::get_by_username(&pool, "admin")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(user.id, "u1");
 
         // Count
@@ -53,7 +89,9 @@ mod tests {
         assert_eq!(users::count_active_admins(&pool).await.unwrap(), 1);
 
         // Update password
-        users::update_password(&pool, "u1", "$newhash$", now).await.unwrap();
+        users::update_password(&pool, "u1", "$newhash$", now)
+            .await
+            .unwrap();
         let user = users::get_by_id(&pool, "u1").await.unwrap().unwrap();
         assert_eq!(user.password_hash, "$newhash$");
         assert!(!user.must_change_password);
@@ -79,21 +117,39 @@ mod tests {
             .await
             .unwrap();
 
-        user_sessions::insert_session(&pool, "s1", "u1", "hashvalue", "127.0.0.1", "test-agent", now, expires)
-            .await
-            .unwrap();
+        user_sessions::insert_session(
+            &pool,
+            "s1",
+            "u1",
+            "hashvalue",
+            "127.0.0.1",
+            "test-agent",
+            now,
+            expires,
+        )
+        .await
+        .unwrap();
 
         // Lookup by hash (not expired)
-        let sess = user_sessions::get_by_token_hash(&pool, "hashvalue", now).await.unwrap();
+        let sess = user_sessions::get_by_token_hash(&pool, "hashvalue", now)
+            .await
+            .unwrap();
         assert!(sess.is_some());
 
         // Lookup with expired timestamp
-        let sess = user_sessions::get_by_token_hash(&pool, "hashvalue", "2026-04-16T00:00:00Z").await.unwrap();
+        let sess = user_sessions::get_by_token_hash(&pool, "hashvalue", "2026-04-16T00:00:00Z")
+            .await
+            .unwrap();
         assert!(sess.is_none());
 
         // Delete
         assert!(user_sessions::delete_session(&pool, "s1").await.unwrap());
-        assert!(user_sessions::get_by_token_hash(&pool, "hashvalue", now).await.unwrap().is_none());
+        assert!(
+            user_sessions::get_by_token_hash(&pool, "hashvalue", now)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -110,7 +166,9 @@ mod tests {
             .unwrap();
 
         // Lookup by hash
-        let tok = api_tokens::get_by_token_hash(&pool, "tokenhash", now).await.unwrap();
+        let tok = api_tokens::get_by_token_hash(&pool, "tokenhash", now)
+            .await
+            .unwrap();
         assert!(tok.is_some());
 
         // List by user
@@ -119,7 +177,12 @@ mod tests {
 
         // Revoke
         assert!(api_tokens::revoke_token(&pool, "t1", now).await.unwrap());
-        assert!(api_tokens::get_by_token_hash(&pool, "tokenhash", now).await.unwrap().is_none());
+        assert!(
+            api_tokens::get_by_token_hash(&pool, "tokenhash", now)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -131,9 +194,20 @@ mod tests {
             .await
             .unwrap();
 
-        audit_log::insert_entry(&pool, "a1", "u1", now, "auth.login", "user", "u1", None, "127.0.0.1", "test-agent")
-            .await
-            .unwrap();
+        audit_log::insert_entry(
+            &pool,
+            "a1",
+            "u1",
+            now,
+            "auth.login",
+            "user",
+            "u1",
+            None,
+            "127.0.0.1",
+            "test-agent",
+        )
+        .await
+        .unwrap();
 
         let entries = audit_log::list_entries(&pool, None, None, None, None, None, 50, None)
             .await
@@ -163,9 +237,24 @@ mod tests {
             .unwrap();
         }
 
-        assert_eq!(login_attempts::count_failed_by_ip(&pool, "10.0.0.1", window_start).await.unwrap(), 3);
-        assert_eq!(login_attempts::count_failed_by_username(&pool, "admin", window_start).await.unwrap(), 3);
-        assert_eq!(login_attempts::count_failed_by_ip(&pool, "10.0.0.2", window_start).await.unwrap(), 0);
+        assert_eq!(
+            login_attempts::count_failed_by_ip(&pool, "10.0.0.1", window_start)
+                .await
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            login_attempts::count_failed_by_username(&pool, "admin", window_start)
+                .await
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            login_attempts::count_failed_by_ip(&pool, "10.0.0.2", window_start)
+                .await
+                .unwrap(),
+            0
+        );
     }
 
     #[tokio::test]
@@ -213,7 +302,9 @@ mod tests {
             name: "My Profile v2".into(),
             ..row.clone()
         };
-        profiles::create_new_version(&pool, "p1", &v2).await.unwrap();
+        profiles::create_new_version(&pool, "p1", &v2)
+            .await
+            .unwrap();
 
         // Current should be v2
         let p = profiles::get_current(&pool, "p1").await.unwrap().unwrap();
@@ -221,7 +312,10 @@ mod tests {
         assert_eq!(p.name, "My Profile v2");
 
         // Old version still accessible
-        let p = profiles::get_version(&pool, "p1", 1).await.unwrap().unwrap();
+        let p = profiles::get_version(&pool, "p1", 1)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(p.version, 1);
         assert!(!p.is_current);
 
@@ -234,7 +328,11 @@ mod tests {
         assert!(profiles::get_current(&pool, "p1").await.unwrap().is_none());
 
         // Name uniqueness
-        assert!(!profiles::name_exists_for_user(&pool, "My Profile v2", "u1", None).await.unwrap());
+        assert!(
+            !profiles::name_exists_for_user(&pool, "My Profile v2", "u1", None)
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -265,14 +363,30 @@ mod tests {
         sessions::insert_session(&pool, &row).await.unwrap();
 
         // Transition: configuring → validating
-        assert!(sessions::transition_state(&pool, "sess1", "configuring", "validating", now).await.unwrap());
+        assert!(
+            sessions::transition_state(&pool, "sess1", "configuring", "validating", now)
+                .await
+                .unwrap()
+        );
 
         // Transition from wrong state fails
-        assert!(!sessions::transition_state(&pool, "sess1", "configuring", "launching", now).await.unwrap());
+        assert!(
+            !sessions::transition_state(&pool, "sess1", "configuring", "launching", now)
+                .await
+                .unwrap()
+        );
 
         // validating → launching → active
-        assert!(sessions::transition_state(&pool, "sess1", "validating", "launching", now).await.unwrap());
-        assert!(sessions::transition_state(&pool, "sess1", "launching", "active", now).await.unwrap());
+        assert!(
+            sessions::transition_state(&pool, "sess1", "validating", "launching", now)
+                .await
+                .unwrap()
+        );
+        assert!(
+            sessions::transition_state(&pool, "sess1", "launching", "active", now)
+                .await
+                .unwrap()
+        );
 
         let s = sessions::get_by_id(&pool, "sess1").await.unwrap().unwrap();
         assert_eq!(s.state, "active");
@@ -287,6 +401,11 @@ mod tests {
         assert!(s.closed_at.is_some());
 
         // Cancel again is no-op
-        assert!(sessions::cancel(&pool, "sess1", now).await.unwrap().is_none());
+        assert!(
+            sessions::cancel(&pool, "sess1", now)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }

@@ -76,9 +76,7 @@ impl AgentService for MockAgentService {
         &self,
         _request: Request<proto::ReadResourceRequest>,
     ) -> Result<Response<proto::ReadResourceResponse>, Status> {
-        Err(Status::unimplemented(
-            "mock: read_resource not implemented",
-        ))
+        Err(Status::unimplemented("mock: read_resource not implemented"))
     }
 
     type ReceiveEnvelopesStream =
@@ -173,9 +171,7 @@ impl HighwayService for MockHighwayService {
         &self,
         _request: Request<proto::GetWorkspaceRequest>,
     ) -> Result<Response<proto::WorkspaceView>, Status> {
-        Err(Status::unimplemented(
-            "mock: get_workspace not implemented",
-        ))
+        Err(Status::unimplemented("mock: get_workspace not implemented"))
     }
 
     async fn get_task_graph(
@@ -281,7 +277,9 @@ impl CoordinatorService for MockCoordinatorService {
         &self,
         _request: Request<proto::GetReadyTasksRequest>,
     ) -> Result<Response<proto::GetReadyTasksResponse>, Status> {
-        Ok(Response::new(proto::GetReadyTasksResponse { tasks: vec![] }))
+        Ok(Response::new(proto::GetReadyTasksResponse {
+            tasks: vec![],
+        }))
     }
 
     async fn cancel_task(

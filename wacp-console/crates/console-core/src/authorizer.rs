@@ -89,23 +89,21 @@ fn is_allowed(role: ConsoleRole, action: Action) -> bool {
 
     match action {
         // Everyone
-        BrowseTaxonomy | ListOwnProfiles | ViewOwnProfile | ExportProfile
-        | ListOwnSessions | ViewOwnOversight | ListOwnTokens => true,
+        BrowseTaxonomy | ListOwnProfiles | ViewOwnProfile | ExportProfile | ListOwnSessions
+        | ViewOwnOversight | ListOwnTokens => true,
 
         // Operator+
-        CreateProfile | EditOwnProfile | DeleteOwnProfile | ImportProfile
-        | CreateSession | CancelOwnSession | ApproveOwnGates
-        | HandleOwnEscalations | InjectOwnDirectives
+        CreateProfile | EditOwnProfile | DeleteOwnProfile | ImportProfile | CreateSession
+        | CancelOwnSession | ApproveOwnGates | HandleOwnEscalations | InjectOwnDirectives
         | CreateOwnToken | RevokeOwnToken | ViewSettings | ReloadTaxonomy => {
             matches!(role, Operator | Admin)
         }
 
         // Admin only
-        ListAllProfiles | ViewAnyProfile | EditAnyProfile | DeleteAnyProfile
-        | ListAllSessions | ViewAnyOversight | CancelAnySession
-        | ApproveAnyGates | HandleAnyEscalations | InjectAnyDirectives
-        | ListUsers | CreateUser | DisableUser | ChangeUserRole | ResetUserPassword
-        | ManageAnyTokens | ViewAuditLog | ModifySettings => {
+        ListAllProfiles | ViewAnyProfile | EditAnyProfile | DeleteAnyProfile | ListAllSessions
+        | ViewAnyOversight | CancelAnySession | ApproveAnyGates | HandleAnyEscalations
+        | InjectAnyDirectives | ListUsers | CreateUser | DisableUser | ChangeUserRole
+        | ResetUserPassword | ManageAnyTokens | ViewAuditLog | ModifySettings => {
             matches!(role, Admin)
         }
     }
@@ -159,15 +157,26 @@ mod tests {
     fn admin_can_do_everything() {
         let admin = user(ConsoleRole::Admin);
         let all_actions = [
-            Action::BrowseTaxonomy, Action::ListAllProfiles, Action::ViewAnyProfile,
-            Action::EditAnyProfile, Action::DeleteAnyProfile, Action::ListAllSessions,
-            Action::ViewAnyOversight, Action::CancelAnySession, Action::ListUsers,
-            Action::CreateUser, Action::DisableUser, Action::ChangeUserRole,
-            Action::ResetUserPassword, Action::ManageAnyTokens, Action::ViewAuditLog,
+            Action::BrowseTaxonomy,
+            Action::ListAllProfiles,
+            Action::ViewAnyProfile,
+            Action::EditAnyProfile,
+            Action::DeleteAnyProfile,
+            Action::ListAllSessions,
+            Action::ViewAnyOversight,
+            Action::CancelAnySession,
+            Action::ListUsers,
+            Action::CreateUser,
+            Action::DisableUser,
+            Action::ChangeUserRole,
+            Action::ResetUserPassword,
+            Action::ManageAnyTokens,
+            Action::ViewAuditLog,
             Action::ModifySettings,
         ];
         for action in all_actions {
-            authorize(&admin, action).unwrap_or_else(|_| panic!("admin should be allowed {action:?}"));
+            authorize(&admin, action)
+                .unwrap_or_else(|_| panic!("admin should be allowed {action:?}"));
         }
     }
 
@@ -182,6 +191,8 @@ mod tests {
     fn authorize_owned_falls_back_to_any_for_non_owner() {
         let mut u = user(ConsoleRole::Operator);
         u.user_id = "owner1".into();
-        assert!(authorize_owned(&u, Action::EditOwnProfile, Action::EditAnyProfile, "owner2").is_err());
+        assert!(
+            authorize_owned(&u, Action::EditOwnProfile, Action::EditAnyProfile, "owner2").is_err()
+        );
     }
 }

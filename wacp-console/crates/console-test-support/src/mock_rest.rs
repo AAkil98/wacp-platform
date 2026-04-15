@@ -48,10 +48,7 @@ async fn list_verticals(State(state): State<RestState>) -> impl IntoResponse {
     Json(items)
 }
 
-async fn get_vertical(
-    State(state): State<RestState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_vertical(State(state): State<RestState>, Path(id): Path<String>) -> impl IntoResponse {
     match state.verticals.get(&id) {
         Some(manifest) => Ok(Json(manifest.clone())),
         None => Err((

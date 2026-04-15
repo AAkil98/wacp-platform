@@ -99,10 +99,22 @@ mod tests {
 
     #[test]
     fn cancel_actions() {
-        assert!(matches!(cancel_action_for_state(CONFIGURING), Some(CancelAction::NoOp)));
-        assert!(matches!(cancel_action_for_state(VALIDATING), Some(CancelAction::NoOp)));
-        assert!(matches!(cancel_action_for_state(LAUNCHING), Some(CancelAction::BestEffortAbort)));
-        assert!(matches!(cancel_action_for_state(ACTIVE), Some(CancelAction::AbortWorkspace)));
+        assert!(matches!(
+            cancel_action_for_state(CONFIGURING),
+            Some(CancelAction::NoOp)
+        ));
+        assert!(matches!(
+            cancel_action_for_state(VALIDATING),
+            Some(CancelAction::NoOp)
+        ));
+        assert!(matches!(
+            cancel_action_for_state(LAUNCHING),
+            Some(CancelAction::BestEffortAbort)
+        ));
+        assert!(matches!(
+            cancel_action_for_state(ACTIVE),
+            Some(CancelAction::AbortWorkspace)
+        ));
         assert!(cancel_action_for_state(COMPLETED).is_none());
     }
 }

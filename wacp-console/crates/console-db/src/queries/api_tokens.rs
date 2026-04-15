@@ -72,13 +72,12 @@ pub async fn insert_token(
 }
 
 pub async fn revoke_token(pool: &DbPool, id: &str, now: &str) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
-    )
-    .bind(now)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
+            .bind(now)
+            .bind(id)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected() > 0)
 }
 

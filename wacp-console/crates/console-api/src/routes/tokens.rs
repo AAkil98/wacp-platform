@@ -4,7 +4,10 @@
 
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
-use axum::{Json, Router, routing::{delete, get}};
+use axum::{
+    Json, Router,
+    routing::{delete, get},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -23,7 +26,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/tokens", get(list_tokens).post(create_token))
         .route("/api/tokens/{id}", delete(revoke_token))
         .route("/api/users/{user_id}/tokens", get(list_user_tokens))
-        .route("/api/users/{user_id}/tokens/{id}", delete(revoke_user_token))
+        .route(
+            "/api/users/{user_id}/tokens/{id}",
+            delete(revoke_user_token),
+        )
 }
 
 async fn list_tokens(
@@ -36,13 +42,18 @@ async fn list_tokens(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    let result: Vec<serde_json::Value> = rows.into_iter().map(|t| serde_json::json!({
-        "id": t.id,
-        "name": t.name,
-        "created_at": t.created_at,
-        "expires_at": t.expires_at,
-        "last_used_at": t.last_used_at,
-    })).collect();
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "name": t.name,
+                "created_at": t.created_at,
+                "expires_at": t.expires_at,
+                "last_used_at": t.last_used_at,
+            })
+        })
+        .collect();
 
     Ok(Json(result))
 }
@@ -67,31 +78,46 @@ async fn create_token(
     let token_hash_value = hash_token(&raw_token);
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now();
-    let expires_at = body.expires_in_days.map(|d| (now + chrono::Duration::days(d)).to_rfc3339());
+    let expires_at = body
+        .expires_in_days
+        .map(|d| (now + chrono::Duration::days(d)).to_rfc3339());
 
     api_tokens::insert_token(
-        &state.db, &id, &auth.user_id, &body.name,
-        &token_hash_value, &now.to_rfc3339(), expires_at.as_deref(),
+        &state.db,
+        &id,
+        &auth.user_id,
+        &body.name,
+        &token_hash_value,
+        &now.to_rfc3339(),
+        expires_at.as_deref(),
     )
     .await
     .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::TokenCreate,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"name": body.name})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::TokenCreate,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"name": body.name})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     // Return the raw token ONCE — it cannot be retrieved again
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!({
-        "id": id,
-        "name": body.name,
-        "token": raw_token,
-        "expires_at": expires_at,
-    }))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": id,
+            "name": body.name,
+            "token": raw_token,
+            "expires_at": expires_at,
+        })),
+    ))
 }
 
 async fn revoke_token(
@@ -120,14 +146,19 @@ async fn revoke_token(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::TokenRevoke,
-        target_id: id,
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::TokenRevoke,
+            target_id: id,
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -144,14 +175,19 @@ async fn list_user_tokens(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    let result: Vec<serde_json::Value> = rows.into_iter().map(|t| serde_json::json!({
-        "id": t.id,
-        "name": t.name,
-        "user_id": t.user_id,
-        "created_at": t.created_at,
-        "expires_at": t.expires_at,
-        "last_used_at": t.last_used_at,
-    })).collect();
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "name": t.name,
+                "user_id": t.user_id,
+                "created_at": t.created_at,
+                "expires_at": t.expires_at,
+                "last_used_at": t.last_used_at,
+            })
+        })
+        .collect();
 
     Ok(Json(result))
 }
@@ -172,14 +208,19 @@ async fn revoke_user_token(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::TokenRevoke,
-        target_id: id,
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::TokenRevoke,
+            target_id: id,
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

@@ -138,10 +138,7 @@ pub fn parse_import_yaml(yaml: &str) -> Result<ProfileData, ConsoleError> {
     if parsed.format_version != 1 {
         return Err(ConsoleError::validation(
             "UNSUPPORTED_FORMAT_VERSION",
-            format!(
-                "Expected format_version 1, got {}",
-                parsed.format_version
-            ),
+            format!("Expected format_version 1, got {}", parsed.format_version),
         ));
     }
 
@@ -257,7 +254,10 @@ mod tests {
         assert_eq!(imported.autonomy, row.autonomy);
         assert_eq!(imported.tool_allowlist, row.tool_allowlist);
         assert_eq!(imported.budget_max_cost_micros, row.budget_max_cost_micros);
-        assert_eq!(imported.budget_warning_threshold, row.budget_warning_threshold);
+        assert_eq!(
+            imported.budget_warning_threshold,
+            row.budget_warning_threshold
+        );
     }
 
     #[test]

@@ -4,14 +4,12 @@
 
 use std::collections::HashMap;
 
-use console_runtime::{
-    BaseRole, Taxonomy, ToolPolicyKind, VerticalManifest,
-};
+use console_runtime::{BaseRole, Taxonomy, ToolPolicyKind, VerticalManifest};
 use tracing::{info, warn};
 
 use crate::taxonomy::{
-    CheckpointTypeEntry, EnvelopeTypeEntry, RoleEntry, TaxonomyIndex, ToolEntry, VerticalEntry,
-    VerticalCheckpointType,
+    CheckpointTypeEntry, EnvelopeTypeEntry, RoleEntry, TaxonomyIndex, ToolEntry,
+    VerticalCheckpointType, VerticalEntry,
 };
 
 /// Result of building the taxonomy index.
@@ -206,14 +204,15 @@ fn insert_protocol_taxonomy(index: &mut TaxonomyIndex, taxonomy: &Taxonomy) {
     }
     for (name, (senders, receivers)) in envelope_map {
         // Only insert if not already a base envelope type
-        index.envelope_types.entry(name.clone()).or_insert_with(|| {
-            EnvelopeTypeEntry {
+        index
+            .envelope_types
+            .entry(name.clone())
+            .or_insert_with(|| EnvelopeTypeEntry {
                 name,
                 description: String::new(),
                 sender_roles: senders,
                 receiver_roles: receivers,
-            }
-        });
+            });
     }
 
     // Custom checkpoint types from taxonomy.
@@ -346,7 +345,10 @@ fn insert_vertical(
 }
 
 fn insert_failed_vertical(index: &mut TaxonomyIndex, id: &str, error: &str) {
-    warn!(vertical_id = id, error, "vertical manifest fetch failed — creating stub entry");
+    warn!(
+        vertical_id = id,
+        error, "vertical manifest fetch failed — creating stub entry"
+    );
 
     index.verticals.insert(
         id.to_string(),

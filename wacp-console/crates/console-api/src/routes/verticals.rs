@@ -14,26 +14,14 @@ use crate::middleware::Auth;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route(
-            "/api/verticals/{id}/workflows",
-            get(list_workflows),
-        )
-        .route(
-            "/api/verticals/{id}/workflows/{wf_id}",
-            get(get_workflow),
-        )
-        .route(
-            "/api/verticals/{id}/task-types",
-            get(list_task_types),
-        )
+        .route("/api/verticals/{id}/workflows", get(list_workflows))
+        .route("/api/verticals/{id}/workflows/{wf_id}", get(get_workflow))
+        .route("/api/verticals/{id}/task-types", get(list_task_types))
         .route(
             "/api/verticals/{id}/context-schema",
             get(get_context_schema),
         )
-        .route(
-            "/api/verticals/{id}/tool-policies",
-            get(get_tool_policies),
-        )
+        .route("/api/verticals/{id}/tool-policies", get(get_tool_policies))
         .route(
             "/api/verticals/{id}/checkpoint-types",
             get(get_checkpoint_types),
@@ -92,7 +80,9 @@ async fn list_task_types(
         .get_vertical(&id)
         .ok_or_else(|| ApiError::not_found("vertical", &id))?;
 
-    Ok(Json(serde_json::to_value(&v.task_types).unwrap_or_default()))
+    Ok(Json(
+        serde_json::to_value(&v.task_types).unwrap_or_default(),
+    ))
 }
 
 async fn get_context_schema(
@@ -107,7 +97,9 @@ async fn get_context_schema(
         .get_vertical(&id)
         .ok_or_else(|| ApiError::not_found("vertical", &id))?;
 
-    Ok(Json(serde_json::to_value(&v.context_schema).unwrap_or_default()))
+    Ok(Json(
+        serde_json::to_value(&v.context_schema).unwrap_or_default(),
+    ))
 }
 
 async fn get_tool_policies(
@@ -122,7 +114,9 @@ async fn get_tool_policies(
         .get_vertical(&id)
         .ok_or_else(|| ApiError::not_found("vertical", &id))?;
 
-    Ok(Json(serde_json::to_value(&v.tool_policies).unwrap_or_default()))
+    Ok(Json(
+        serde_json::to_value(&v.tool_policies).unwrap_or_default(),
+    ))
 }
 
 async fn get_checkpoint_types(
@@ -137,7 +131,9 @@ async fn get_checkpoint_types(
         .get_vertical(&id)
         .ok_or_else(|| ApiError::not_found("vertical", &id))?;
 
-    Ok(Json(serde_json::to_value(&v.checkpoint_types).unwrap_or_default()))
+    Ok(Json(
+        serde_json::to_value(&v.checkpoint_types).unwrap_or_default(),
+    ))
 }
 
 async fn get_quality_criteria(
@@ -152,5 +148,7 @@ async fn get_quality_criteria(
         .get_vertical(&id)
         .ok_or_else(|| ApiError::not_found("vertical", &id))?;
 
-    Ok(Json(serde_json::to_value(&v.quality_criteria).unwrap_or_default()))
+    Ok(Json(
+        serde_json::to_value(&v.quality_criteria).unwrap_or_default(),
+    ))
 }

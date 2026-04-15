@@ -8,8 +8,7 @@ use tonic::transport::{Channel, Endpoint};
 use tracing::{info, warn};
 
 use crate::proto::{
-    agent_service_client::AgentServiceClient,
-    coordinator_service_client::CoordinatorServiceClient,
+    agent_service_client::AgentServiceClient, coordinator_service_client::CoordinatorServiceClient,
     highway_service_client::HighwayServiceClient,
 };
 

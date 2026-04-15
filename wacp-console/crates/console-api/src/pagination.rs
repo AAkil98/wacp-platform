@@ -19,9 +19,7 @@ pub struct PaginationParams {
 impl PaginationParams {
     /// Returns the effective limit, clamped to [1, MAX_LIMIT].
     pub fn effective_limit(&self) -> usize {
-        self.limit
-            .unwrap_or(DEFAULT_LIMIT)
-            .clamp(1, MAX_LIMIT)
+        self.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
     }
 
     /// Decode the cursor string. Returns None if absent or invalid.
@@ -107,7 +105,10 @@ mod tests {
     fn first_page_default_limit() {
         let result = paginate(
             &items(),
-            &PaginationParams { limit: None, cursor: None },
+            &PaginationParams {
+                limit: None,
+                cursor: None,
+            },
             |i| &i.name,
         );
         assert_eq!(result.items.len(), 10);
@@ -119,7 +120,10 @@ mod tests {
     fn pagination_with_limit() {
         let result = paginate(
             &items(),
-            &PaginationParams { limit: Some(3), cursor: None },
+            &PaginationParams {
+                limit: Some(3),
+                cursor: None,
+            },
             |i| &i.name,
         );
         assert_eq!(result.items.len(), 3);
@@ -132,12 +136,18 @@ mod tests {
     fn second_page_via_cursor() {
         let first = paginate(
             &items(),
-            &PaginationParams { limit: Some(3), cursor: None },
+            &PaginationParams {
+                limit: Some(3),
+                cursor: None,
+            },
             |i| &i.name,
         );
         let second = paginate(
             &items(),
-            &PaginationParams { limit: Some(3), cursor: first.cursor },
+            &PaginationParams {
+                limit: Some(3),
+                cursor: first.cursor,
+            },
             |i| &i.name,
         );
         assert_eq!(second.items.len(), 3);
@@ -149,7 +159,10 @@ mod tests {
     fn last_page_has_no_cursor() {
         let result = paginate(
             &items(),
-            &PaginationParams { limit: Some(10), cursor: None },
+            &PaginationParams {
+                limit: Some(10),
+                cursor: None,
+            },
             |i| &i.name,
         );
         assert_eq!(result.items.len(), 10);
@@ -159,14 +172,20 @@ mod tests {
 
     #[test]
     fn limit_capped_at_max() {
-        let params = PaginationParams { limit: Some(999), cursor: None };
+        let params = PaginationParams {
+            limit: Some(999),
+            cursor: None,
+        };
         assert_eq!(params.effective_limit(), MAX_LIMIT);
     }
 
     #[test]
     fn cursor_roundtrip() {
         let encoded = encode_cursor("item_05");
-        let params = PaginationParams { limit: None, cursor: Some(encoded) };
+        let params = PaginationParams {
+            limit: None,
+            cursor: Some(encoded),
+        };
         assert_eq!(params.decode_cursor().unwrap(), "item_05");
     }
 }

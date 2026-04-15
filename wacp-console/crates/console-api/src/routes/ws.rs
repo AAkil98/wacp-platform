@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-api` §12, `wcon-highway` §2.2
 
-use axum::extract::{Path, State, WebSocketUpgrade};
 use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{Path, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::{Router, routing::get};
 use std::sync::Arc;
@@ -62,7 +62,9 @@ async fn handle_ws(mut socket: WebSocket, session_id: String, user_id: String) {
     });
 
     if let Err(e) = socket
-        .send(Message::Text(serde_json::to_string(&welcome).unwrap_or_default().into()))
+        .send(Message::Text(
+            serde_json::to_string(&welcome).unwrap_or_default().into(),
+        ))
         .await
     {
         warn!(error = %e, "Failed to send welcome message");

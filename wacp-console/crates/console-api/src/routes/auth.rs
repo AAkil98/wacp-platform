@@ -3,10 +3,13 @@
 //! Spec: `wcon-api` §3.5, `wcon-auth` §3
 
 use axum::extract::State;
-use axum::http::header::SET_COOKIE;
 use axum::http::HeaderMap;
+use axum::http::header::SET_COOKIE;
 use axum::response::IntoResponse;
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -52,29 +55,38 @@ async fn login(
 
     let Some(user) = user else {
         // Record failed attempt even if user doesn't exist (timing-safe)
-        record_login_attempt(&state.db, &ctx.ip, &body.username, false).await.ok();
+        record_login_attempt(&state.db, &ctx.ip, &body.username, false)
+            .await
+            .ok();
         return Err(ApiError::from(ConsoleError::Unauthenticated));
     };
 
     if user.disabled_at.is_some() {
-        record_login_attempt(&state.db, &ctx.ip, &body.username, false).await.ok();
+        record_login_attempt(&state.db, &ctx.ip, &body.username, false)
+            .await
+            .ok();
         return Err(ApiError::from(ConsoleError::Unauthenticated));
     }
 
     // Verify password
-    let valid = verify_password(&body.password, &user.password_hash)
-        .map_err(ApiError::from)?;
+    let valid = verify_password(&body.password, &user.password_hash).map_err(ApiError::from)?;
 
     if !valid {
-        record_login_attempt(&state.db, &ctx.ip, &body.username, false).await.ok();
+        record_login_attempt(&state.db, &ctx.ip, &body.username, false)
+            .await
+            .ok();
         return Err(ApiError::from(ConsoleError::Unauthenticated));
     }
 
     // Record success
-    record_login_attempt(&state.db, &ctx.ip, &body.username, true).await.ok();
+    record_login_attempt(&state.db, &ctx.ip, &body.username, true)
+        .await
+        .ok();
 
     // Rotate old sessions for this user
-    user_sessions::delete_user_sessions(&state.db, &user.id).await.ok();
+    user_sessions::delete_user_sessions(&state.db, &user.id)
+        .await
+        .ok();
 
     // Create new session
     let session_token = generate_session_token();
@@ -98,14 +110,19 @@ async fn login(
     .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
     // Audit
-    log_audit(&state.db, AuditEntry {
-        user_id: user.id.clone(),
-        action: AuditAction::AuthLogin,
-        target_id: user.id.clone(),
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: user.id.clone(),
+            action: AuditAction::AuthLogin,
+            target_id: user.id.clone(),
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     // Set cookies
     let mut headers = HeaderMap::new();
@@ -115,13 +132,19 @@ async fn login(
             "wcon_sid={session_token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400"
         )
         .parse()
-        .map_err(|_| ApiError::from(ConsoleError::Internal("invalid session cookie header".into())))?,
+        .map_err(|_| {
+            ApiError::from(ConsoleError::Internal(
+                "invalid session cookie header".into(),
+            ))
+        })?,
     );
     headers.append(
         SET_COOKIE,
         format!("wcon_csrf={csrf_token}; Secure; SameSite=Strict; Path=/; Max-Age=86400")
             .parse()
-            .map_err(|_| ApiError::from(ConsoleError::Internal("invalid csrf cookie header".into())))?,
+            .map_err(|_| {
+                ApiError::from(ConsoleError::Internal("invalid csrf cookie header".into()))
+            })?,
     );
 
     let response_body = serde_json::json!({
@@ -143,16 +166,23 @@ async fn logout(
     validate_csrf(&headers, is_bearer_auth(&headers)).map_err(ApiError::from)?;
 
     // Delete all sessions for this user
-    user_sessions::delete_user_sessions(&state.db, &auth.user_id).await.ok();
+    user_sessions::delete_user_sessions(&state.db, &auth.user_id)
+        .await
+        .ok();
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::AuthLogout,
-        target_id: auth.user_id.clone(),
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::AuthLogout,
+            target_id: auth.user_id.clone(),
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     let mut resp_headers = HeaderMap::new();
     resp_headers.insert(
@@ -201,8 +231,8 @@ async fn change_password(
         .ok_or_else(|| ApiError::from(ConsoleError::Unauthenticated))?;
 
     // Verify current password
-    let valid = verify_password(&body.current_password, &user.password_hash)
-        .map_err(ApiError::from)?;
+    let valid =
+        verify_password(&body.current_password, &user.password_hash).map_err(ApiError::from)?;
     if !valid {
         return Err(ApiError::from(ConsoleError::Unauthenticated));
     }
@@ -217,14 +247,19 @@ async fn change_password(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::AuthChangePassword,
-        target_id: auth.user_id.clone(),
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::AuthChangePassword,
+            target_id: auth.user_id.clone(),
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

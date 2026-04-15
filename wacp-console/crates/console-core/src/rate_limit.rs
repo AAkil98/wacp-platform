@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-auth` §9
 
-use console_db::queries::login_attempts;
 use console_db::DbPool;
+use console_db::queries::login_attempts;
 
 use crate::error::ConsoleError;
 
@@ -21,7 +21,8 @@ pub async fn check_login_rate_limit(
     ip: &str,
     username: &str,
 ) -> Result<(), ConsoleError> {
-    let window_start = (chrono::Utc::now() - chrono::Duration::minutes(WINDOW_MINUTES)).to_rfc3339();
+    let window_start =
+        (chrono::Utc::now() - chrono::Duration::minutes(WINDOW_MINUTES)).to_rfc3339();
 
     // Check per-IP limit
     let ip_count = login_attempts::count_failed_by_ip(pool, ip, &window_start)
@@ -33,10 +34,9 @@ pub async fn check_login_rate_limit(
     }
 
     // Check per-account limit
-    let account_count =
-        login_attempts::count_failed_by_username(pool, username, &window_start)
-            .await
-            .map_err(|e| ConsoleError::Database(e.to_string()))?;
+    let account_count = login_attempts::count_failed_by_username(pool, username, &window_start)
+        .await
+        .map_err(|e| ConsoleError::Database(e.to_string()))?;
 
     if account_count >= MAX_FAILED_PER_ACCOUNT {
         return Err(ConsoleError::AccountLocked);
@@ -76,7 +76,9 @@ mod tests {
     #[tokio::test]
     async fn allows_under_limit() {
         let pool = create_test_pool().await.unwrap();
-        check_login_rate_limit(&pool, "10.0.0.1", "admin").await.unwrap();
+        check_login_rate_limit(&pool, "10.0.0.1", "admin")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -84,10 +86,14 @@ mod tests {
         let pool = create_test_pool().await.unwrap();
 
         for _ in 0..MAX_FAILED_PER_ACCOUNT {
-            record_login_attempt(&pool, "10.0.0.1", "admin", false).await.unwrap();
+            record_login_attempt(&pool, "10.0.0.1", "admin", false)
+                .await
+                .unwrap();
         }
 
-        let err = check_login_rate_limit(&pool, "10.0.0.1", "admin").await.unwrap_err();
+        let err = check_login_rate_limit(&pool, "10.0.0.1", "admin")
+            .await
+            .unwrap_err();
         assert!(matches!(err, ConsoleError::AccountLocked));
     }
 
@@ -102,7 +108,9 @@ mod tests {
                 .unwrap();
         }
 
-        let err = check_login_rate_limit(&pool, "10.0.0.1", "newuser").await.unwrap_err();
+        let err = check_login_rate_limit(&pool, "10.0.0.1", "newuser")
+            .await
+            .unwrap_err();
         assert!(matches!(err, ConsoleError::RateLimited));
     }
 }

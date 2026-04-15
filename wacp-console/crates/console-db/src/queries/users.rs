@@ -111,14 +111,12 @@ pub async fn update_role(
     console_role: &str,
     now: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE users SET console_role = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(console_role)
-    .bind(now)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("UPDATE users SET console_role = ?, updated_at = ? WHERE id = ?")
+        .bind(console_role)
+        .bind(now)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 
@@ -150,13 +148,12 @@ pub async fn set_must_change_password(
     id: &str,
     now: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE users SET must_change_password = 1, updated_at = ? WHERE id = ?",
-    )
-    .bind(now)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE users SET must_change_password = 1, updated_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(id)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected() > 0)
 }
 

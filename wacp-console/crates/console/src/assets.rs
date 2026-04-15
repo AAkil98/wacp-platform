@@ -44,11 +44,9 @@ async fn serve_disk(root: &Path, path: &str) -> Response {
     match fs::read(root.join(path)).await {
         Ok(bytes) => ([(header::CONTENT_TYPE, mime_from_ext(path))], bytes).into_response(),
         Err(_) => match fs::read(root.join("index.html")).await {
-            Ok(bytes) => (
-                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-                bytes,
-            )
-                .into_response(),
+            Ok(bytes) => {
+                ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response()
+            }
             Err(_) => (StatusCode::NOT_FOUND, "Not Found").into_response(),
         },
     }

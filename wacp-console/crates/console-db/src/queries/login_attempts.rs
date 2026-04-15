@@ -23,11 +23,7 @@ pub async fn record_attempt(
 }
 
 /// Count failed attempts from a given IP within the window.
-pub async fn count_failed_by_ip(
-    pool: &DbPool,
-    ip: &str,
-    since: &str,
-) -> Result<i64, sqlx::Error> {
+pub async fn count_failed_by_ip(pool: &DbPool, ip: &str, since: &str) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM login_attempts
          WHERE ip = ? AND attempted_at > ? AND success = 0",

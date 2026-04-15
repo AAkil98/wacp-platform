@@ -5,7 +5,10 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -66,18 +69,23 @@ async fn resolve_gate(
     // TODO: Forward to HighwayService.ResolveGate via gRPC when connected
     // For now, record the decision in the audit log.
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionGateApprove,
-        target_id: gid,
-        detail: Some(serde_json::json!({
-            "session_id": sid,
-            "decision": body.decision,
-            "reason": body.reason,
-        })),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionGateApprove,
+            target_id: gid,
+            detail: Some(serde_json::json!({
+                "session_id": sid,
+                "decision": body.decision,
+                "reason": body.reason,
+            })),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -119,19 +127,24 @@ async fn batch_resolve_gates(
     for item in &body.gates {
         // TODO: Forward each to HighwayService.ResolveGate
         // For now, record in audit log
-        log_audit(&state.db, AuditEntry {
-            user_id: auth.user_id.clone(),
-            action: AuditAction::SessionGateApprove,
-            target_id: item.gate_id.clone(),
-            detail: Some(serde_json::json!({
-                "session_id": sid,
-                "decision": item.decision,
-                "reason": item.reason,
-                "batch": true,
-            })),
-            ip: ctx.ip.clone(),
-            user_agent: ctx.user_agent.clone(),
-        }).await.ok();
+        log_audit(
+            &state.db,
+            AuditEntry {
+                user_id: auth.user_id.clone(),
+                action: AuditAction::SessionGateApprove,
+                target_id: item.gate_id.clone(),
+                detail: Some(serde_json::json!({
+                    "session_id": sid,
+                    "decision": item.decision,
+                    "reason": item.reason,
+                    "batch": true,
+                })),
+                ip: ctx.ip.clone(),
+                user_agent: ctx.user_agent.clone(),
+            },
+        )
+        .await
+        .ok();
 
         resolved.push(item.gate_id.clone());
     }
@@ -168,17 +181,22 @@ async fn respond_escalation(
 
     check_session_action_access(&auth, &session)?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionEscalationRespond,
-        target_id: eid,
-        detail: Some(serde_json::json!({
-            "session_id": sid,
-            "response": body.response,
-        })),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionEscalationRespond,
+            target_id: eid,
+            detail: Some(serde_json::json!({
+                "session_id": sid,
+                "response": body.response,
+            })),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -215,16 +233,21 @@ async fn inject_directive(
         )));
     }
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::SessionInjectDirective,
-        target_id: sid,
-        detail: Some(serde_json::json!({
-            "workspace_id": body.workspace_id,
-        })),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::SessionInjectDirective,
+            target_id: sid,
+            detail: Some(serde_json::json!({
+                "workspace_id": body.workspace_id,
+            })),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -238,7 +261,9 @@ struct PendingParams {
     limit: i64,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 async fn pending_gates(
     State(_state): State<Arc<AppState>>,

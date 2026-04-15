@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 
 use console_runtime::{
-    CheckpointField, ContextField, ProfileSummary, QualityCriterion,
-    TaskTypeDescriptor, ToolPolicy, ToolSummary, WorkflowSummary,
+    CheckpointField, ContextField, ProfileSummary, QualityCriterion, TaskTypeDescriptor,
+    ToolPolicy, ToolSummary, WorkflowSummary,
 };
 use serde::Serialize;
 

@@ -102,8 +102,7 @@ pub fn validate_csrf(headers: &HeaderMap, is_bearer_auth: bool) -> Result<(), Co
         return Ok(()); // Bearer tokens are CSRF-exempt
     }
 
-    let cookie_value = extract_cookie(headers, "wcon_csrf")
-        .ok_or(ConsoleError::CsrfFailed)?;
+    let cookie_value = extract_cookie(headers, "wcon_csrf").ok_or(ConsoleError::CsrfFailed)?;
 
     let header_value = headers
         .get("x-csrf-token")
@@ -111,7 +110,11 @@ pub fn validate_csrf(headers: &HeaderMap, is_bearer_auth: bool) -> Result<(), Co
         .ok_or(ConsoleError::CsrfFailed)?;
 
     // Constant-time comparison
-    if cookie_value.as_bytes().ct_eq(header_value.as_bytes()).into() {
+    if cookie_value
+        .as_bytes()
+        .ct_eq(header_value.as_bytes())
+        .into()
+    {
         Ok(())
     } else {
         Err(ConsoleError::CsrfFailed)
@@ -192,7 +195,10 @@ mod tests {
     #[test]
     fn is_bearer_auth_detects_bearer() {
         let mut headers = HeaderMap::new();
-        headers.insert("authorization", HeaderValue::from_static("Bearer wcon_t_abc"));
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer wcon_t_abc"),
+        );
         assert!(is_bearer_auth(&headers));
 
         let empty = HeaderMap::new();

@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-auth` §10
 
-use console_db::queries::audit_log;
 use console_db::DbPool;
+use console_db::queries::audit_log;
 
 use crate::error::ConsoleError;
 

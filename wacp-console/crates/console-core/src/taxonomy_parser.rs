@@ -23,7 +23,10 @@ pub fn load_protocol_taxonomy(taxonomy_path: &str) -> Option<Taxonomy> {
 
     let path = Path::new(taxonomy_path);
     if !path.exists() {
-        info!(path = taxonomy_path, "taxonomy path does not exist — skipping protocol taxonomy");
+        info!(
+            path = taxonomy_path,
+            "taxonomy path does not exist — skipping protocol taxonomy"
+        );
         return None;
     }
 

@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-profiles` §3, `wcon-data-model` §10.1
 
-use console_db::queries::profiles;
 use console_db::DbPool;
+use console_db::queries::profiles;
 use serde::Serialize;
 
 use crate::taxonomy::TaxonomyIndex;
@@ -123,7 +123,10 @@ pub async fn validate_profile(
     if !matches!(input.autonomy, "autonomous" | "assisted" | "supervised") {
         violations.push(ValidationViolation {
             code: "INVALID_AUTONOMY",
-            message: format!("Autonomy must be one of: autonomous, assisted, supervised; got '{}'", input.autonomy),
+            message: format!(
+                "Autonomy must be one of: autonomous, assisted, supervised; got '{}'",
+                input.autonomy
+            ),
             field: Some("autonomy".into()),
         });
     }
@@ -185,7 +188,10 @@ pub async fn validate_profile(
     if !matches!(input.visibility, "private" | "shared") {
         violations.push(ValidationViolation {
             code: "INVALID_VISIBILITY",
-            message: format!("Visibility must be 'private' or 'shared', got '{}'", input.visibility),
+            message: format!(
+                "Visibility must be 'private' or 'shared', got '{}'",
+                input.visibility
+            ),
             field: Some("visibility".into()),
         });
     }
@@ -246,75 +252,67 @@ pub async fn validate_profile(
     if let Some(r) = role
         && r.vertical.is_some()
     {
-            let effective_tools: Vec<&str> = if allowlist.is_empty() {
-                // All role tools minus denylist
-                r.tools
-                    .iter()
-                    .filter(|t| !denylist.iter().any(|d| d == *t))
-                    .map(|s| s.as_str())
-                    .collect()
-            } else {
-                // Allowlist minus denylist
-                allowlist
-                    .iter()
-                    .filter(|t| !denylist.iter().any(|d| d == *t))
-                    .map(|s| s.as_str())
-                    .collect()
-            };
+        let effective_tools: Vec<&str> = if allowlist.is_empty() {
+            // All role tools minus denylist
+            r.tools
+                .iter()
+                .filter(|t| !denylist.iter().any(|d| d == *t))
+                .map(|s| s.as_str())
+                .collect()
+        } else {
+            // Allowlist minus denylist
+            allowlist
+                .iter()
+                .filter(|t| !denylist.iter().any(|d| d == *t))
+                .map(|s| s.as_str())
+                .collect()
+        };
 
-            if effective_tools.is_empty() {
-                violations.push(ValidationViolation {
-                    code: "EMPTY_TOOL_SET",
-                    message: "Effective tool set is empty after applying allow/deny lists".into(),
-                    field: Some("tool_allowlist".into()),
+        if effective_tools.is_empty() {
+            violations.push(ValidationViolation {
+                code: "EMPTY_TOOL_SET",
+                message: "Effective tool set is empty after applying allow/deny lists".into(),
+                field: Some("tool_allowlist".into()),
+            });
+        }
+
+        // --- Warnings ---
+
+        // TOOL_HAS_RUNTIME_POLICY
+        for tool_name in &effective_tools {
+            if let Some(tool) = index.get_tool(tool_name)
+                && tool.policy.is_some()
+            {
+                warnings.push(ValidationWarning {
+                    code: "TOOL_HAS_RUNTIME_POLICY",
+                    message: format!("Tool '{tool_name}' has a runtime-enforced policy"),
                 });
-            }
-
-            // --- Warnings ---
-
-            // TOOL_HAS_RUNTIME_POLICY
-            for tool_name in &effective_tools {
-                if let Some(tool) = index.get_tool(tool_name)
-                    && tool.policy.is_some()
-                {
-                    warnings.push(ValidationWarning {
-                        code: "TOOL_HAS_RUNTIME_POLICY",
-                        message: format!("Tool '{tool_name}' has a runtime-enforced policy"),
-                    });
-                }
-            }
-
-            // Autonomous worker with write-capable tools
-            if input.autonomy == "autonomous" && r.base_role == "worker" {
-                let high_impact_suffixes = [
-                    "_execute", "_write", "_deploy", "_delete",
-                    "_rotate", "_launch", "_submit",
-                ];
-                for tool_name in &effective_tools {
-                    if high_impact_suffixes.iter().any(|s| tool_name.ends_with(s)) {
-                        warnings.push(ValidationWarning {
-                            code: "AUTONOMOUS_WORKER_HIGH_IMPACT",
-                            message: format!(
-                                "Autonomous worker with high-impact tool '{tool_name}'"
-                            ),
-                        });
-                        break; // One warning is enough
-                    }
-                }
             }
         }
 
+        // Autonomous worker with write-capable tools
+        if input.autonomy == "autonomous" && r.base_role == "worker" {
+            let high_impact_suffixes = [
+                "_execute", "_write", "_deploy", "_delete", "_rotate", "_launch", "_submit",
+            ];
+            for tool_name in &effective_tools {
+                if high_impact_suffixes.iter().any(|s| tool_name.ends_with(s)) {
+                    warnings.push(ValidationWarning {
+                        code: "AUTONOMOUS_WORKER_HIGH_IMPACT",
+                        message: format!("Autonomous worker with high-impact tool '{tool_name}'"),
+                    });
+                    break; // One warning is enough
+                }
+            }
+        }
+    }
 
     // --- Database validation ---
 
     // DUPLICATE_NAME
-    if let Ok(true) = profiles::name_exists_for_user(
-        pool,
-        input.name,
-        input.owner_user_id,
-        input.exclude_id,
-    )
-    .await
+    if let Ok(true) =
+        profiles::name_exists_for_user(pool, input.name, input.owner_user_id, input.exclude_id)
+            .await
     {
         violations.push(ValidationViolation {
             code: "DUPLICATE_NAME",
@@ -334,7 +332,9 @@ mod tests {
     use super::*;
     use crate::taxonomy_builder;
     use console_db::create_test_pool;
-    use console_runtime::{ProfileSummary, ToolPolicy, ToolPolicyKind, ToolSummary, VerticalManifest};
+    use console_runtime::{
+        ProfileSummary, ToolPolicy, ToolPolicyKind, ToolSummary, VerticalManifest,
+    };
     use std::collections::HashMap;
 
     fn test_manifest() -> VerticalManifest {
@@ -345,30 +345,43 @@ mod tests {
             context_schema: HashMap::new(),
             tool_policies: {
                 let mut m = HashMap::new();
-                m.insert("code_execute".into(), ToolPolicy {
-                    kind: ToolPolicyKind::RequiresGate,
-                    description: "Needs gate".into(),
-                    checkpoint_type: None,
-                    matching_field: None,
-                    expires_after_ms: None,
-                    gate_condition: Some("approved".into()),
-                    budget_field: None,
-                    blocked_classifications: None,
-                    override_flag: None,
-                });
+                m.insert(
+                    "code_execute".into(),
+                    ToolPolicy {
+                        kind: ToolPolicyKind::RequiresGate,
+                        description: "Needs gate".into(),
+                        checkpoint_type: None,
+                        matching_field: None,
+                        expires_after_ms: None,
+                        gate_condition: Some("approved".into()),
+                        budget_field: None,
+                        blocked_classifications: None,
+                        override_flag: None,
+                    },
+                );
                 m
             },
             checkpoint_types: HashMap::new(),
             quality_criteria: vec![],
             task_types: vec![],
             workflows: vec![],
-            profiles: vec![
-                ProfileSummary { role_id: "implementer".into(), autonomy: "autonomous".into() },
-            ],
+            profiles: vec![ProfileSummary {
+                role_id: "implementer".into(),
+                autonomy: "autonomous".into(),
+            }],
             tools: vec![
-                ToolSummary { name: "code_edit".into(), description: "Edit code".into() },
-                ToolSummary { name: "code_execute".into(), description: "Execute code".into() },
-                ToolSummary { name: "test_run".into(), description: "Run tests".into() },
+                ToolSummary {
+                    name: "code_edit".into(),
+                    description: "Edit code".into(),
+                },
+                ToolSummary {
+                    name: "code_execute".into(),
+                    description: "Execute code".into(),
+                },
+                ToolSummary {
+                    name: "test_run".into(),
+                    description: "Run tests".into(),
+                },
             ],
         }
     }
@@ -446,14 +459,25 @@ mod tests {
         let mut m2 = test_manifest();
         m2.id = "finance".into();
         m2.name = "Finance".into();
-        m2.tools = vec![ToolSummary { name: "trade_execute".into(), description: "".into() }];
-        m2.profiles = vec![ProfileSummary { role_id: "analyst".into(), autonomy: "gated".into() }];
+        m2.tools = vec![ToolSummary {
+            name: "trade_execute".into(),
+            description: "".into(),
+        }];
+        m2.profiles = vec![ProfileSummary {
+            role_id: "analyst".into(),
+            autonomy: "gated".into(),
+        }];
         let index = taxonomy_builder::build_index(None, &[test_manifest(), m2], &[]).index;
 
         let mut input = valid_input();
         input.tool_allowlist = Some(r#"["trade_execute"]"#);
         let result = validate_profile(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "TOOL_NOT_IN_ROLE_VERTICAL"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "TOOL_NOT_IN_ROLE_VERTICAL")
+        );
     }
 
     #[tokio::test]
@@ -474,7 +498,12 @@ mod tests {
         let mut input = valid_input();
         input.llm_temperature = Some(3.0);
         let result = validate_profile(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "INVALID_TEMPERATURE"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "INVALID_TEMPERATURE")
+        );
     }
 
     #[tokio::test]
@@ -484,7 +513,12 @@ mod tests {
         let mut input = valid_input();
         input.autonomy = "manual";
         let result = validate_profile(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "INVALID_AUTONOMY"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "INVALID_AUTONOMY")
+        );
     }
 
     #[tokio::test]
@@ -494,7 +528,12 @@ mod tests {
         let mut input = valid_input();
         input.tool_allowlist = Some(r#"["code_execute"]"#);
         let result = validate_profile(&input, &index, &pool).await;
-        assert!(result.warnings.iter().any(|w| w.code == "TOOL_HAS_RUNTIME_POLICY"));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.code == "TOOL_HAS_RUNTIME_POLICY")
+        );
     }
 
     #[tokio::test]
@@ -505,7 +544,12 @@ mod tests {
         input.autonomy = "autonomous";
         input.tool_allowlist = Some(r#"["code_execute"]"#);
         let result = validate_profile(&input, &index, &pool).await;
-        assert!(result.warnings.iter().any(|w| w.code == "AUTONOMOUS_WORKER_HIGH_IMPACT"));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.code == "AUTONOMOUS_WORKER_HIGH_IMPACT")
+        );
     }
 
     #[tokio::test]
@@ -513,9 +557,17 @@ mod tests {
         let pool = create_test_pool().await.unwrap();
         // Insert a user first
         console_db::queries::users::insert_user(
-            &pool, "user1", "testuser", "Test User", "$hash$", "operator", false,
+            &pool,
+            "user1",
+            "testuser",
+            "Test User",
+            "$hash$",
+            "operator",
+            false,
             &chrono::Utc::now().to_rfc3339(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Insert a profile with the same name
         let row = console_db::queries::profiles::ProfileRow {
@@ -542,7 +594,9 @@ mod tests {
             created_at: chrono::Utc::now().to_rfc3339(),
             deleted_at: None,
         };
-        console_db::queries::profiles::insert_profile(&pool, &row).await.unwrap();
+        console_db::queries::profiles::insert_profile(&pool, &row)
+            .await
+            .unwrap();
 
         let index = build_test_index();
         let input = valid_input();

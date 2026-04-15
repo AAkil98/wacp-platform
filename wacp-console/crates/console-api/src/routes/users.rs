@@ -4,7 +4,10 @@
 
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -33,7 +36,9 @@ struct ListParams {
     cursor: Option<String>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 async fn list_users(
     State(state): State<Arc<AppState>>,
@@ -46,15 +51,20 @@ async fn list_users(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    let result: Vec<serde_json::Value> = rows.into_iter().map(|u| serde_json::json!({
-        "id": u.id,
-        "username": u.username,
-        "display_name": u.display_name,
-        "console_role": u.console_role,
-        "disabled_at": u.disabled_at,
-        "created_at": u.created_at,
-        "updated_at": u.updated_at,
-    })).collect();
+    let result: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|u| {
+            serde_json::json!({
+                "id": u.id,
+                "username": u.username,
+                "display_name": u.display_name,
+                "console_role": u.console_role,
+                "disabled_at": u.disabled_at,
+                "created_at": u.created_at,
+                "updated_at": u.updated_at,
+            })
+        })
+        .collect();
 
     Ok(Json(result))
 }
@@ -84,26 +94,40 @@ async fn create_user(
     let now = chrono::Utc::now().to_rfc3339();
 
     users::insert_user(
-        &state.db, &id, &body.username, &body.display_name,
-        &password_hash, &body.console_role, false, &now,
+        &state.db,
+        &id,
+        &body.username,
+        &body.display_name,
+        &password_hash,
+        &body.console_role,
+        false,
+        &now,
     )
     .await
     .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::UserCreate,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"username": body.username, "role": body.console_role})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::UserCreate,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"username": body.username, "role": body.console_role})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!({
-        "id": id,
-        "username": body.username,
-        "console_role": body.console_role,
-    }))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": id,
+            "username": body.username,
+            "console_role": body.console_role,
+        })),
+    ))
 }
 
 async fn get_user(
@@ -169,14 +193,19 @@ async fn update_user(
             .await
             .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-        log_audit(&state.db, AuditEntry {
-            user_id: auth.user_id.clone(),
-            action: AuditAction::UserChangeRole,
-            target_id: id.clone(),
-            detail: Some(serde_json::json!({"new_role": role})),
-            ip: ctx.ip.clone(),
-            user_agent: ctx.user_agent.clone(),
-        }).await.ok();
+        log_audit(
+            &state.db,
+            AuditEntry {
+                user_id: auth.user_id.clone(),
+                action: AuditAction::UserChangeRole,
+                target_id: id.clone(),
+                detail: Some(serde_json::json!({"new_role": role})),
+                ip: ctx.ip.clone(),
+                user_agent: ctx.user_agent.clone(),
+            },
+        )
+        .await
+        .ok();
     }
 
     if let Some(disabled) = body.disabled {
@@ -202,28 +231,38 @@ async fn update_user(
                 .await
                 .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-            log_audit(&state.db, AuditEntry {
-                user_id: auth.user_id.clone(),
-                action: AuditAction::UserDisable,
-                target_id: id.clone(),
-                detail: None,
-                ip: ctx.ip.clone(),
-                user_agent: ctx.user_agent.clone(),
-            }).await.ok();
+            log_audit(
+                &state.db,
+                AuditEntry {
+                    user_id: auth.user_id.clone(),
+                    action: AuditAction::UserDisable,
+                    target_id: id.clone(),
+                    detail: None,
+                    ip: ctx.ip.clone(),
+                    user_agent: ctx.user_agent.clone(),
+                },
+            )
+            .await
+            .ok();
         } else {
             authorizer::authorize(&auth, Action::DisableUser).map_err(ApiError::from)?;
             users::enable_user(&state.db, &id, &now)
                 .await
                 .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-            log_audit(&state.db, AuditEntry {
-                user_id: auth.user_id.clone(),
-                action: AuditAction::UserEnable,
-                target_id: id.clone(),
-                detail: None,
-                ip: ctx.ip.clone(),
-                user_agent: ctx.user_agent.clone(),
-            }).await.ok();
+            log_audit(
+                &state.db,
+                AuditEntry {
+                    user_id: auth.user_id.clone(),
+                    action: AuditAction::UserEnable,
+                    target_id: id.clone(),
+                    detail: None,
+                    ip: ctx.ip.clone(),
+                    user_agent: ctx.user_agent.clone(),
+                },
+            )
+            .await
+            .ok();
         }
     }
 
@@ -244,14 +283,19 @@ async fn reset_password(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::UserResetPassword,
-        target_id: id,
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::UserResetPassword,
+            target_id: id,
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

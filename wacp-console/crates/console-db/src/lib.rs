@@ -40,7 +40,9 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::migrate::MigrateE
 /// Creates an in-memory pool for testing — WAL mode, FKs enabled.
 pub async fn create_test_pool() -> Result<DbPool, sqlx::Error> {
     let pool = create_pool("sqlite::memory:").await?;
-    run_migrations(&pool).await.map_err(|e| sqlx::Error::Configuration(e.into()))?;
+    run_migrations(&pool)
+        .await
+        .map_err(|e| sqlx::Error::Configuration(e.into()))?;
     Ok(pool)
 }
 

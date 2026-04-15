@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-data-model` §5.1–5.2, `wcon-api` §10
 
-use console_db::queries::settings as db;
 use console_db::DbPool;
+use console_db::queries::settings as db;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ConsoleError;
@@ -41,15 +41,51 @@ enum ValueType {
 /// Registry of all known settings keys.
 fn known_keys() -> Vec<KnownKey> {
     vec![
-        KnownKey { key: "runtime.agent_address", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "runtime.highway_address", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "runtime.coordinator_address", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "runtime.rest_address", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "taxonomy.path", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "export.directory", value_type: ValueType::String, default: serde_json::json!("") },
-        KnownKey { key: "ui.theme", value_type: ValueType::String, default: serde_json::json!("light") },
-        KnownKey { key: "ui.trail_buffer_size", value_type: ValueType::Integer, default: serde_json::json!(500) },
-        KnownKey { key: "auth.session_ttl_hours", value_type: ValueType::Integer, default: serde_json::json!(24) },
+        KnownKey {
+            key: "runtime.agent_address",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "runtime.highway_address",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "runtime.coordinator_address",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "runtime.rest_address",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "taxonomy.path",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "export.directory",
+            value_type: ValueType::String,
+            default: serde_json::json!(""),
+        },
+        KnownKey {
+            key: "ui.theme",
+            value_type: ValueType::String,
+            default: serde_json::json!("light"),
+        },
+        KnownKey {
+            key: "ui.trail_buffer_size",
+            value_type: ValueType::Integer,
+            default: serde_json::json!(500),
+        },
+        KnownKey {
+            key: "auth.session_ttl_hours",
+            value_type: ValueType::Integer,
+            default: serde_json::json!(24),
+        },
     ]
 }
 
@@ -73,7 +109,8 @@ pub async fn get_all(pool: &DbPool) -> Result<Vec<Setting>, ConsoleError> {
     // Database values first
     for row in rows {
         seen_keys.insert(row.key.clone());
-        let value = serde_json::from_str(&row.value).unwrap_or(serde_json::Value::String(row.value));
+        let value =
+            serde_json::from_str(&row.value).unwrap_or(serde_json::Value::String(row.value));
         result.push(Setting {
             key: row.key,
             value,
@@ -103,7 +140,8 @@ pub async fn get(pool: &DbPool, key: &str) -> Result<Setting, ConsoleError> {
         .map_err(|e| ConsoleError::Database(e.to_string()))?;
 
     if let Some(row) = row {
-        let value = serde_json::from_str(&row.value).unwrap_or(serde_json::Value::String(row.value));
+        let value =
+            serde_json::from_str(&row.value).unwrap_or(serde_json::Value::String(row.value));
         Ok(Setting {
             key: row.key,
             value,
@@ -124,11 +162,7 @@ pub async fn get(pool: &DbPool, key: &str) -> Result<Setting, ConsoleError> {
 }
 
 /// Set a setting value. Validates type for known keys; accepts any JSON for unknown keys.
-pub async fn set(
-    pool: &DbPool,
-    key: &str,
-    value: &serde_json::Value,
-) -> Result<(), ConsoleError> {
+pub async fn set(pool: &DbPool, key: &str, value: &serde_json::Value) -> Result<(), ConsoleError> {
     if let Some(kk) = find_known_key(key) {
         validate_type(&kk, value)?;
     }
@@ -195,7 +229,9 @@ mod tests {
     #[tokio::test]
     async fn set_and_get() {
         let pool = create_test_pool().await.unwrap();
-        set(&pool, "ui.theme", &serde_json::json!("dark")).await.unwrap();
+        set(&pool, "ui.theme", &serde_json::json!("dark"))
+            .await
+            .unwrap();
 
         let s = get(&pool, "ui.theme").await.unwrap();
         assert_eq!(s.value, serde_json::json!("dark"));
@@ -205,9 +241,13 @@ mod tests {
     #[tokio::test]
     async fn type_validation_rejects_wrong_type() {
         let pool = create_test_pool().await.unwrap();
-        let err = set(&pool, "auth.session_ttl_hours", &serde_json::json!("not an int"))
-            .await
-            .unwrap_err();
+        let err = set(
+            &pool,
+            "auth.session_ttl_hours",
+            &serde_json::json!("not an int"),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, ConsoleError::Validation { .. }));
     }
 
@@ -225,7 +265,9 @@ mod tests {
     #[tokio::test]
     async fn delete_resets_to_default() {
         let pool = create_test_pool().await.unwrap();
-        set(&pool, "ui.theme", &serde_json::json!("dark")).await.unwrap();
+        set(&pool, "ui.theme", &serde_json::json!("dark"))
+            .await
+            .unwrap();
         delete(&pool, "ui.theme").await.unwrap();
 
         let s = get(&pool, "ui.theme").await.unwrap();

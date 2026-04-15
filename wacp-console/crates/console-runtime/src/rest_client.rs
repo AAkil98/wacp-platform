@@ -40,21 +40,23 @@ pub async fn load_verticals(rest_address: &str) -> Result<VerticalLoadResult, St
     let summaries: Vec<VerticalSummary> = match client.get(&list_url).send().await {
         Ok(resp) => {
             if !resp.status().is_success() {
-                return Err(format!(
-                    "GET /v1/verticals returned {}",
-                    resp.status()
-                ));
+                return Err(format!("GET /v1/verticals returned {}", resp.status()));
             }
-            resp.json().await.map_err(|e| {
-                format!("failed to parse vertical list: {e}")
-            })?
+            resp.json()
+                .await
+                .map_err(|e| format!("failed to parse vertical list: {e}"))?
         }
         Err(e) => {
-            return Err(format!("failed to reach runtime REST API at {list_url}: {e}"));
+            return Err(format!(
+                "failed to reach runtime REST API at {list_url}: {e}"
+            ));
         }
     };
 
-    info!(count = summaries.len(), "fetched vertical summaries from runtime");
+    info!(
+        count = summaries.len(),
+        "fetched vertical summaries from runtime"
+    );
 
     // Step 2: Fetch full manifest for each vertical.
     let mut manifests = Vec::new();

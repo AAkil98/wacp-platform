@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-auth` §6
 
-use console_db::queries::users;
 use console_db::DbPool;
+use console_db::queries::users;
 use rand::Rng;
 use tracing::info;
 
@@ -102,7 +102,10 @@ mod tests {
         assert!(!password.is_empty());
 
         // Verify user exists
-        let user = users::get_by_username(&pool, "admin").await.unwrap().unwrap();
+        let user = users::get_by_username(&pool, "admin")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(user.console_role, "admin");
         assert!(user.must_change_password);
 

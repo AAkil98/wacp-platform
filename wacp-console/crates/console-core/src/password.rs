@@ -3,8 +3,8 @@
 //! Spec: `wcon-auth` §7
 
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use rand::Rng;
 use argon2::{Algorithm, Argon2, Params, Version};
+use rand::Rng;
 
 use crate::error::ConsoleError;
 

@@ -33,12 +33,10 @@ pub async fn get_by_id(
     pool: &DbPool,
     id: &str,
 ) -> Result<Option<SessionAssignmentRow>, sqlx::Error> {
-    sqlx::query_as::<_, SessionAssignmentRow>(
-        "SELECT * FROM session_assignments WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
+    sqlx::query_as::<_, SessionAssignmentRow>("SELECT * FROM session_assignments WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn insert_assignment(
@@ -89,13 +87,11 @@ pub async fn set_workspace_id(
     id: &str,
     workspace_id: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "UPDATE session_assignments SET workspace_id = ? WHERE id = ?",
-    )
-    .bind(workspace_id)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("UPDATE session_assignments SET workspace_id = ? WHERE id = ?")
+        .bind(workspace_id)
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 

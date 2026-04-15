@@ -2,8 +2,8 @@
 //!
 //! Spec: `wcon-sessions` §3.1
 
-use console_db::queries::{profiles, session_assignments};
 use console_db::DbPool;
+use console_db::queries::{profiles, session_assignments};
 use serde::Serialize;
 
 use crate::taxonomy::TaxonomyIndex;
@@ -128,7 +128,10 @@ pub async fn validate_session(
             if p.deleted_at.is_some() {
                 violations.push(SessionViolation {
                     code: "DELETED_PROFILE_IN_ASSIGNMENT",
-                    message: format!("Profile '{}' (slot {}) has been deleted", p.name, assignment.slot_position),
+                    message: format!(
+                        "Profile '{}' (slot {}) has been deleted",
+                        p.name, assignment.slot_position
+                    ),
                     slot,
                 });
             }
@@ -282,12 +285,14 @@ mod tests {
                 stage_count: 2,
                 gated_stage_count: 1,
             }],
-            profiles: vec![
-                ProfileSummary { role_id: "implementer".into(), autonomy: "autonomous".into() },
-            ],
-            tools: vec![
-                ToolSummary { name: "code_edit".into(), description: "".into() },
-            ],
+            profiles: vec![ProfileSummary {
+                role_id: "implementer".into(),
+                autonomy: "autonomous".into(),
+            }],
+            tools: vec![ToolSummary {
+                name: "code_edit".into(),
+                description: "".into(),
+            }],
         }
     }
 
@@ -305,7 +310,12 @@ mod tests {
             budget_max_wall_time_ms: None,
         };
         let result = validate_session(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "UNKNOWN_VERTICAL"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "UNKNOWN_VERTICAL")
+        );
     }
 
     #[tokio::test]
@@ -322,7 +332,12 @@ mod tests {
             budget_max_wall_time_ms: None,
         };
         let result = validate_session(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "UNKNOWN_WORKFLOW"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "UNKNOWN_WORKFLOW")
+        );
     }
 
     #[tokio::test]
@@ -339,7 +354,12 @@ mod tests {
             budget_max_wall_time_ms: None,
         };
         let result = validate_session(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "MISSING_ASSIGNMENT"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "MISSING_ASSIGNMENT")
+        );
     }
 
     #[tokio::test]
@@ -367,7 +387,12 @@ mod tests {
             budget_max_wall_time_ms: None,
         };
         let result = validate_session(&input, &index, &pool).await;
-        assert!(result.violations.iter().any(|v| v.code == "MISSING_CONTEXT"));
+        assert!(
+            result
+                .violations
+                .iter()
+                .any(|v| v.code == "MISSING_CONTEXT")
+        );
     }
 
     #[test]

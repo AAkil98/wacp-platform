@@ -5,7 +5,10 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
-use axum::{Json, Router, routing::{get, post}};
+use axum::{
+    Json, Router,
+    routing::{get, post},
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -45,7 +48,9 @@ struct ListParams {
     cursor: Option<String>,
 }
 
-fn default_limit() -> i64 { 50 }
+fn default_limit() -> i64 {
+    50
+}
 
 async fn list_profiles(
     State(state): State<Arc<AppState>>,
@@ -120,8 +125,12 @@ struct CreateProfileRequest {
     visibility: String,
 }
 
-fn default_autonomy() -> String { "assisted".into() }
-fn default_visibility() -> String { "private".into() }
+fn default_autonomy() -> String {
+    "assisted".into()
+}
+fn default_visibility() -> String {
+    "private".into()
+}
 
 async fn create_profile(
     State(state): State<Arc<AppState>>,
@@ -133,9 +142,18 @@ async fn create_profile(
     validate_csrf(&headers, is_bearer_auth(&headers)).map_err(ApiError::from)?;
     authorizer::authorize(&auth, Action::CreateProfile).map_err(ApiError::from)?;
 
-    let tags_json = body.tags.as_ref().map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".into()));
-    let allow_json = body.tool_allowlist.as_ref().map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".into()));
-    let deny_json = body.tool_denylist.as_ref().map(|d| serde_json::to_string(d).unwrap_or_else(|_| "[]".into()));
+    let tags_json = body
+        .tags
+        .as_ref()
+        .map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".into()));
+    let allow_json = body
+        .tool_allowlist
+        .as_ref()
+        .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".into()));
+    let deny_json = body
+        .tool_denylist
+        .as_ref()
+        .map(|d| serde_json::to_string(d).unwrap_or_else(|_| "[]".into()));
 
     let index = state.taxonomy.load();
     let input = ProfileInput {
@@ -196,14 +214,19 @@ async fn create_profile(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::ProfileCreate,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"name": row.name})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::ProfileCreate,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"name": row.name})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -293,9 +316,18 @@ async fn update_profile(
 
     check_profile_write_access(&auth, &current)?;
 
-    let tags_json = body.tags.as_ref().map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".into()));
-    let allow_json = body.tool_allowlist.as_ref().map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".into()));
-    let deny_json = body.tool_denylist.as_ref().map(|d| serde_json::to_string(d).unwrap_or_else(|_| "[]".into()));
+    let tags_json = body
+        .tags
+        .as_ref()
+        .map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".into()));
+    let allow_json = body
+        .tool_allowlist
+        .as_ref()
+        .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".into()));
+    let deny_json = body
+        .tool_denylist
+        .as_ref()
+        .map(|d| serde_json::to_string(d).unwrap_or_else(|_| "[]".into()));
 
     let index = state.taxonomy.load();
     let input = ProfileInput {
@@ -356,14 +388,19 @@ async fn update_profile(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::ProfileUpdate,
-        target_id: id,
-        detail: Some(serde_json::json!({"version": new_version})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::ProfileUpdate,
+            target_id: id,
+            detail: Some(serde_json::json!({"version": new_version})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "version": new_version,
@@ -394,28 +431,34 @@ async fn delete_profile(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::ProfileDelete,
-        target_id: id.clone(),
-        detail: None,
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
-
-    // Check for non-terminal session assignments and return warnings.
-    let affected = console_db::queries::session_assignments::find_active_sessions_for_profile(
-        &state.db, &id,
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::ProfileDelete,
+            target_id: id.clone(),
+            detail: None,
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
     )
     .await
-    .unwrap_or_default();
+    .ok();
+
+    // Check for non-terminal session assignments and return warnings.
+    let affected =
+        console_db::queries::session_assignments::find_active_sessions_for_profile(&state.db, &id)
+            .await
+            .unwrap_or_default();
 
     let warnings: Vec<serde_json::Value> = affected
         .iter()
-        .map(|sid| serde_json::json!({
-            "session_id": sid,
-            "message": format!("Session '{sid}' uses this profile in a non-terminal state"),
-        }))
+        .map(|sid| {
+            serde_json::json!({
+                "session_id": sid,
+                "message": format!("Session '{sid}' uses this profile in a non-terminal state"),
+            })
+        })
         .collect();
 
     Ok(Json(serde_json::json!({ "warnings": warnings })))
@@ -486,7 +529,9 @@ async fn rollback(
     let target = profiles::get_version(&state.db, &id, body.version)
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?
-        .ok_or_else(|| ApiError::not_found("profile_version", &format!("{id}@v{}", body.version)))?;
+        .ok_or_else(|| {
+            ApiError::not_found("profile_version", &format!("{id}@v{}", body.version))
+        })?;
 
     // Create a new version with the old content
     let new_version = current.version + 1;
@@ -613,14 +658,19 @@ async fn clone_profile(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::ProfileClone,
-        target_id: new_id.clone(),
-        detail: Some(serde_json::json!({"source_id": id})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::ProfileClone,
+            target_id: new_id.clone(),
+            detail: Some(serde_json::json!({"source_id": id})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -714,14 +764,19 @@ async fn import_profile(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    log_audit(&state.db, AuditEntry {
-        user_id: auth.user_id.clone(),
-        action: AuditAction::ProfileImport,
-        target_id: id.clone(),
-        detail: Some(serde_json::json!({"name": row.name})),
-        ip: ctx.ip,
-        user_agent: ctx.user_agent,
-    }).await.ok();
+    log_audit(
+        &state.db,
+        AuditEntry {
+            user_id: auth.user_id.clone(),
+            action: AuditAction::ProfileImport,
+            target_id: id.clone(),
+            detail: Some(serde_json::json!({"name": row.name})),
+            ip: ctx.ip,
+            user_agent: ctx.user_agent,
+        },
+    )
+    .await
+    .ok();
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -753,10 +808,7 @@ async fn derive_display_name(
     }
 }
 
-fn check_profile_read_access(
-    auth: &Auth,
-    profile: &profiles::ProfileRow,
-) -> Result<(), ApiError> {
+fn check_profile_read_access(auth: &Auth, profile: &profiles::ProfileRow) -> Result<(), ApiError> {
     if auth.console_role == console_core::ConsoleRole::Admin {
         return Ok(());
     }
@@ -797,10 +849,7 @@ fn to_validation_error(result: &profile_validation::ValidationResult) -> Console
     }
 }
 
-fn check_profile_write_access(
-    auth: &Auth,
-    profile: &profiles::ProfileRow,
-) -> Result<(), ApiError> {
+fn check_profile_write_access(auth: &Auth, profile: &profiles::ProfileRow) -> Result<(), ApiError> {
     if auth.console_role == console_core::ConsoleRole::Admin {
         authorizer::authorize(auth, Action::EditAnyProfile).map_err(ApiError::from)?;
         return Ok(());

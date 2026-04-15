@@ -1,0 +1,33 @@
+[package]
+name = "console-integration"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+console-api = { workspace = true }
+console-core = { workspace = true }
+console-db = { workspace = true }
+console-runtime = { workspace = true }
+arc-swap = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls", "json", "stream", "cookies"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { version = "0.27", features = ["rustls-tls-native-roots"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+http = "1"
+futures = { workspace = true }
+
+[dev-dependencies]
+console-test-support = { workspace = true }

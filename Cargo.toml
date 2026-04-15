@@ -4,6 +4,7 @@ members = [
     "wacp/crates/*",
     "wacp/tests",
     "wacp-console/crates/*",
+    "wacp-console/integration",
 ]
 
 [workspace.package]

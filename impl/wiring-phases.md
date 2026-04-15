@@ -76,7 +76,7 @@ W1 (pool → AppState)
 
 ---
 
-### W2 — Launch Flow   *(DONE — commit TBD)*
+### W2 — Launch Flow   *(DONE — commit `5cba194`)*
 
 **Estimate:** 1 working day (actual: ~2h end-to-end). **Coding spec:** `wcon-w2-launch-flow`. **Proto-shape note:** `impl/notes/w2-proto-shapes.md`.
 

@@ -1,0 +1,30 @@
+[package]
+name = "wacp-console"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "wacp-console"
+path = "src/main.rs"
+
+[dependencies]
+console-api = { workspace = true }
+console-core = { workspace = true }
+console-db = { workspace = true }
+console-runtime = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+directories = { workspace = true }
+rust-embed = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+tokio-util = { workspace = true }
+arc-swap = { workspace = true }
+anyhow = "1"
+
+[dev-dependencies]
+console-test-support = { workspace = true }
+tempfile = { workspace = true }

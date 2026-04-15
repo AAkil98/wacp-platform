@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: wacp-console
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/wacp
+          path: wacp
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: wacp-console
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "28.x"
+
+      - name: cargo fmt
+        working-directory: wacp-console
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        working-directory: wacp-console
+        run: cargo clippy --workspace -- -D warnings
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      - name: pnpm install
+        working-directory: wacp-console/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm lint
+        working-directory: wacp-console/frontend
+        run: pnpm lint
+
+      - name: pnpm typecheck
+        working-directory: wacp-console/frontend
+        run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: wacp-console
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/wacp
+          path: wacp
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: wacp-console
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "28.x"
+
+      - name: cargo test
+        working-directory: wacp-console
+        run: cargo test --workspace
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      - name: pnpm install
+        working-directory: wacp-console/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm test
+        working-directory: wacp-console/frontend
+        run: pnpm test
+
+  # Reserved for Phase 2+: integration tests against mock runtime
+  # integration:
+  #   name: Integration
+  #   needs: [lint, test]
+
+  # Reserved for Phase 2+: OpenAPI drift check
+  # openapi-drift:
+  #   name: OpenAPI Drift
+  #   needs: [lint]

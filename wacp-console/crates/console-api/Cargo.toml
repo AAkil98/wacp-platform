@@ -1,0 +1,35 @@
+[package]
+name = "console-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+console-core = { workspace = true }
+console-db = { workspace = true }
+console-runtime = { workspace = true }
+arc-swap = { workspace = true }
+reqwest = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+subtle = { workspace = true }
+utoipa = { workspace = true }
+serde_yaml_ng = { workspace = true }
+
+[[bin]]
+name = "gen-openapi"
+path = "src/bin/gen_openapi.rs"
+
+[dev-dependencies]
+rstest = { workspace = true }

@@ -386,15 +386,19 @@ dependencies = [
 name = "console-api"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "axum",
  "base64",
  "chrono",
  "console-core",
  "console-db",
+ "console-runtime",
  "rand 0.9.4",
+ "reqwest",
  "rstest",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "sqlx",
  "subtle",
  "thiserror",
@@ -415,6 +419,7 @@ dependencies = [
  "base64",
  "chrono",
  "console-db",
+ "console-runtime",
  "directories",
  "insta",
  "rand 0.9.4",
@@ -424,6 +429,7 @@ dependencies = [
  "serde_yaml_ng",
  "sha2",
  "subtle",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",
@@ -3126,6 +3132,7 @@ name = "wacp-console"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "axum",
  "clap",
  "console-api",

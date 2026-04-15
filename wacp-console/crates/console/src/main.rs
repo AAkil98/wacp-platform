@@ -161,14 +161,37 @@ async fn main() -> anyhow::Result<()> {
                 "gRPC pool initialized"
             );
 
+            let active_sessions = Arc::new(tokio::sync::RwLock::new(
+                std::collections::HashMap::new(),
+            ));
+
+            // W5 — startup recovery. Iterate sessions left in ACTIVE from the
+            // previous boot, probe each via GetWorkspace, then either respawn
+            // the W3 monitor (resume) or transition the session to FAILED.
+            // Outcome is logged structurally; never fatal to startup.
+            let recovery_report = console_core::recovery::run(
+                pool.clone(),
+                grpc_pool.clone(),
+                console_core::event_enricher::EventEnricher::new(taxonomy.clone()),
+                console_core::refusal_synthesizer::RefusalSynthesizer::new(),
+                active_sessions.clone(),
+                console_core::session_monitor::MonitorConfig::default(),
+            )
+            .await;
+            info!(
+                resumed = recovery_report.resumed.len(),
+                synced_terminal = recovery_report.synced_terminal.len(),
+                failed = recovery_report.failed.len(),
+                skipped_unavailable = recovery_report.skipped_unavailable.len(),
+                "session recovery complete"
+            );
+
             let state = AppState {
                 db: pool,
                 taxonomy,
                 runtime_config: config.runtime.clone(),
                 grpc_pool,
-                active_sessions: Arc::new(tokio::sync::RwLock::new(
-                    std::collections::HashMap::new(),
-                )),
+                active_sessions,
             };
 
             let frontend_mode = match frontend_path {

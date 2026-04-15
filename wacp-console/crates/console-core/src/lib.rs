@@ -10,6 +10,7 @@ pub mod password;
 pub mod profile_validation;
 pub mod profile_yaml;
 pub mod rate_limit;
+pub mod recovery;
 pub mod refusal_synthesizer;
 pub mod session_launcher;
 pub mod session_monitor;

@@ -154,9 +154,16 @@ W1 (pool → AppState)
 
 ---
 
-### W5 — Cancel & Recovery
+### W5 — Cancel & Recovery *(DONE — commit `9aa59dc`)*
 
 **Estimate:** 4 hours. **Coding spec:** `wcon-w5-cancel-recovery`.
+
+**Deviations landed with the W5 commit:**
+
+- Recovery probes the runtime via `HighwayService::GetWorkspace` (not Coordinator). The spec named "Coordinator" generically; the actual proto exposes the workspace view on Highway, and Highway is what the W3 monitor already needs at startup, so reusing the channel keeps the dependency surface tight.
+- Recovery failure reasons (`stuck_in_launching`, `recovery_workspace_missing`, etc.) live only in the structured `RecoveryReport` log line — they are not persisted on the session row (the row carries only `state`). When we eventually need cross-restart audit, add a `failure_reason` column or write an audit-log entry.
+- Cancel reorders the spec's pseudocode: required-abort runtime call happens BEFORE the DB transition (so a runtime rejection leaves the session ACTIVE); best-effort runs AFTER (cancel succeeds locally regardless). The spec's pseudocode reverses this; the new order is what's needed to honour the "session stays ACTIVE on hard-abort failure" requirement in T5.3.
+- The acceptance grep for `// Full abort via CoordinatorService.AbortWorkspace` matches a doc-comment in `session_state::CancelAction::AbortWorkspace` that legitimately describes the variant — left intact, the placeholder TODO in `routes/sessions.rs` is gone.
 
 | Task | Deliverable | Test layer | Acceptance bar |
 |------|-------------|------------|----------------|

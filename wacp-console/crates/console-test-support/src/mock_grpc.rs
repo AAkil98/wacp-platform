@@ -4,6 +4,8 @@
 //! streaming responses for highway integration tests. For Phase 0, the
 //! goal is: the servers start, accept connections, and respond.
 
+use std::sync::Arc;
+
 use tonic::{Request, Response, Status};
 
 // Server-side generated traits sourced from the shared `wacp-proto` crate.
@@ -107,11 +109,101 @@ impl AgentService for MockAgentService {
 }
 
 // ---------------------------------------------------------------------------
-// HighwayService
+// HighwayService — configurable
 // ---------------------------------------------------------------------------
 
+/// Per-RPC outcome a configurable mock can be programmed to return. Each
+/// W4 test that needs a non-happy path attaches a custom outcome.
+#[derive(Debug, Clone, Default)]
+pub enum HighwayOutcome {
+    /// Default — return Ok with `applied=true`.
+    #[default]
+    Ok,
+    /// Return Ok but the runtime claims the action did not apply (gate
+    /// already resolved, escalation already closed). Spec wcon-w4 §3.1.
+    OkNotApplied,
+    /// Map to the listed gRPC status code.
+    Err(tonic::Code, &'static str),
+}
+
+/// Configurable behaviour driver for `MockHighwayService`. The W4 tests
+/// install a config, then make HTTP requests against the console. Per-RPC
+/// outcomes can be set independently; default is Ok everywhere.
+///
+/// Also captures the last request seen on each RPC for assertions.
 #[derive(Debug, Default)]
-pub struct MockHighwayService;
+pub struct HighwayConfig {
+    pub respond_to_gate: std::sync::Mutex<HighwayOutcome>,
+    pub respond_to_escalation: std::sync::Mutex<HighwayOutcome>,
+    pub inject_envelope: std::sync::Mutex<HighwayOutcome>,
+
+    pub last_gate: std::sync::Mutex<Option<proto::GateResponse>>,
+    pub last_escalation: std::sync::Mutex<Option<proto::EscalationResponse>>,
+    pub last_inject: std::sync::Mutex<Option<proto::InjectEnvelopeRequest>>,
+
+    /// Sequence of `respond_to_gate` outcomes consumed in order. When
+    /// non-empty, takes precedence over `respond_to_gate`. Allows tests to
+    /// alternate Ok / Err across a batch.
+    pub gate_sequence: std::sync::Mutex<std::collections::VecDeque<HighwayOutcome>>,
+}
+
+impl HighwayConfig {
+    pub fn arc() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+    pub fn set_gate(&self, o: HighwayOutcome) {
+        *self.respond_to_gate.lock().unwrap() = o;
+    }
+    pub fn set_escalation(&self, o: HighwayOutcome) {
+        *self.respond_to_escalation.lock().unwrap() = o;
+    }
+    pub fn set_inject(&self, o: HighwayOutcome) {
+        *self.inject_envelope.lock().unwrap() = o;
+    }
+    pub fn push_gate_sequence(&self, items: impl IntoIterator<Item = HighwayOutcome>) {
+        let mut q = self.gate_sequence.lock().unwrap();
+        q.extend(items);
+    }
+}
+
+/// `MockHighwayService` defaults to Ok behaviour everywhere so that existing
+/// tests don't have to wire a config. W4 tests that need failure paths
+/// construct a `HighwayConfig`, attach it via `MockHighwayService::with_config`,
+/// and program per-RPC outcomes.
+#[derive(Debug, Default)]
+pub struct MockHighwayService {
+    config: Option<Arc<HighwayConfig>>,
+}
+
+impl MockHighwayService {
+    pub fn with_config(config: Arc<HighwayConfig>) -> Self {
+        Self { config: Some(config) }
+    }
+
+    fn outcome_for(&self, kind: HighwayRpc) -> HighwayOutcome {
+        let Some(cfg) = &self.config else {
+            return HighwayOutcome::Ok;
+        };
+        match kind {
+            HighwayRpc::RespondToGate => {
+                let mut seq = cfg.gate_sequence.lock().unwrap();
+                if let Some(o) = seq.pop_front() {
+                    return o;
+                }
+                cfg.respond_to_gate.lock().unwrap().clone()
+            }
+            HighwayRpc::RespondToEscalation => cfg.respond_to_escalation.lock().unwrap().clone(),
+            HighwayRpc::InjectEnvelope => cfg.inject_envelope.lock().unwrap().clone(),
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+enum HighwayRpc {
+    RespondToGate,
+    RespondToEscalation,
+    InjectEnvelope,
+}
 
 #[tonic::async_trait]
 impl HighwayService for MockHighwayService {
@@ -127,33 +219,68 @@ impl HighwayService for MockHighwayService {
 
     async fn inject_envelope(
         &self,
-        _request: Request<proto::InjectEnvelopeRequest>,
+        request: Request<proto::InjectEnvelopeRequest>,
     ) -> Result<Response<proto::InjectEnvelopeResponse>, Status> {
-        Err(Status::unimplemented(
-            "mock: inject_envelope not implemented",
-        ))
+        let req = request.into_inner();
+        if let Some(cfg) = &self.config {
+            *cfg.last_inject.lock().unwrap() = Some(req.clone());
+        }
+        match self.outcome_for(HighwayRpc::InjectEnvelope) {
+            HighwayOutcome::Ok | HighwayOutcome::OkNotApplied => {
+                Ok(Response::new(proto::InjectEnvelopeResponse {
+                    envelope_id: format!("env-{}", req.client_request_id),
+                    timestamp: None,
+                    client_request_id: req.client_request_id,
+                }))
+            }
+            HighwayOutcome::Err(code, msg) => Err(Status::new(code, msg)),
+        }
     }
 
     async fn respond_to_gate(
         &self,
-        _request: Request<proto::GateResponse>,
+        request: Request<proto::GateResponse>,
     ) -> Result<Response<proto::GateResponseAck>, Status> {
-        Ok(Response::new(proto::GateResponseAck {
-            gate_id: String::new(),
-            applied: true,
-            client_request_id: String::new(),
-        }))
+        let req = request.into_inner();
+        if let Some(cfg) = &self.config {
+            *cfg.last_gate.lock().unwrap() = Some(req.clone());
+        }
+        match self.outcome_for(HighwayRpc::RespondToGate) {
+            HighwayOutcome::Ok => Ok(Response::new(proto::GateResponseAck {
+                gate_id: req.gate_id,
+                applied: true,
+                client_request_id: req.client_request_id,
+            })),
+            HighwayOutcome::OkNotApplied => Ok(Response::new(proto::GateResponseAck {
+                gate_id: req.gate_id,
+                applied: false,
+                client_request_id: req.client_request_id,
+            })),
+            HighwayOutcome::Err(code, msg) => Err(Status::new(code, msg)),
+        }
     }
 
     async fn respond_to_escalation(
         &self,
-        _request: Request<proto::EscalationResponse>,
+        request: Request<proto::EscalationResponse>,
     ) -> Result<Response<proto::EscalationResponseAck>, Status> {
-        Ok(Response::new(proto::EscalationResponseAck {
-            escalation_id: String::new(),
-            applied: true,
-            client_request_id: String::new(),
-        }))
+        let req = request.into_inner();
+        if let Some(cfg) = &self.config {
+            *cfg.last_escalation.lock().unwrap() = Some(req.clone());
+        }
+        match self.outcome_for(HighwayRpc::RespondToEscalation) {
+            HighwayOutcome::Ok => Ok(Response::new(proto::EscalationResponseAck {
+                escalation_id: req.escalation_id,
+                applied: true,
+                client_request_id: req.client_request_id,
+            })),
+            HighwayOutcome::OkNotApplied => Ok(Response::new(proto::EscalationResponseAck {
+                escalation_id: req.escalation_id,
+                applied: false,
+                client_request_id: req.client_request_id,
+            })),
+            HighwayOutcome::Err(code, msg) => Err(Status::new(code, msg)),
+        }
     }
 
     async fn query_trail(

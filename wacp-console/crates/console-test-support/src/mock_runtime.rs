@@ -17,8 +17,8 @@ use tracing::info;
 
 use crate::fixtures;
 use crate::mock_grpc::{
-    AgentServiceServer, CoordinatorServiceServer, HighwayServiceServer, MockAgentService,
-    MockCoordinatorService, MockHighwayService,
+    AgentServiceServer, CoordinatorServiceServer, HighwayConfig, HighwayServiceServer,
+    MockAgentService, MockCoordinatorService, MockHighwayService,
 };
 use crate::mock_rest::{RestState, rest_router};
 
@@ -28,12 +28,24 @@ pub struct MockRuntime {
     pub highway_addr: SocketAddr,
     pub coordinator_addr: SocketAddr,
     pub rest_addr: SocketAddr,
+    /// When `start_with_highway_config` was used, holds the shared config so
+    /// tests can program outcomes and inspect captured requests.
+    pub highway_config: Option<Arc<HighwayConfig>>,
     _handles: Vec<JoinHandle<()>>,
 }
 
 impl MockRuntime {
     /// Start all four servers on random OS-assigned ports.
     pub async fn start() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::start_with_highway_config(None).await
+    }
+
+    /// Same as `start` but installs a programmable `HighwayConfig` on the
+    /// mock highway service. The config is also returned via the
+    /// `highway_config` field for later mutation / inspection.
+    pub async fn start_with_highway_config(
+        highway_config: Option<Arc<HighwayConfig>>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut handles = Vec::with_capacity(4);
 
         // --- Agent gRPC ---
@@ -53,9 +65,13 @@ impl MockRuntime {
         let highway_listener = TcpListener::bind("[::1]:0").await?;
         let highway_addr = highway_listener.local_addr()?;
         let highway_stream = tokio_stream::wrappers::TcpListenerStream::new(highway_listener);
+        let highway_service = match highway_config.clone() {
+            Some(cfg) => MockHighwayService::with_config(cfg),
+            None => MockHighwayService::default(),
+        };
         handles.push(tokio::spawn(async move {
             Server::builder()
-                .add_service(HighwayServiceServer::new(MockHighwayService))
+                .add_service(HighwayServiceServer::new(highway_service))
                 .serve_with_incoming(highway_stream)
                 .await
                 .ok();
@@ -97,6 +113,7 @@ impl MockRuntime {
             highway_addr,
             coordinator_addr,
             rest_addr,
+            highway_config,
             _handles: handles,
         })
     }

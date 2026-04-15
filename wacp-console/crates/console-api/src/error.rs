@@ -192,6 +192,70 @@ impl ApiError {
             warnings: vec![],
         })
     }
+
+    /// Map a `tonic::Status` returned by a runtime gRPC call into the API's
+    /// HTTP error shape. Per spec `wcon-w4-highway-forwarding` §3.2:
+    /// runtime-rejected actions surface as 4xx where the cause is structural
+    /// (NotFound, FailedPrecondition, PermissionDenied), and as 5xx where the
+    /// runtime is unreachable or unhealthy.
+    pub fn from_tonic(s: tonic::Status, service: &'static str, method: &'static str) -> Self {
+        let (status, code, message) = match s.code() {
+            tonic::Code::NotFound => (
+                StatusCode::NOT_FOUND,
+                "not_found",
+                s.message().to_string(),
+            ),
+            tonic::Code::FailedPrecondition => (
+                StatusCode::CONFLICT,
+                "conflict",
+                s.message().to_string(),
+            ),
+            tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "runtime_unavailable",
+                s.message().to_string(),
+            ),
+            tonic::Code::PermissionDenied => (
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                s.message().to_string(),
+            ),
+            _ => (
+                StatusCode::BAD_GATEWAY,
+                "runtime_error",
+                format!("runtime: {}", s.message()),
+            ),
+        };
+        ApiError {
+            status,
+            body: ApiErrorBody {
+                error: code.into(),
+                message,
+                details: Some(serde_json::json!({
+                    "grpc_status": format!("{:?}", s.code()),
+                    "service": service,
+                    "method": method,
+                })),
+            },
+        }
+    }
+
+    /// Constructed when the gRPC pool has no live highway client (e.g., the
+    /// runtime crashed and reconnect hasn't fired yet). Returns 503 to signal
+    /// the caller should retry rather than re-issue with backoff.
+    pub fn runtime_unavailable(service: &'static str, method: &'static str) -> Self {
+        ApiError {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            body: ApiErrorBody {
+                error: "runtime_unavailable".into(),
+                message: format!("{service}.{method} unavailable: pool has no live channel"),
+                details: Some(serde_json::json!({
+                    "service": service,
+                    "method": method,
+                })),
+            },
+        }
+    }
 }
 
 #[cfg(test)]

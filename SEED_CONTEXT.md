@@ -2,7 +2,8 @@
 
 > Compressed summary of the full design, current implementation state, and next steps.
 > For detail on any topic, follow the spec references. For task-level implementation detail, see `IMPLEMENTATION.md`.
-> For the wiring strategy, see `impl/wiring-strategy.md`.
+> For the wiring strategy (cross-cutting, intended to sit at the monorepo root post-merge), see `impl/wiring-strategy.md`.
+> For the monorepo merge procedure (W0 detail, 7 milestones, decisions still open), see `impl/merge-plan.md`.
 
 ## What This Is
 
@@ -105,13 +106,13 @@ Four endpoints, three independent Tonic channels + one REST client:
 
 ## Next Step: Wiring Strategy
 
-**Document:** `impl/wiring-strategy.md`
+**Documents:** `impl/wiring-strategy.md` (cross-cutting plan — intended to sit at the monorepo root post-merge) and `impl/merge-plan.md` (W0 detail — `status: final`, 12 decisions resolved, 6 pre-M0 open items resolved with decisions recorded in §10).
 
 Phase 7 (distribution) is postponed. The next work is wiring the Console to the real WACP runtime. The strategy has 7 steps:
 
 | Step | What | Effort |
 |------|------|--------|
-| **W0** | Merge `wacp/` and `wacp-console/` into one workspace | ~4h |
+| **W0** | Merge `wacp/` and `wacp-console/` into one workspace (see `impl/merge-plan.md`) | 1–2d |
 | **W1** | gRPC pool → AppState (instantiate, connect, inject) | ~2h |
 | **W2** | Real launch flow (CreateSession → SubmitGoal → Dispatch → SendEnvelope) | ~1d |
 | **W3** | Session monitor (4 gRPC stream subscribers, event aggregation, WebSocket broadcast) | ~2d |
@@ -121,11 +122,55 @@ Phase 7 (distribution) is postponed. The next work is wiring the Console to the 
 
 **Critical path:** W3 (session monitor) — the hardest piece. Everything else is mechanical wiring.
 
-**Before writing any wiring code:** Start the real runtime (`cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml`), verify REST taxonomy loading works, confirm auth/profiles/settings work standalone.
+**Before writing any wiring code:** Start the real runtime (`cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml` pre-merge; `cargo run -p wacp-runtime -- serve --config wacp/dev/runtime.yaml` post-merge), verify REST taxonomy loading works, confirm auth/profiles/settings work standalone.
 
-### Monorepo Decision
+### Monorepo Decision (Merge Plan in Review)
 
-The two repos are not independent. They share proto contracts, type crates, and must version-lock. Merge is recommended — ~4 hours of mechanical work (move files, update Cargo.toml paths, fix proto build path, consolidate CI). The architectural boundary stays: two binaries, gRPC between them. The merge is about development ergonomics.
+The two repos are not independent. They share proto contracts, type crates, and must version-lock. Merge is **decided** — full plan in `impl/merge-plan.md` (`status: final`). Architectural boundary stays: two binaries, gRPC between them. Merge is about development ergonomics.
+
+**12 decisions resolved** (§2 of merge-plan):
+
+| # | Area | Value |
+|---|------|-------|
+| D1 | Merge direction | New umbrella repo `wacp-platform/` |
+| D2 | Git history | `git subtree add` from both — preserves history |
+| D3 | Frontends | Independent at M0–M7 (`highway-ui` + `console/frontend` untouched); B/C revisit post-M7 |
+| D4 | Cargo workspace | Single unified workspace, 22 crates as members |
+| D5 | Proto codegen | New `wacp-proto` crate owns `tonic_build`; both consumers depend on it |
+| D6 | CI | Per-project workflows (`ci-wacp.yml`, `ci-console.yml`) with `paths:` filters + shared `ci-lint.yml` |
+| D7 | Specs/docs | Per-subdir trees preserved; `wiring-strategy.md` promotes to umbrella root at M5 |
+| D8 | Branch naming | `main` (protected) + `dev` (integration) |
+| D9 | Remote | `github.com/Madahub-dev/wacp-platform` |
+| D10 | Release tagging | Per-subproject tags: `wacp-runtime-v*` + `wacp-console-v*`, independent cadence |
+| D11 | Console distribution | **OCI image only (ADR-009 supersedes ADR-004); cargo-dist deferred** |
+| D12 | Docker | Per-subdir Dockerfiles (runtime exists; console written at M5); root `docker-compose.yml` for dev |
+
+**Sibling repo (out of scope):** `../wacp-protocol/` holds protocol specs (deliberately separate). Spec IDs are path-independent, so cross-references work unchanged.
+
+**8 execution milestones:** M0 pre-flight → M1 umbrella + subtree import → M2 Cargo workspace union → M3 `wacp-proto` extraction → M4 path-dep flip → M5 tooling + Dockerfiles + ADR-009 + wiring-strategy relocation → M6 CI rewrite → M7 validate + tag `monorepo-v0`.
+
+**6 pre-M0 open items resolved** (§10 of merge-plan). Decision summary:
+
+1. **§10.1** — Commit `wacp/.cargo/config.toml` (WSL2 OOM mitigation: `jobs=1` + mold linker); hoist to umbrella root at M5. Done on `wacp` dev branch (commit `d010336`).
+2. **§10.2** — Console currently CLI-flag-only (no config-file, no env). Add clap `env = "WACP_RUNTIME_*_ADDRESS"` attributes on five flags at M5, bundled with compose + Dockerfile. Also adds `WACP_CONSOLE_LISTEN` since `[::1]:8080` is container-hostile.
+3. **§10.3** — `rust-embed` is a declared-but-unused dep (Phase 7 integration postponed). Implement at M5: new `crates/console/src/assets.rs` with `#[folder = "$CARGO_MANIFEST_DIR/../../frontend/dist/"]`; wire `.fallback_service` with SPA history fallback; honour the currently-discarded `--frontend-path` dev override.
+4. **§10.4** — Real scratch-tag push to ghcr.io + cleanup runbook. `*-test` `if:` guards skip the 4-target matrix on `release-runtime.yml`, so validation runs docker-only (~5 min vs ~40 min). `act` rejected — can't test OIDC/ghcr-login step.
+5. **§10.5** — Confirmed live: `cd wacp/packages/wacp-cli && pnpm install --frozen-lockfile` → 8 `file:` deps, 825 ms. Two unrelated `.gitignore` anomalies surfaced: `wacp/.gitignore:5` ignores `Cargo.lock` (drop at M5 union); `node_modules/` relies on user's global gitignore in both repos (add explicit `**/node_modules/` at M5).
+6. **§10.6** — Hybrid port: TS/Python/proto job bodies copy verbatim with mechanical `wacp/` path-prefix updates; `rust` job rewrites for `-p wacp-*` scoping; workflow trigger adds `paths:` filter. Post-M4, `ci-console.yml` loses its cross-repo checkout dance — ~100-line simplification.
+
+**Revised effort estimate:** 1–2 working days (not the original 4h).
+
+### Resumption Point
+
+Pre-flight complete: merge-plan `status: final`, §10 items resolved, `wacp/.cargo/config.toml` committed on wacp `dev` (commit `d010336`), `wacp-console/Cargo.lock` re-synced on console `dev` (commit `40457e5`).
+
+When resuming:
+1. Read `impl/merge-plan.md` §5 procedure and §10 decisions (~10 min refresh).
+2. Finish M0 — commit outstanding docs (this SEED update, `impl/wiring-strategy.md`, `impl/merge-plan.md`) on `wacp-console/dev`, then tag `pre-monorepo-wacp` on wacp and `pre-monorepo-console` on wacp-console.
+3. Execute M1 → M7 in one focused session (1–2 days).
+4. Post-M7, begin W1 (gRPC pool → AppState) on umbrella `dev` branch.
+
+**ADR-009 is new and supersedes ADR-004.** Update the ADR table below when M5 writes it.
 
 ### Hollow Code Inventory
 
@@ -160,13 +205,14 @@ The two repos are not independent. They share proto contracts, type crates, and 
 | 001 | Runtime is the vertical registry (REST, not filesystem) |
 | 002 | Multi-user auth in Phase 1 |
 | 003 | Tech stack: Rust/Axum/Tonic + React/Vite/TS + SQLite/sqlx |
-| 004 | Single binary with embedded frontend (rust-embed + cargo-dist) |
+| 004 | ~~Single binary with embedded frontend (rust-embed + cargo-dist)~~ — **superseded by ADR-009** |
 | 005 | TLS trust boundary: three modes (plaintext loopback / system CA / explicit CA) |
 | 006 | Apache-2.0 license |
 | 007 | Profile YAML format versioning (format_version: 1) |
 | 008 | OpenAPI as shared contract (utoipa → openapi-typescript) |
+| 009 | *(pending — written at M5)* OCI-only console distribution; cargo-dist deferred; `rust-embed` retained inside Dockerfile cargo build stage |
 
-**Full ADR text:** `SPEC_BUILD.md`
+**Full ADR text:** `SPEC_BUILD.md` (ADR-009 will live at umbrella `impl/adr-009-oci-only-console.md` post-merge).
 
 ## Workspace Layout
 

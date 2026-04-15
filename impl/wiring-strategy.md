@@ -3,12 +3,19 @@ id: wcon-wiring-strategy
 type: impl
 status: draft
 created: 2026-04-15T03:00:00
-authors: [AAkil98]
-tags: [strategy, runtime, integration, monorepo]
-depends_on: [wcon-architecture, wcon-sessions, wcon-highway]
+revised: 2026-04-14T00:00:00
+authors: [AAkil98, Claude Opus 4.6]
+tags: [strategy, runtime, integration, monorepo, cross-cutting]
+depends_on: [wcon-architecture, wcon-sessions, wcon-highway, wcon-merge-plan]
 ---
 
 # Wiring Strategy — Console ↔ Runtime Integration
+
+> **Scope.** This is a **cross-cutting document** spanning both `wacp/` (runtime, protocol, taxonomy) and `wacp-console/` (workbench, SPA). It describes how the two halves connect across process boundaries via gRPC and REST.
+>
+> **Positioning.** Post-merge, this document is intended to live at the **monorepo root** (e.g., `impl/wiring-strategy.md` of the umbrella repo) as the canonical wiring plan for the workspace. Until the merge lands (see `impl/merge-plan.md`), it lives in `wacp-console/impl/` as the calling-side repo — but its content and references are written to read correctly from either vantage point.
+>
+> **Relationship to `merge-plan.md`.** W0 (monorepo merge) is the precondition for the wiring phases W1–W6. The detailed merge procedure is extracted to `impl/merge-plan.md`; this document only summarizes it and defers for detail.
 
 ## Table of Contents
 
@@ -113,71 +120,64 @@ Cancelling an active session marks it `cancelled` in SQLite but doesn't tell the
 
 ## 3. The Monorepo Question
 
-### 3.1 Current Setup
+### 3.1 Current Cross-Repo Coupling
 
 ```
 mada/
 ├── wacp/                  # Protocol runtime (16 crates)
 │   ├── crates/
 │   │   ├── wacp-runtime/  # gRPC services + REST gateway
-│   │   ├── wacp-taxonomy/ # Vertical manifests, roles, tools
-│   │   ├── wacp-types/    # BaseRole, TaskStatus, etc.
-│   │   └── ...14 more
+│   │   ├── wacp-taxonomy/ # ← console depends on this (path dep)
+│   │   ├── wacp-types/    # ← console depends on this (path dep)
+│   │   └── …13 more
 │   ├── proto/             # .proto files (5)
-│   └── tests/             # Integration tests
+│   ├── highway-ui/        # Connect-Web SPA (separate from console's frontend)
+│   └── tests/
 │
 └── wacp-console/          # Management workbench (6 crates + frontend)
     ├── crates/
-    │   ├── console-runtime/ # Proto codegen + REST client (paths: ../../../wacp/proto)
-    │   └── ...5 more
-    └── frontend/
+    │   ├── console-runtime/ # build.rs reads ../../../wacp/proto/*.proto
+    │   └── …5 more
+    └── frontend/          # REST + OpenAPI codegen
 ```
 
-**Cross-repo dependencies:**
+**Coupling points:**
 - `wacp-taxonomy = { path = "../wacp/crates/wacp-taxonomy" }` — relative path dep
 - `wacp-types = { path = "../wacp/crates/wacp-types" }` — relative path dep
 - `tonic-build` reads `../../../wacp/proto/*.proto` — fragile 3-level relative path
-- CI checks out both repos side-by-side
+- `wacp-console`'s CI already checks out both repos side-by-side (merge was anticipated)
 
-### 3.2 Assessment
+### 3.2 The Decision
 
-**The two repos are not independent.** They share proto contracts, type crates, and must version-lock. A proto change in `wacp/` breaks `wacp-console/` immediately. There's no scenario where you ship one without the other — the Console is the product layer on top of the runtime.
+**The two repos are not independent.** They share proto contracts, type crates, and must version-lock. A proto change on one side breaks the other immediately. There is no scenario where you ship one without the other — the Console is the product layer on top of the runtime.
 
-**Merge is the right call.** Here's why:
+**Merge is the right call.** Key benefits in one table:
 
 | Factor | Separate | Merged |
 |--------|----------|--------|
-| Proto contract changes | Break console silently; discovered when CI runs both | Caught in same commit; `cargo check` fails immediately |
-| Type changes (wacp-types) | Path dep works but no lockfile coordination | Single Cargo.lock; types are workspace members |
-| Integration tests | Must check out both repos; can't import console crates from wacp tests | Single workspace; `console-test-support` and `wacp-runtime` can import each other |
-| CI | Two workflows, coordinated checkout | One workflow, one checkout |
-| Proto codegen path | `../../../wacp/proto` — breaks if directory structure changes | `../../proto` or `${WORKSPACE_ROOT}/proto` |
-| Release | Two binaries from two repos; version sync is manual | One workspace, `cargo-dist` builds both from same tag |
-| gRPC wiring | Console imports proto stubs; can't easily write tests that spin up real runtime | Integration test crate imports both `wacp-runtime` and `console-api`, starts both, runs E2E |
+| Proto contract changes | Break console silently; discovered later in CI | Caught in same commit; `cargo check` fails immediately |
+| Type changes (`wacp-types`) | Path dep works but no lockfile coordination | Single `Cargo.lock`; types are workspace members |
+| Integration tests | Must check out both repos | Single workspace; test crate imports both sides |
+| CI | Two workflows, coordinated checkout | Per-project workflows with `paths:` filters, one checkout |
+| Proto codegen | `../../../wacp/proto` from console's `build.rs` | Shared `wacp-proto` crate, one codegen pass |
+| Release | Two binaries, two repos, manual version sync | One workspace, `cargo-dist` from same tag |
 
-### 3.3 Merge Plan
+### 3.3 Pointer to Merge Procedure
 
-```
-wacp/                              # Renamed from wacp-console or new repo
-├── Cargo.toml                     # Unified workspace (22 crate members)
-├── proto/                         # .proto files (unchanged)
-├── crates/
-│   ├── wacp-*/                    # 16 runtime crates (from current wacp/)
-│   ├── console-*/                 # 6 console crates (from current wacp-console/)
-│   └── integration-tests/         # New: E2E tests importing both sides
-├── frontend/                      # React SPA (from current wacp-console/frontend/)
-├── ecosystem/                     # Vertical definitions (from current wacp/ecosystem/)
-├── migrations/                    # SQLite DDL (from current wacp-console/migrations/)
-└── openapi.yaml                   # Generated spec
-```
+**The detailed merge procedure lives in `impl/merge-plan.md`.** It covers:
 
-**Effort:** Mechanical — move files, update Cargo.toml paths, fix proto build path. No code changes. ~4 hours.
+- 7 execution milestones: M0 pre-flight → M1 umbrella repo + subtree import → M2 Cargo workspace union → M3 shared `wacp-proto` crate → M4 path-dep flip → M5 tooling merge (`.cargo`, `.claude`, `rust-toolchain`, `.gitignore`, README) → M6 CI rewrite → M7 validate & tag.
+- Collision map for files that exist on both sides (`README.md`, `LICENSE`, `IMPLEMENTATION.md`, `SEED*.md`, `.gitignore`, `.cargo/`, `.claude/`, etc.).
+- 8 open decisions that must be answered before M0: merge direction (umbrella vs. absorb), git history preservation strategy (subtree vs. filter-repo vs. discard), frontend coexistence (unified pnpm workspace vs. independent), Cargo workspace shape, proto codegen extraction, CI consolidation pattern, spec tree layout, release tagging.
+- Validation checklist, rollback plan, and risk map.
+
+**Revised effort estimate:** 1–2 working days. The original "~4 hours mechanical" framing under-scoped git history strategy, `[workspace.dependencies]` union, proto codegen extraction into a shared crate, and CI rewrite with path filters.
 
 ### 3.4 What NOT to Do
 
 Do **not** collapse the architectural boundary. The Console process and the Runtime process remain separate binaries. The Console connects to the Runtime via gRPC and REST. Merging repos does not mean merging processes.
 
-The merge is about **development ergonomics** — one checkout, one build, one test suite, one lockfile. The runtime is still `wacp-runtime serve` and the console is still `wacp-console serve`. They just live in the same workspace.
+The merge is about **development ergonomics** — one checkout, one build, one test suite, one lockfile. The runtime is still `wacp-runtime serve` and the console is still `wacp-console serve` (or whatever the final binary names are). They just live in the same workspace.
 
 ---
 
@@ -301,7 +301,7 @@ SessionMonitor
 ## 5. Execution Order
 
 ```
-Step 0: Merge repos (if decided)               ~4 hours
+Step 0: Merge repos (see impl/merge-plan.md)   1–2 days
   │
 Step 1: W1 — gRPC Pool → AppState              ~2 hours
   │
@@ -341,11 +341,19 @@ Step 7: Integration tests                       ~1 day
 
 Before writing any wiring code:
 
-1. **Start the real runtime.** `cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml`. Verify it starts, loads verticals, serves REST endpoints.
+1. **Start the real runtime.**
+   - Pre-merge: `cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml`
+   - Post-merge: `cargo run -p wacp-runtime -- serve --config wacp/dev/runtime.yaml` from workspace root
+
+   Verify it starts, loads verticals, serves REST endpoints.
 
 2. **Hit the REST API by hand.** `curl http://[::1]:9093/v1/verticals` — confirm the fixture verticals appear. This is the same endpoint the Console's taxonomy loader calls.
 
-3. **Start the Console against the real runtime.** `cargo run --bin wacp-console -- serve`. The taxonomy should load from REST. Discovery endpoints should return real verticals. This already works (Phase 2 code).
+3. **Start the Console against the real runtime.**
+   - Pre-merge: `cargo run --bin wacp-console -- serve` from `wacp-console/`
+   - Post-merge: `cargo run -p console -- serve` from workspace root
+
+   The taxonomy should load from REST. Discovery endpoints should return real verticals. This already works (Phase 2 code).
 
 4. **Verify what's already live.** Auth, profiles, settings, audit, health — these are self-contained and work without the runtime. Taxonomy discovery works if the runtime is reachable. Only sessions/highway/WebSocket are hollow.
 
@@ -371,5 +379,6 @@ Before writing any wiring code:
 | wcon-architecture | System Architecture | constrains (§4.1 connection model, §7 monitor, §8.6 auth) |
 | wcon-sessions | Session System | implements (§4 launch, §6 monitor, §7.3 cancel, §8.2 recovery) |
 | wcon-highway | Highway Integration | implements (§2.2 WebSocket, §4 gates, §5 escalations, §4A refusals) |
+| wcon-merge-plan | Monorepo Merge Plan | precedes (W0 precondition for W1–W6) |
 
-*WACP Console -- authored by AAkil98*
+*WACP Workspace — authored by AKIL Abderrahim and Claude Opus 4.6*

@@ -1,3 +1,5 @@
+mod assets;
+
 use arc_swap::ArcSwap;
 use clap::{Parser, Subcommand};
 use console_api::{AppState, api_router};
@@ -26,7 +28,7 @@ enum Commands {
     /// Start the console server
     Serve {
         /// HTTP listen address
-        #[arg(long, default_value = "[::1]:8080")]
+        #[arg(long, env = "WACP_CONSOLE_LISTEN", default_value = "[::1]:8080")]
         listen: SocketAddr,
 
         /// Path to SQLite database file
@@ -38,19 +40,35 @@ enum Commands {
         frontend_path: Option<PathBuf>,
 
         /// AgentService gRPC address
-        #[arg(long, default_value = "[::1]:9090")]
+        #[arg(
+            long,
+            env = "WACP_RUNTIME_AGENT_ADDRESS",
+            default_value = "[::1]:9090"
+        )]
         agent_address: String,
 
         /// HighwayService gRPC address
-        #[arg(long, default_value = "[::1]:9091")]
+        #[arg(
+            long,
+            env = "WACP_RUNTIME_HIGHWAY_ADDRESS",
+            default_value = "[::1]:9091"
+        )]
         highway_address: String,
 
         /// CoordinatorService gRPC address
-        #[arg(long, default_value = "[::1]:9092")]
+        #[arg(
+            long,
+            env = "WACP_RUNTIME_COORDINATOR_ADDRESS",
+            default_value = "[::1]:9092"
+        )]
         coordinator_address: String,
 
         /// REST gateway address
-        #[arg(long, default_value = "http://[::1]:9093")]
+        #[arg(
+            long,
+            env = "WACP_RUNTIME_REST_ADDRESS",
+            default_value = "http://[::1]:9093"
+        )]
         rest_address: String,
     },
 
@@ -81,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Serve {
             listen,
             database,
-            frontend_path: _,
+            frontend_path,
             agent_address,
             highway_address,
             coordinator_address,
@@ -132,7 +150,25 @@ async fn main() -> anyhow::Result<()> {
                 taxonomy,
                 runtime_config: config.runtime.clone(),
             };
-            let app = api_router(state);
+
+            let frontend_mode = match frontend_path {
+                Some(path) => {
+                    info!(path = %path.display(), "serving frontend from disk");
+                    assets::FrontendMode::Disk(Arc::new(path))
+                }
+                None => {
+                    info!("serving embedded frontend");
+                    assets::FrontendMode::Embedded
+                }
+            };
+
+            let app = api_router(state).fallback({
+                let mode = frontend_mode.clone();
+                move |uri: axum::http::Uri| {
+                    let mode = mode.clone();
+                    async move { assets::serve_frontend(mode, uri).await }
+                }
+            });
 
             let listener = TcpListener::bind(config.listen_addr).await?;
             info!(addr = %config.listen_addr, "server listening");

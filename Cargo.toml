@@ -43,7 +43,7 @@ arc-swap = "1"
 parking_lot = "0.12"
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # Error handling
 thiserror = "2"
@@ -86,7 +86,7 @@ directories = "6"
 utoipa = { version = "5", features = ["axum_extras"] }
 
 # Embedding
-rust-embed = "8"
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 
 # Internal workspace members — consumers inherit via `{ workspace = true }`.
 # Paths declared here so cargo resolves to the local member; per-crate

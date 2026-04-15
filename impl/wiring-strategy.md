@@ -1,9 +1,9 @@
 ---
 id: wcon-wiring-strategy
 type: impl
-status: draft
+status: final
 created: 2026-04-15T03:00:00
-revised: 2026-04-14T00:00:00
+revised: 2026-04-15T04:10:00
 authors: [AAkil98, Claude Opus 4.6]
 tags: [strategy, runtime, integration, monorepo, cross-cutting]
 depends_on: [wcon-architecture, wcon-sessions, wcon-highway, wcon-merge-plan]
@@ -162,16 +162,14 @@ mada/
 | Proto codegen | `../../../wacp/proto` from console's `build.rs` | Shared `wacp-proto` crate, one codegen pass |
 | Release | Two binaries, two repos, manual version sync | One workspace, `cargo-dist` from same tag |
 
-### 3.3 Pointer to Merge Procedure
+### 3.3 Retrospective — Merge Executed 2026-04-15
 
-**The detailed merge procedure lives in `wacp-console/impl/merge-plan.md`.** It covers:
+**The merge (W0) is done.** The umbrella repo at `/home/aakil98/mada/wacp-platform/` carries the full merged state on `main`, tagged `monorepo-v0` at commit `d26ec80`. Both `wacp/` and `wacp-console/` are subtrees with preserved history; source repos are frozen at `pre-monorepo-{wacp,console}` for 30-day rollback.
 
-- 7 execution milestones: M0 pre-flight → M1 umbrella repo + subtree import → M2 Cargo workspace union → M3 shared `wacp-proto` crate → M4 path-dep flip → M5 tooling merge (`.cargo`, `.claude`, `rust-toolchain`, `.gitignore`, README) → M6 CI rewrite → M7 validate & tag.
-- Collision map for files that exist on both sides (`README.md`, `LICENSE`, `IMPLEMENTATION.md`, `SEED*.md`, `.gitignore`, `.cargo/`, `.claude/`, etc.).
-- 8 open decisions that must be answered before M0: merge direction (umbrella vs. absorb), git history preservation strategy (subtree vs. filter-repo vs. discard), frontend coexistence (unified pnpm workspace vs. independent), Cargo workspace shape, proto codegen extraction, CI consolidation pattern, spec tree layout, release tagging.
-- Validation checklist, rollback plan, and risk map.
-
-**Revised effort estimate:** 1–2 working days. The original "~4 hours mechanical" framing under-scoped git history strategy, `[workspace.dependencies]` union, proto codegen extraction into a shared crate, and CI rewrite with path filters.
+- **Procedure:** `wacp-console/impl/merge-plan.md` (7 milestones M0 → M7).
+- **Execution record:** `impl/merge-execution-log.md` — per-milestone commit anchors, 6 deviations (§4.1–§4.6), §6 validation outcomes.
+- **Outcome:** §6 checklist green modulo pre-existing drift (logged §4.5) and Docker/UI items deferred to W1 browser smoke + pre-release infra (logged §4.6).
+- **Actual effort:** ~4 working hours end-to-end vs. the 1–2 day estimate, largely because §10 pre-flight surfaced every ambiguity before execution.
 
 ### 3.4 What NOT to Do
 
@@ -301,61 +299,50 @@ SessionMonitor
 ## 5. Execution Order
 
 ```
-Step 0: Merge repos (see wacp-console/impl/merge-plan.md)   1–2 days
+[W0 DONE]  Merge repos — tag monorepo-v0 (2026-04-15)
+  │        see impl/merge-execution-log.md for record
   │
-Step 1: W1 — gRPC Pool → AppState              ~2 hours
+W1: gRPC Pool → AppState                   ~2 hours
   │
-Step 2: W2 — Launch flow                        ~1 day
+W2: Launch flow                             ~1 day
   │     (requires understanding the runtime's
   │      CreateSession/Dispatch/SendEnvelope
   │      request/response shapes)
   │
-Step 3: W3 — Session monitor                    ~2 days
-  │     (the hardest piece — 4 concurrent
-  │      streams, event aggregation, lifecycle
-  │      derivation, broadcast fan-out)
+W3: Session monitor                         ~2 days
+  │     (critical path — 4 concurrent streams,
+  │      event aggregation, lifecycle derivation,
+  │      broadcast fan-out, reconnect + gap recovery)
   │
-Step 4: W4 — Highway forwarding                 ~4 hours
-  │     (mechanical — call the gRPC method
-  │      before the existing audit log)
+W4: Highway forwarding                      ~4 hours
+  │     (mechanical — gRPC call before the existing
+  │      audit log, on all 4 highway endpoints)
   │
-Step 5: W5 — Cancel + recovery                  ~4 hours
+W5: Cancel + recovery                       ~4 hours
   │
-Step 6: W6 — Cross-session endpoints            ~2 hours
+W6: Cross-session endpoints                 ~2 hours
   │
-Step 7: Integration tests                       ~1 day
-        (spin up mock runtime, run full
-         lifecycle, verify all streams)
+W7: Integration tests                       ~1 day
+        (real wacp-runtime as child process,
+         full lifecycle, 4-stream assertion)
 ```
 
-**Total estimated effort:** 5-6 working days.
+**Total remaining effort:** 5–6 working days.
 
-**Critical path:** W3 (session monitor) is the hardest and most architecturally significant piece. Everything else is mechanical wiring. W3 requires:
-- Understanding the 4 stream response types from the runtime's proto definitions
-- Building a Tokio select loop that handles all 4 streams + internal commands (cancel, shutdown)
-- Mapping gRPC stream events to the JSON frame format the frontend expects
-- Handling stream disconnects with exponential backoff
-- Detecting session completion from workspace state changes
+**Critical path:** W3 (session monitor) — 4 concurrent streams, aggregation, reconnect, completion detection, broadcast fan-out. Every other phase is mechanical wiring.
 
-### 5.1 What to Do First
+**Phase breakdown with per-phase deliverables, test strategy, and acceptance bar:** see `impl/wiring-phases.md`. Each phase has a coding spec at `wacp-console/specs/coding/wcon-w{1..7}-*.md` that drills into function signatures, types, and test cases.
 
-Before writing any wiring code:
+### 5.1 Pre-Flight — Done at M7 §6
 
-1. **Start the real runtime.**
-   - Pre-merge: `cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml`
-   - Post-merge: `cargo run -p wacp-runtime -- serve --config wacp/dev/runtime.yaml` from workspace root
+All four pre-flight checks in the pre-merge version of this document were verified at M7 validation; evidence is in `impl/merge-execution-log.md` §3 M7 table. Quick summary:
 
-   Verify it starts, loads verticals, serves REST endpoints.
+1. ✓ `cargo run -p wacp-runtime -- serve --config dev/runtime.yaml` starts, loads 7 verticals, serves REST on `[::1]:9093`.
+2. ✓ `curl http://[::1]:9093/v1/verticals` returns fixture data (2397 bytes).
+3. ✓ `cargo run -p wacp-console -- serve` boots, loads taxonomy via REST (roles=37, tools=68, verticals=7), serves rust-embed'd SPA on `[::1]:8080`.
+4. ✓ `/api/health` reports `runtime_{agent,coordinator,highway,rest}` all `"ok"` — the four runtime ports are reachable from the console process.
 
-2. **Hit the REST API by hand.** `curl http://[::1]:9093/v1/verticals` — confirm the fixture verticals appear. This is the same endpoint the Console's taxonomy loader calls.
-
-3. **Start the Console against the real runtime.**
-   - Pre-merge: `cargo run --bin wacp-console -- serve` from `wacp-console/`
-   - Post-merge: `cargo run -p console -- serve` from workspace root
-
-   The taxonomy should load from REST. Discovery endpoints should return real verticals. This already works (Phase 2 code).
-
-4. **Verify what's already live.** Auth, profiles, settings, audit, health — these are self-contained and work without the runtime. Taxonomy discovery works if the runtime is reachable. Only sessions/highway/WebSocket are hollow.
+The Console talks to the Runtime's REST surface cleanly. The gRPC surface is unused (no pool instantiated yet) — that's W1.
 
 ---
 
@@ -379,6 +366,15 @@ Before writing any wiring code:
 | wcon-architecture | System Architecture | constrains (§4.1 connection model, §7 monitor, §8.6 auth) |
 | wcon-sessions | Session System | implements (§4 launch, §6 monitor, §7.3 cancel, §8.2 recovery) |
 | wcon-highway | Highway Integration | implements (§2.2 WebSocket, §4 gates, §5 escalations, §4A refusals) |
-| wcon-merge-plan | Monorepo Merge Plan | precedes (W0 precondition for W1–W6) |
+| wcon-merge-plan | Monorepo Merge Plan | precedes (W0 precondition, executed 2026-04-15) |
+| wcon-merge-execution-log | Merge Execution Log | records W0 execution evidence + §6 outcomes |
+| wcon-wiring-phases | Wiring Phases | derives (per-phase deliverables, tests, acceptance bars) |
+| wcon-w1-grpc-pool | W1 — gRPC Pool → AppState | implements §4.1 |
+| wcon-w2-launch-flow | W2 — Launch Flow | implements §4.2 |
+| wcon-w3-session-monitor | W3 — Session Monitor | implements §4.3 |
+| wcon-w4-highway-forwarding | W4 — Highway Forwarding | implements §4.4 |
+| wcon-w5-cancel-recovery | W5 — Cancel & Recovery | implements §4.5 |
+| wcon-w6-cross-session | W6 — Cross-Session Endpoints | implements §4.6 |
+| wcon-w7-integration-tests | W7 — Integration Tests | validates W1–W6 |
 
 *WACP Workspace — authored by AKIL Abderrahim and Claude Opus 4.6*

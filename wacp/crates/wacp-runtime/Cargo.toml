@@ -6,16 +6,16 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-wacp-types = { path = "../wacp-types" }
-wacp-clock = { path = "../wacp-clock" }
-wacp-fsm = { path = "../wacp-fsm" }
-wacp-taxonomy = { path = "../wacp-taxonomy" }
-wacp-trail = { path = "../wacp-trail" }
-wacp-permissions = { path = "../wacp-permissions" }
-wacp-workspace = { path = "../wacp-workspace" }
-wacp-coordinator = { path = "../wacp-coordinator" }
-wacp-transport = { path = "../wacp-transport" }
-wacp-recovery = { path = "../wacp-recovery" }
+wacp-types = { workspace = true }
+wacp-clock = { workspace = true }
+wacp-fsm = { workspace = true }
+wacp-taxonomy = { workspace = true }
+wacp-trail = { workspace = true }
+wacp-permissions = { workspace = true }
+wacp-workspace = { workspace = true }
+wacp-coordinator = { workspace = true }
+wacp-transport = { workspace = true }
+wacp-recovery = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }

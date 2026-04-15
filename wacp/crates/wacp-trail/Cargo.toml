@@ -6,8 +6,8 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-wacp-types = { path = "../wacp-types" }
-wacp-clock = { path = "../wacp-clock" }
+wacp-types = { workspace = true }
+wacp-clock = { workspace = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
 rusqlite = { workspace = true }

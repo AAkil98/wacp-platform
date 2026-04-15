@@ -6,8 +6,8 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-wacp-types = { path = "../wacp-types" }
-wacp-transport = { path = "../wacp-transport" }
+wacp-types = { workspace = true }
+wacp-transport = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tonic = { workspace = true }

@@ -6,12 +6,12 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-wacp-types = { path = "../wacp-types" }
-wacp-trail = { path = "../wacp-trail" }
-wacp-fsm = { path = "../wacp-fsm" }
-wacp-clock = { path = "../wacp-clock" }
-wacp-workspace = { path = "../wacp-workspace" }
-wacp-coordinator = { path = "../wacp-coordinator" }
+wacp-types = { workspace = true }
+wacp-trail = { workspace = true }
+wacp-fsm = { workspace = true }
+wacp-clock = { workspace = true }
+wacp-workspace = { workspace = true }
+wacp-coordinator = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

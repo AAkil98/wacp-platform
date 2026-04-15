@@ -89,10 +89,23 @@ utoipa = { version = "5", features = ["axum_extras"] }
 rust-embed = "8"
 
 # Internal workspace members — consumers inherit via `{ workspace = true }`.
-# M4 may drop explicit paths once proto extraction settles.
+# Paths declared here so cargo resolves to the local member; per-crate
+# Cargo.tomls reference these via `{ workspace = true }` rather than
+# duplicating paths.
+wacp-clock = { path = "wacp/crates/wacp-clock" }
+wacp-coordinator = { path = "wacp/crates/wacp-coordinator" }
+wacp-coordinator-sdk = { path = "wacp/crates/wacp-coordinator-sdk" }
+wacp-fsm = { path = "wacp/crates/wacp-fsm" }
+wacp-permissions = { path = "wacp/crates/wacp-permissions" }
 wacp-proto = { path = "wacp/crates/wacp-proto" }
+wacp-recovery = { path = "wacp/crates/wacp-recovery" }
+wacp-sdk = { path = "wacp/crates/wacp-sdk" }
 wacp-taxonomy = { path = "wacp/crates/wacp-taxonomy" }
+wacp-tools = { path = "wacp/crates/wacp-tools" }
+wacp-trail = { path = "wacp/crates/wacp-trail" }
+wacp-transport = { path = "wacp/crates/wacp-transport" }
 wacp-types = { path = "wacp/crates/wacp-types" }
+wacp-workspace = { path = "wacp/crates/wacp-workspace" }
 console-api = { path = "wacp-console/crates/console-api" }
 console-core = { path = "wacp-console/crates/console-core" }
 console-db = { path = "wacp-console/crates/console-db" }

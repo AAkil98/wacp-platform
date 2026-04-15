@@ -6,11 +6,11 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
-wacp-types = { path = "../wacp-types" }
-wacp-clock = { path = "../wacp-clock" }
-wacp-trail = { path = "../wacp-trail" }
-wacp-fsm = { path = "../wacp-fsm" }
-wacp-permissions = { path = "../wacp-permissions" }
+wacp-types = { workspace = true }
+wacp-clock = { workspace = true }
+wacp-trail = { workspace = true }
+wacp-fsm = { workspace = true }
+wacp-permissions = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 

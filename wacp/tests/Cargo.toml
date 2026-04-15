@@ -7,17 +7,17 @@ license.workspace = true
 publish = false
 
 [dependencies]
-wacp-types = { path = "../crates/wacp-types" }
-wacp-clock = { path = "../crates/wacp-clock" }
-wacp-fsm = { path = "../crates/wacp-fsm" }
-wacp-taxonomy = { path = "../crates/wacp-taxonomy" }
-wacp-trail = { path = "../crates/wacp-trail" }
-wacp-permissions = { path = "../crates/wacp-permissions" }
-wacp-workspace = { path = "../crates/wacp-workspace" }
-wacp-coordinator = { path = "../crates/wacp-coordinator" }
-wacp-transport = { path = "../crates/wacp-transport" }
-wacp-recovery = { path = "../crates/wacp-recovery" }
-wacp-sdk = { path = "../crates/wacp-sdk" }
+wacp-types = { workspace = true }
+wacp-clock = { workspace = true }
+wacp-fsm = { workspace = true }
+wacp-taxonomy = { workspace = true }
+wacp-trail = { workspace = true }
+wacp-permissions = { workspace = true }
+wacp-workspace = { workspace = true }
+wacp-coordinator = { workspace = true }
+wacp-transport = { workspace = true }
+wacp-recovery = { workspace = true }
+wacp-sdk = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 serde_json = { workspace = true }

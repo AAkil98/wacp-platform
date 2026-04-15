@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 wacp-proto = { workspace = true }
-wacp-types = { path = "../wacp-types" }
-wacp-taxonomy = { path = "../wacp-taxonomy", features = ["openapi"] }
+wacp-types = { workspace = true }
+wacp-taxonomy = { workspace = true, features = ["openapi"] }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tonic = { workspace = true, features = ["tls-ring"] }

@@ -9,7 +9,7 @@ keywords = ["wacp", "protocol", "agents", "taxonomy"]
 categories = ["data-structures", "config"]
 
 [dependencies]
-wacp-types = { version = "0.1", path = "../wacp-types" }
+wacp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }

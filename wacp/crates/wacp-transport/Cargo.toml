@@ -6,6 +6,7 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+wacp-proto = { workspace = true }
 wacp-types = { path = "../wacp-types" }
 wacp-taxonomy = { path = "../wacp-taxonomy", features = ["openapi"] }
 tokio = { workspace = true }
@@ -30,6 +31,3 @@ tower = "0.5"
 [[bin]]
 name = "gen_openapi"
 path = "src/bin/gen_openapi.rs"
-
-[build-dependencies]
-tonic-build = "0.13"

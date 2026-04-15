@@ -507,8 +507,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
- "tonic-build",
  "tracing",
+ "wacp-proto",
  "wacp-taxonomy",
  "wacp-types",
 ]
@@ -525,8 +525,8 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
- "tonic-build",
  "tracing",
+ "wacp-proto",
  "wacp-taxonomy",
 ]
 
@@ -3603,6 +3603,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wacp-proto"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "wacp-recovery"
 version = "0.1.0"
 dependencies = [
@@ -3734,10 +3743,10 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic",
- "tonic-build",
  "tower",
  "tower-http",
  "utoipa",
+ "wacp-proto",
  "wacp-taxonomy",
  "wacp-types",
 ]

@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+wacp-proto = { workspace = true }
 console-runtime = { workspace = true }
 tonic = { workspace = true }
 prost = { workspace = true }
@@ -15,6 +16,3 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 wacp-taxonomy = { workspace = true }
-
-[build-dependencies]
-tonic-build = { workspace = true }

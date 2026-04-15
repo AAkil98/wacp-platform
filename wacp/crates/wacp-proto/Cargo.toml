@@ -1,0 +1,13 @@
+[package]
+name = "wacp-proto"
+description = "WACP — Generated protobuf types and gRPC service stubs"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+tonic = { workspace = true }
+prost = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }

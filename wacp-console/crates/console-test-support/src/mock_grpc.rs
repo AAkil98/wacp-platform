@@ -6,11 +6,8 @@
 
 use tonic::{Request, Response, Status};
 
-// Server-side generated traits (built with build_server = true).
-#[allow(dead_code)]
-mod proto {
-    tonic::include_proto!("wacp.v1");
-}
+// Server-side generated traits sourced from the shared `wacp-proto` crate.
+use wacp_proto::wacp_v1 as proto;
 
 pub use proto::agent_service_server::{AgentService, AgentServiceServer};
 pub use proto::coordinator_service_server::{CoordinatorService, CoordinatorServiceServer};

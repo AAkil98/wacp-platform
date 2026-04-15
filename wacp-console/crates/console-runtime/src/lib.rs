@@ -1,7 +1,8 @@
 /// Compiled protobuf types and gRPC client stubs for WACP runtime services.
-pub mod proto {
-    tonic::include_proto!("wacp.v1");
-}
+///
+/// Sourced from the shared `wacp-proto` crate; re-exported as `proto` to
+/// preserve the existing `console_runtime::proto::*` import path.
+pub use wacp_proto::wacp_v1 as proto;
 
 pub mod grpc_pool;
 pub mod rest_client;

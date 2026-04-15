@@ -89,7 +89,8 @@ utoipa = { version = "5", features = ["axum_extras"] }
 rust-embed = "8"
 
 # Internal workspace members — consumers inherit via `{ workspace = true }`.
-# M3 adds wacp-proto here; M4 may drop explicit paths once proto extraction settles.
+# M4 may drop explicit paths once proto extraction settles.
+wacp-proto = { path = "wacp/crates/wacp-proto" }
 wacp-taxonomy = { path = "wacp/crates/wacp-taxonomy" }
 wacp-types = { path = "wacp/crates/wacp-types" }
 console-api = { path = "wacp-console/crates/console-api" }

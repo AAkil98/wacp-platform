@@ -56,9 +56,11 @@ W1 (pool → AppState)
 
 ## 3. Phase Breakdown
 
-### W1 — gRPC Pool → AppState
+### W1 — gRPC Pool → AppState   *(DONE — commit TBD by post-commit amendment)*
 
-**Estimate:** 2 hours. **Coding spec:** `wcon-w1-grpc-pool`.
+**Estimate:** 2 hours (actual: ~1h30 end-to-end). **Coding spec:** `wcon-w1-grpc-pool`.
+
+**Deviation noted in the coding spec §6:** the current `GrpcPool` has no background reconnect loop, so per-channel status is refreshed only when the pool is explicitly told to reconnect. After a runtime crash, health reports `runtime_rest: "error"` immediately (live HTTP probe) but the three gRPC rows stay at their last-known `"ok"` until a handler or the W3 monitor triggers `reconnect_*()`. This is acceptable for W1; a dedicated tick-based refresh is not in scope but tracked in §7 risk deltas below.
 
 | Task | Deliverable | Test layer | Acceptance bar |
 |------|-------------|------------|----------------|
@@ -259,6 +261,7 @@ Strategy §6 lists six risks. This table tracks mitigations per phase and flags 
 | Proto shape mismatch | W2.1, W3.1 coding spec task | Low — review tasks gate the code |
 | Mock/real runtime divergence | W2, W3, W4, W5 each require real test | Low — layering rule enforces real-path coverage |
 | Stream reconnect gap | W3.7 | Low if W3.7 tests green; monitor open-question: can `GetTaskGraph` return a *too-large* payload on long sessions? Profile during W7. |
+| Pool status freshness (no background refresh in W1) | deferred | Low — every gRPC caller from W2 onward gets `Option<Client>`; `None` triggers `reconnect_*`. W3 monitor driver sub-tasks reconnect on stream failure. Escalate to a tick-based refresh only if the health endpoint's gRPC rows feel stale in practice. |
 | Concurrent monitor resource pressure | W7.5 | Medium — profile against 10-session fixture; 100+ untested until after W7 |
 | WS broadcast backpressure | W3.5 | Low — `Lagged` drop is the intended semantics |
 | Stale session on restart | W5.3, W5.5 | Low — recovery partition test covers it |

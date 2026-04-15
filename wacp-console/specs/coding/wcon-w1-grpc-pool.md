@@ -148,8 +148,13 @@ W1 alone does not ship real-runtime tests; W7 will replay these with the real bi
 - [ ] `cargo check -p console-api` and `cargo check -p wacp-console` green.
 - [ ] `cargo test -p console-api --lib` passes, including 6 new health-related tests.
 - [ ] `cargo test -p console-runtime --lib grpc_pool::` still green (no regressions).
-- [ ] Manual smoke: `wacp-runtime serve` in one shell, `wacp-console serve` in another → `curl -s http://[::1]:8080/api/health | jq .status` = `"healthy"`. Kill runtime → `"unhealthy"` within 5 s. Restart runtime → `"healthy"` within 5 s.
+- [ ] Manual smoke: `wacp-runtime serve` in one shell, `wacp-console serve` in another → `curl -s http://[::1]:8080/api/health | jq .status` = `"healthy"`. Kill runtime → `"degraded"` (db stays ok while gRPC channels flip to `"error"`); db failure would be `"unhealthy"`. Restart runtime → `"healthy"` after next reconnect pass.
 - [ ] `git grep 'TODO.*pool\|grpc_pool.*TODO' wacp-console/` returns zero.
+
+### Deviations landed with the W1 commit
+
+- **Status freshness.** The current `GrpcPool` does not run a background reconnect loop — statuses update only when the pool is explicitly told to reconnect (`reconnect_*()`) or when a call returns `None` and the caller triggers a reconnect. That means after a runtime crash the pool's status stays `Connected` until either a handler hits `None` on `.agent()` / etc., or W3's monitor reconnects from its stream driver. Acceptable for W1 (W2+ call sites + W3 monitor drive the refresh); a dedicated `PoolRefresh` task would add scope. If this becomes a usability issue we add a small tick-based refresh — tracked in `impl/wiring-phases.md` §7.
+- **Overall status mapping.** Health returns `"degraded"` when db is `ok` but any runtime check fails (preserves the pre-W1 semantics from `health.rs`). Only db failure escalates to `"unhealthy"`.
 
 ---
 

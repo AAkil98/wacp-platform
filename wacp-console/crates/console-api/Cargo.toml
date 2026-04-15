@@ -32,4 +32,5 @@ name = "gen-openapi"
 path = "src/bin/gen_openapi.rs"
 
 [dev-dependencies]
+console-test-support = { workspace = true }
 rstest = { workspace = true }

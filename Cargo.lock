@@ -436,6 +436,7 @@ dependencies = [
  "console-core",
  "console-db",
  "console-runtime",
+ "console-test-support",
  "rand 0.9.4",
  "reqwest",
  "rstest",

@@ -7,6 +7,7 @@ use console_core::ConsoleConfig;
 use console_core::config::RuntimeConfig;
 use console_core::{taxonomy_builder, taxonomy_parser};
 use console_db::{create_pool_from_path, run_migrations};
+use console_runtime::grpc_pool::GrpcPool;
 use console_runtime::rest_client;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -141,10 +142,30 @@ async fn main() -> anyhow::Result<()> {
             );
             let taxonomy = Arc::new(ArcSwap::from_pointee(taxonomy_index));
 
+            // Instantiate the gRPC pool up front. `connect()` is non-fatal —
+            // channels that fail to dial stay `Disconnected` and callers trigger
+            // reconnect on demand. Startup does not abort on runtime outages
+            // because the console must remain usable for auth / profile work
+            // even when the runtime is down.
+            let grpc_pool = GrpcPool::new(
+                &config.runtime.agent_address,
+                &config.runtime.highway_address,
+                &config.runtime.coordinator_address,
+            );
+            grpc_pool.connect().await;
+            let snapshot = grpc_pool.status_snapshot().await;
+            info!(
+                agent = ?snapshot[0].1,
+                highway = ?snapshot[1].1,
+                coordinator = ?snapshot[2].1,
+                "gRPC pool initialized"
+            );
+
             let state = AppState {
                 db: pool,
                 taxonomy,
                 runtime_config: config.runtime.clone(),
+                grpc_pool,
             };
 
             let frontend_mode = match frontend_path {

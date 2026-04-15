@@ -8,6 +8,7 @@ use arc_swap::ArcSwap;
 use axum::Router;
 use console_core::taxonomy::TaxonomyIndex;
 use console_db::DbPool;
+use console_runtime::grpc_pool::GrpcPool;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
@@ -18,8 +19,11 @@ pub struct AppState {
     pub db: DbPool,
     /// The taxonomy index, atomically swappable for reload.
     pub taxonomy: Arc<ArcSwap<TaxonomyIndex>>,
-    /// Runtime connection addresses for health checks.
+    /// Runtime connection addresses for health checks and client construction.
     pub runtime_config: console_core::config::RuntimeConfig,
+    /// Shared gRPC client pool. Held across all Axum handlers; reconnect is
+    /// triggered by callers on per-service `None` responses.
+    pub grpc_pool: Arc<GrpcPool>,
 }
 
 /// Builds the full API router with per-request tracing and all endpoints.

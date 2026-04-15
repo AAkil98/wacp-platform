@@ -126,8 +126,37 @@ impl GrpcPool {
         self.connect_agent().await;
     }
 
+    pub async fn reconnect_highway(&self) {
+        self.connect_highway().await;
+    }
+
     pub async fn reconnect_coordinator(&self) {
         self.connect_coordinator().await;
+    }
+
+    /// Snapshot of all three service statuses. Intended for the health endpoint —
+    /// acquires and releases three read locks, so the cost is a constant handful of
+    /// atomic ops. Field order is stable (agent, highway, coordinator).
+    pub async fn status_snapshot(&self) -> [(&'static str, ServiceStatus); 3] {
+        [
+            ("runtime_agent", *self.agent_status.read().await),
+            ("runtime_highway", *self.highway_status.read().await),
+            ("runtime_coordinator", *self.coordinator_status.read().await),
+        ]
+    }
+}
+
+impl ServiceStatus {
+    /// Map the internal status into the string shape used by the `/api/health` response.
+    /// - `Connected` → `"ok"`
+    /// - `Disconnected` → `"error"` (after a failed dial; caller should trigger reconnect)
+    /// - `Unknown` → `"error"` (the pool has never successfully dialed this channel)
+    pub fn as_health_string(self) -> &'static str {
+        match self {
+            ServiceStatus::Connected => "ok",
+            ServiceStatus::Disconnected => "error",
+            ServiceStatus::Unknown => "error",
+        }
     }
 }
 
@@ -163,5 +192,31 @@ mod tests {
         assert_eq!(pool.agent_status().await, ServiceStatus::Unknown);
         assert_eq!(pool.highway_status().await, ServiceStatus::Unknown);
         assert_eq!(pool.coordinator_status().await, ServiceStatus::Unknown);
+    }
+
+    #[test]
+    fn service_status_health_strings() {
+        assert_eq!(ServiceStatus::Connected.as_health_string(), "ok");
+        assert_eq!(ServiceStatus::Disconnected.as_health_string(), "error");
+        assert_eq!(ServiceStatus::Unknown.as_health_string(), "error");
+    }
+
+    #[tokio::test]
+    async fn status_snapshot_returns_three_keys_in_order() {
+        let pool = GrpcPool::new("[::1]:9090", "[::1]:9091", "[::1]:9092");
+        let snap = pool.status_snapshot().await;
+        assert_eq!(snap[0].0, "runtime_agent");
+        assert_eq!(snap[1].0, "runtime_highway");
+        assert_eq!(snap[2].0, "runtime_coordinator");
+        assert!(snap.iter().all(|(_, s)| *s == ServiceStatus::Unknown));
+    }
+
+    #[tokio::test]
+    async fn reconnect_highway_exists_and_is_callable() {
+        // Bind an unused port so the connect fails fast but symmetrically with the
+        // agent + coordinator reconnect helpers.
+        let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+        pool.reconnect_highway().await;
+        assert_eq!(pool.highway_status().await, ServiceStatus::Disconnected);
     }
 }

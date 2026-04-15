@@ -129,9 +129,15 @@ W1 (pool → AppState)
 
 ---
 
-### W4 — Highway Forwarding
+### W4 — Highway Forwarding *(DONE — commit `e679a2b`)*
 
 **Estimate:** 4 hours. **Coding spec:** `wcon-w4-highway-forwarding`.
+
+**Deviations landed with the W4 commit:**
+
+- `audit_log` schema does not gain a `runtime_applied` column — instead, the bit lives inside the existing `detail` JSON blob (`detail.runtime_applied`). This avoids a migration mid-wiring; promote to a column when compliance review actually consumes the field.
+- Batch resolve always returns 200 with a per-gate `results` array (`status: applied | runtime_rejected | bad_request`). The original spec hinted at partial failure but didn't fix the response shape; we settled on a uniform per-item record so the frontend can drive a checklist UI without parsing varied error payloads.
+- Optimistic pending removal mutates the W3 monitor handle's `pending.gates` / `pending.escalations` directly. If the monitor isn't running for the session (recovery race), the mutation is skipped — the next stream tick will reconcile.
 
 | Task | Deliverable | Test layer | Acceptance bar |
 |------|-------------|------------|----------------|

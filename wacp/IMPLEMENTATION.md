@@ -12,7 +12,7 @@ authors:
 tags: [strategy, roadmap, productionization, console, phase-28, phase-29]
 ```
 
-This document is forward-looking. For the current-state snapshot — what's built, what's tested, what's deployed — see `SEED-CONTEXT.md`.
+This document is forward-looking. For the current-state snapshot — what's built, what's tested, what's deployed — see `SEED.md`.
 
 ---
 
@@ -103,7 +103,7 @@ Gaps that block or bruise the Console build, ordered by severity:
 
 | # | Gap | Impact | Fix |
 |---|---|---|---|
-| **G1** | **Port configuration is internally inconsistent.** `crates/wacp-runtime/src/config.rs` defaults to `agent_listen=[::1]:9090`, `highway_listen=[::1]:9091`, `coordinator_listen=[::1]:9402`. `Dockerfile` sets `agent=0.0.0.0:9090`, `highway=0.0.0.0:9091`, and reserves 9092 for metrics and 9093 for health — it never sets `coordinator_listen` and never EXPOSEs 9402, so `CoordinatorService` is **unreachable in the Docker image**. `SEED-CONTEXT.md` claims `9400/9401/9402` which matches neither. | Hard-blocks a clean Console setup flow. Every new integrator has to reverse-engineer the correct addresses. `wcon-doctor` cannot emit correct defaults. | Canonicalize the port map (§4.1). Apply to `config.rs`, `Dockerfile`, `deploy/wacp-runtime.service`, and the Console default-runtime-address setting. |
+| **G1** | **Port configuration is internally inconsistent.** `crates/wacp-runtime/src/config.rs` defaults to `agent_listen=[::1]:9090`, `highway_listen=[::1]:9091`, `coordinator_listen=[::1]:9402`. `Dockerfile` sets `agent=0.0.0.0:9090`, `highway=0.0.0.0:9091`, and reserves 9092 for metrics and 9093 for health — it never sets `coordinator_listen` and never EXPOSEs 9402, so `CoordinatorService` is **unreachable in the Docker image**. `SEED.md` claims `9400/9401/9402` which matches neither. | Hard-blocks a clean Console setup flow. Every new integrator has to reverse-engineer the correct addresses. `wcon-doctor` cannot emit correct defaults. | Canonicalize the port map (§4.1). Apply to `config.rs`, `Dockerfile`, `deploy/wacp-runtime.service`, and the Console default-runtime-address setting. |
 | **G2** | **No release pipeline.** `ci.yml` runs build/clippy/test/fmt but produces no artifacts. There is no `curl \| sh` installer, no published binary, no `cargo install wacp-runtime`, no published Docker image. | Hard-blocks Console dev on a fresh machine; blocks runtime deployment to anything that isn't a local checkout. | Add a tag-triggered release workflow (§4.2). |
 | **G3** | **CI ignores all packages added in Phases 25–27S.** The TypeScript job runs only `highway-ui` and ignores `packages/wacp-cli/` (132 tests), `packages/wacp-local/` (86 tests), and every `ecosystem/<id>` package (459 vertical tests + 35 cross-vertical integration tests in `packages/wacp-cli/tests/ecosystem.test.ts`). | Regressions in the CLI or any vertical are not caught by CI. Every Phase-27S-style schema refactor can silently break downstream consumers — including the Console. | Extend `ci.yml` to matrix-build every `packages/*` and `ecosystem/*` workspace (§4.2). |
 | **G4** | **`wacp-taxonomy` has no stable version.** The Console's tech-stack proposal git-deps on it to get `VerticalManifest`. Without a pinned tag or crates.io release, every Console build floats against `main` and every schema refactor here breaks the Console unpredictably. | Brittle Console CI; frequent breakages on unrelated WACP commits. | Publish `wacp-types` and `wacp-taxonomy` to crates.io as `0.1.0` (§4.3). |
@@ -137,7 +137,7 @@ Fixes required:
 - Verify and (if necessary) document the REST gateway's current bind — it is not in `rest_gateway.rs::Router::new()`; confirm via `grpc_server.rs` where it is mounted and which `listen` config drives it.
 - `Dockerfile` — `EXPOSE 9090 9091 9092 9093 9094` (drop 9092-for-metrics assumption; move metrics to 9095 and gate on an opt-in env var). Set `ENV WACP_SERVER__COORDINATOR_LISTEN=0.0.0.0:9092` and `ENV WACP_SERVER__REST_LISTEN=0.0.0.0:9093`.
 - `deploy/wacp-runtime.service` — mirror the env vars.
-- `SEED-CONTEXT.md` — correct the Architecture Summary line that claims `9400/9401/9402` (informational fix; does not affect code).
+- `SEED.md` — correct the Architecture Summary line that claims `9400/9401/9402` (informational fix; does not affect code).
 - `wacp-console/TECH_STACK_PROPOSAL.md` Q3 ("cryptographic trust boundary") — the default runtime address in Console settings should match this map.
 
 **Exit criteria.** `cargo run --bin wacp-runtime -- defaults` emits the canonical ports. `docker run <image>` binds all five services on the canonical ports. `grep -R '9090\|9091\|9092\|9093\|9094\|9095\|9402' crates Dockerfile deploy` returns only references that match the map.
@@ -338,7 +338,7 @@ Executable tasks, ordered by stream. Each is small enough to land in one focused
 
 | # | Task | Files / crates | Blocker |
 |---|---|---|---|
-| **A1** | ~~Canonicalize port map~~ | `config.rs`, `grpc_server.rs`, `Dockerfile`, `deploy/`, `runtime-manager.ts`, 5 impl specs, `SEED-CONTEXT.md` | **Done** |
+| **A1** | ~~Canonicalize port map~~ | `config.rs`, `grpc_server.rs`, `Dockerfile`, `deploy/`, `runtime-manager.ts`, 5 impl specs, `SEED.md` | **Done** |
 | **A2** | ~~CI matrix for `packages/wacp-cli`, `packages/wacp-local`, `ecosystem/*`~~ | `.github/workflows/ci.yml` | **Done** |
 | **A3** | ~~`release.yml` — tag-triggered matrix build + GitHub Release + GHCR image~~ | `.github/workflows/release.yml` | **Done** |
 | **A4** | ~~Prepare `wacp-types` + `wacp-taxonomy` for crates.io~~ | `crates/wacp-types/Cargo.toml`, `crates/wacp-taxonomy/Cargo.toml` — metadata ready, `cargo publish` pending | **Done** (metadata) |
@@ -417,9 +417,9 @@ Not defined. Suggested default: tag on any change that is visible in `openapi.ya
 
 Canonical port map is now `9090/9091/9092/9093/9094/9095` across all code, deployment files, and docs. Zero references to the old `9400/9401/9402` range remain in code or impl specs.
 
-### 10.7 ~~SEED-CONTEXT.md port drift~~ (resolved by A1)
+### 10.7 ~~SEED.md port drift~~ (resolved by A1)
 
-Architecture Summary in `SEED-CONTEXT.md` now documents the canonical port map. No drift.
+Architecture Summary in `SEED.md` now documents the canonical port map. No drift.
 
 ---
 
@@ -427,7 +427,7 @@ Architecture Summary in `SEED-CONTEXT.md` now documents the canonical port map. 
 
 | ID / Path | Title | Relationship |
 |---|---|---|
-| `SEED-CONTEXT.md` | WACP session primer | current state (authoritative for what is built) |
+| `SEED.md` | WACP session primer | current state (authoritative for what is built) |
 | `wacp-console/TECH_STACK_PROPOSAL.md` | Console tech stack proposition | consumer of Stream A §4 |
 | `wacp-console/SPEC_BUILD.md` | Console spec build + ADR-001 | consumer of `GET /v1/verticals` |
 | `crates/wacp-transport/src/rest_gateway.rs` | 16 REST handlers | modified in Stream A §4.4 |

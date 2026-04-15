@@ -13,9 +13,9 @@ depends_on: [wcon-architecture, wcon-sessions, wcon-highway, wcon-merge-plan]
 
 > **Scope.** This is a **cross-cutting document** spanning both `wacp/` (runtime, protocol, taxonomy) and `wacp-console/` (workbench, SPA). It describes how the two halves connect across process boundaries via gRPC and REST.
 >
-> **Positioning.** Post-merge, this document is intended to live at the **monorepo root** (e.g., `impl/wiring-strategy.md` of the umbrella repo) as the canonical wiring plan for the workspace. Until the merge lands (see `impl/merge-plan.md`), it lives in `wacp-console/impl/` as the calling-side repo — but its content and references are written to read correctly from either vantage point.
+> **Positioning.** Lives at the **monorepo root** (`impl/wiring-strategy.md` of `wacp-platform/`) — the canonical wiring plan for the workspace. Relocated here at M5; see `wacp-console/impl/merge-plan.md` for the merge procedure and `impl/merge-execution-log.md` for the execution record.
 >
-> **Relationship to `merge-plan.md`.** W0 (monorepo merge) is the precondition for the wiring phases W1–W6. The detailed merge procedure is extracted to `impl/merge-plan.md`; this document only summarizes it and defers for detail.
+> **Relationship to `merge-plan.md`.** W0 (monorepo merge) is the precondition for the wiring phases W1–W6. The detailed merge procedure is at `wacp-console/impl/merge-plan.md`; this document only summarizes it and defers for detail.
 
 ## Table of Contents
 
@@ -164,7 +164,7 @@ mada/
 
 ### 3.3 Pointer to Merge Procedure
 
-**The detailed merge procedure lives in `impl/merge-plan.md`.** It covers:
+**The detailed merge procedure lives in `wacp-console/impl/merge-plan.md`.** It covers:
 
 - 7 execution milestones: M0 pre-flight → M1 umbrella repo + subtree import → M2 Cargo workspace union → M3 shared `wacp-proto` crate → M4 path-dep flip → M5 tooling merge (`.cargo`, `.claude`, `rust-toolchain`, `.gitignore`, README) → M6 CI rewrite → M7 validate & tag.
 - Collision map for files that exist on both sides (`README.md`, `LICENSE`, `IMPLEMENTATION.md`, `SEED*.md`, `.gitignore`, `.cargo/`, `.claude/`, etc.).
@@ -301,7 +301,7 @@ SessionMonitor
 ## 5. Execution Order
 
 ```
-Step 0: Merge repos (see impl/merge-plan.md)   1–2 days
+Step 0: Merge repos (see wacp-console/impl/merge-plan.md)   1–2 days
   │
 Step 1: W1 — gRPC Pool → AppState              ~2 hours
   │

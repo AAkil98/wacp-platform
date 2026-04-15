@@ -50,7 +50,7 @@ WACP (Workspace Agent Coordination Protocol) is a formal protocol for coordinati
 wacp/
 ├── IMPLEMENTATION.md        # Forward strategy — runtime productionization + Phase 28/29
 ├── LAYER-MAPPING.md         # Historical map: mada-os layers → WACP (referenced by impl specs)
-├── SEED-CONTEXT.md          # This file
+├── SEED.md          # This file
 ├── LICENSE                  # Apache-2.0 (specification is separately licensed CC BY-SA 4.0 in wacp-protocol)
 ├── NOTICE                   # Attribution + pointer to wacp-protocol
 ├── Cargo.toml               # Workspace manifest — 16 crates

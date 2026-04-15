@@ -94,7 +94,7 @@ node dist/main.js   # loads all 7 verticals at boot, starts the REPL
 ```
 wacp/
 ├── IMPLEMENTATION.md        # Forward strategy — runtime productionization + Phase 28/29
-├── SEED-CONTEXT.md          # Current state primer for new sessions
+├── SEED.md          # Current state primer for new sessions
 ├── LAYER-MAPPING.md         # Historical architectural map (referenced by impl specs)
 ├── LICENSE                  # Apache-2.0
 ├── NOTICE                   # Attribution + pointer to wacp-protocol
@@ -160,7 +160,7 @@ wacp/
 
 ## Status
 
-See [`SEED-CONTEXT.md`](SEED-CONTEXT.md) for the current-state snapshot and [`IMPLEMENTATION.md`](IMPLEMENTATION.md) for the forward strategy.
+See [`SEED.md`](SEED.md) for the current-state snapshot and [`IMPLEMENTATION.md`](IMPLEMENTATION.md) for the forward strategy.
 
 | Layer | Status |
 |---|---|
@@ -176,7 +176,7 @@ See [`SEED-CONTEXT.md`](SEED-CONTEXT.md) for the current-state snapshot and [`IM
 | **IDE + chat bridge (Phase 28)** | **Pending** — see `IMPLEMENTATION.md` Stream B |
 | **Dashboard (Phase 29.2)** | **Pending** — built as `wacp-console`, separate repo |
 
-Total test coverage across the three ecosystems runs in the low thousands; see `SEED-CONTEXT.md` for the breakdown.
+Total test coverage across the three ecosystems runs in the low thousands; see `SEED.md` for the breakdown.
 
 ---
 

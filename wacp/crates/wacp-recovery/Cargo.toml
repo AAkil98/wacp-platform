@@ -1,0 +1,17 @@
+[package]
+name = "wacp-recovery"
+description = "WACP — Recovery engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+wacp-trail = { path = "../wacp-trail" }
+wacp-fsm = { path = "../wacp-fsm" }
+wacp-clock = { path = "../wacp-clock" }
+wacp-workspace = { path = "../wacp-workspace" }
+wacp-coordinator = { path = "../wacp-coordinator" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

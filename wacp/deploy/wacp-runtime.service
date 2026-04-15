@@ -1,0 +1,69 @@
+# WACP Runtime — systemd unit file
+# deployment.md §10
+
+[Unit]
+Description=WACP Runtime
+Documentation=https://github.com/wacp/wacp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=wacp
+Group=wacp
+ExecStart=/usr/local/bin/wacp-runtime serve --config /etc/wacp/runtime.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Canonical port map (IMPLEMENTATION.md §4.1).
+# Override via /etc/wacp/runtime.yaml or drop-in .conf files.
+Environment=WACP_SERVER__AGENT_LISTEN=0.0.0.0:9090
+Environment=WACP_SERVER__HIGHWAY_LISTEN=0.0.0.0:9091
+Environment=WACP_SERVER__COORDINATOR_LISTEN=0.0.0.0:9092
+Environment=WACP_SERVER__REST_LISTEN=0.0.0.0:9093
+Environment=WACP_OBSERVABILITY__HEALTH__LISTEN=0.0.0.0:9094
+Environment=WACP_OBSERVABILITY__METRICS__LISTEN=0.0.0.0:9095
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security hardening (deployment.md §10.3)
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Filesystem isolation
+ReadWritePaths=/var/lib/wacp
+ReadOnlyPaths=/etc/wacp
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wacp-runtime
+
+# Shutdown
+TimeoutStopSec=60
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+[package]
+name = "wacp-fsm"
+description = "WACP — State machine engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+thiserror = { workspace = true }

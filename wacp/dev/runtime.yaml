@@ -1,0 +1,10 @@
+# Dev configuration for Console development.
+# Usage: wacp-runtime serve --config dev/runtime.yaml
+#
+# Run from the repo root. Data persists in .wacp-data/ (gitignored).
+
+taxonomy:
+  verticals_dir: ecosystem
+
+storage:
+  data_dir: .wacp-data

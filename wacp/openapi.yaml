@@ -1,0 +1,866 @@
+openapi: 3.1.0
+info:
+  title: WACP Runtime REST API
+  description: REST gateway for the Workspace Agent Coordination Protocol runtime.
+  license:
+    name: Apache-2.0
+  version: 0.1.0
+paths:
+  /v1/budget:
+    get:
+      tags:
+      - resources
+      operationId: get_allocatable_handler
+      responses:
+        '200':
+          description: Allocatable budget
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+  /v1/escalations/{id}/respond:
+    post:
+      tags:
+      - escalations
+      operationId: respond_escalation_handler
+      parameters:
+      - name: id
+        in: path
+        description: Escalation ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalationResponseBody'
+        required: true
+      responses:
+        '204':
+          description: Escalation response accepted
+        '404':
+          description: Escalation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/gates/{id}/respond:
+    post:
+      tags:
+      - gates
+      operationId: respond_gate_handler
+      parameters:
+      - name: id
+        in: path
+        description: Gate ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateResponseBody'
+        required: true
+      responses:
+        '204':
+          description: Gate response accepted
+        '404':
+          description: Gate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/goals:
+    post:
+      tags:
+      - goals
+      operationId: submit_goal_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitGoalBody'
+        required: true
+      responses:
+        '201':
+          description: Goal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalCreatedResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/health:
+    get:
+      tags:
+      - health
+      operationId: health_handler
+      responses:
+        '200':
+          description: Runtime healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/sessions/{id}/workspaces:
+    get:
+      tags:
+      - workspaces
+      operationId: list_session_workspaces_handler
+      parameters:
+      - name: id
+        in: path
+        description: Session (root workspace) ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Workspaces in session
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceSummaryItem'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/tasks:
+    get:
+      tags:
+      - tasks
+      operationId: get_ready_tasks_handler
+      responses:
+        '200':
+          description: Ready tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskListItem'
+  /v1/trail:
+    get:
+      tags:
+      - trail
+      operationId: query_trail_handler
+      responses:
+        '200':
+          description: Trail entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrailEntryItem'
+  /v1/verticals:
+    get:
+      tags:
+      - verticals
+      operationId: list_verticals_handler
+      responses:
+        '200':
+          description: All verticals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VerticalSummary'
+  /v1/verticals/{id}:
+    get:
+      tags:
+      - verticals
+      operationId: get_vertical_handler
+      parameters:
+      - name: id
+        in: path
+        description: Vertical ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Vertical manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerticalManifest'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/workspaces/{id}:
+    get:
+      tags:
+      - workspaces
+      operationId: get_workspace_handler
+      parameters:
+      - name: id
+        in: path
+        description: Workspace ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Workspace details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/workspaces/{id}/abort:
+    post:
+      tags:
+      - workspaces
+      operationId: abort_handler
+      parameters:
+      - name: id
+        in: path
+        description: Workspace ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AbortBody'
+        required: true
+      responses:
+        '204':
+          description: Workspace aborted
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/workspaces/{id}/dispatch:
+    post:
+      tags:
+      - workspaces
+      operationId: dispatch_handler
+      parameters:
+      - name: id
+        in: path
+        description: Parent workspace ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchBody'
+        required: true
+      responses:
+        '201':
+          description: Workspace dispatched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchCreatedResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/workspaces/{id}/inject:
+    post:
+      tags:
+      - workspaces
+      operationId: inject_handler
+      parameters:
+      - name: id
+        in: path
+        description: Target workspace ID
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InjectBody'
+        required: true
+      responses:
+        '201':
+          description: Envelope injected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InjectCreatedResponse'
+  /v1/workspaces/{id}/integrate:
+    post:
+      tags:
+      - workspaces
+      operationId: integrate_handler
+      parameters:
+      - name: id
+        in: path
+        description: Workspace ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Integration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationResponse'
+  /v1/workspaces/{id}/resume:
+    post:
+      tags:
+      - workspaces
+      operationId: resume_handler
+      parameters:
+      - name: id
+        in: path
+        description: Workspace ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Workspace resumed
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/workspaces/{id}/suspend:
+    post:
+      tags:
+      - workspaces
+      operationId: suspend_handler
+      parameters:
+      - name: id
+        in: path
+        description: Workspace ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Workspace suspended
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    AbortBody:
+      type: object
+      properties:
+        reason:
+          type: string
+    BudgetResponse:
+      type: object
+      required:
+      - max_tokens
+      - max_wall_time_ms
+      - max_cost_micros
+      properties:
+        max_cost_micros:
+          type: integer
+          format: int64
+          minimum: 0
+        max_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        max_wall_time_ms:
+          type: integer
+          format: int64
+          minimum: 0
+    CheckpointField:
+      type: object
+      description: A field within a vertical-specific checkpoint type.
+      required:
+      - name
+      - type
+      - description
+      properties:
+        description:
+          type: string
+        enum_values:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/FieldType'
+    CheckpointSchema:
+      type: object
+      description: Schema for a vertical-specific checkpoint type.
+      required:
+      - description
+      - fields
+      properties:
+        description:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckpointField'
+    ContextField:
+      type: object
+      description: A typed field in a vertical's session-launch context schema.
+      required:
+      - type
+      - required
+      - description
+      properties:
+        default: {}
+        description:
+          type: string
+        enum_values:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        required:
+          type: boolean
+        type:
+          $ref: '#/components/schemas/FieldType'
+    DispatchBody:
+      type: object
+      required:
+      - task_id
+      - role
+      properties:
+        role:
+          type: string
+        task_id:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+    DispatchCreatedResponse:
+      type: object
+      required:
+      - workspace_id
+      - task_id
+      properties:
+        task_id:
+          type: string
+        workspace_id:
+          type: string
+    ErrorResponse:
+      type: object
+      required:
+      - error
+      - code
+      properties:
+        code:
+          type: string
+        error:
+          type: string
+    EscalationResponseBody:
+      type: object
+      required:
+      - action
+      properties:
+        action:
+          type: string
+    FieldType:
+      type: string
+      description: Data type for context fields and checkpoint fields.
+      enum:
+      - string
+      - number
+      - boolean
+      - enum
+    GateResponseBody:
+      type: object
+      required:
+      - decision
+      properties:
+        decision:
+          type: string
+        modification:
+          type: string
+    GoalCreatedResponse:
+      type: object
+      required:
+      - goal_id
+      - workspace_id
+      properties:
+        goal_id:
+          type: string
+        workspace_id:
+          type: string
+    HealthResponse:
+      type: object
+      required:
+      - status
+      - version
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+    InjectBody:
+      type: object
+      properties:
+        payload:
+          type: string
+        type:
+          type: string
+    InjectCreatedResponse:
+      type: object
+      required:
+      - envelope_id
+      properties:
+        envelope_id:
+          type: string
+    IntegrationResponse:
+      type: object
+      required:
+      - result
+      - detail
+      properties:
+        detail:
+          type: string
+        result:
+          type: string
+    ProfileSummary:
+      type: object
+      description: Summary of a vertical's agent profile.
+      required:
+      - role_id
+      - autonomy
+      properties:
+        autonomy:
+          type: string
+        role_id:
+          type: string
+    QualityCriterion:
+      type: object
+      description: A quality criterion — serialisable view of a quality dimension (no eval fn).
+      required:
+      - id
+      - name
+      - description
+      - weight
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        weight:
+          type: number
+          format: double
+    SubmitGoalBody:
+      type: object
+      required:
+      - description
+      properties:
+        context:
+          type: string
+        description:
+          type: string
+    TaskListItem:
+      type: object
+      required:
+      - task_id
+      - name
+      - status
+      properties:
+        name:
+          type: string
+        status:
+          type: integer
+          format: int32
+        task_id:
+          type: string
+    TaskTypeDescriptor:
+      type: object
+      description: Declarative task type descriptor with representative detection keywords.
+      required:
+      - id
+      - name
+      - description
+      - workflow_id
+      - keywords
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        name:
+          type: string
+        workflow_id:
+          type: string
+    ToolPolicy:
+      type: object
+      description: |-
+        A tool-layer policy rule — describes how a vertical enforces a pre-condition
+        before allowing a tool to execute.
+      required:
+      - kind
+      - description
+      properties:
+        blocked_classifications:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        budget_field:
+          type:
+          - string
+          - 'null'
+        checkpoint_type:
+          type:
+          - string
+          - 'null'
+        description:
+          type: string
+        expires_after_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        gate_condition:
+          type:
+          - string
+          - 'null'
+        kind:
+          $ref: '#/components/schemas/ToolPolicyKind'
+        matching_field:
+          type:
+          - string
+          - 'null'
+        override_flag:
+          type:
+          - string
+          - 'null'
+    ToolPolicyKind:
+      type: string
+      description: Discriminant for tool-layer enforcement rules.
+      enum:
+      - requires_checkpoint
+      - requires_gate
+      - budget_limited
+      - classification_gated
+    ToolSummary:
+      type: object
+      description: Summary of a vertical's tool.
+      required:
+      - name
+      - description
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+    TrailEntryItem:
+      type: object
+      required:
+      - id
+      - event_type
+      - workspace_id
+      properties:
+        event_type:
+          type: string
+        id:
+          type: string
+        workspace_id:
+          type: string
+    VerticalManifest:
+      type: object
+      description: |-
+        A complete vertical manifest — loaded from `vertical.yaml`.
+
+        Contains all domain metadata needed to configure and operate a session:
+        context schema, tool policies, checkpoint schemas, quality criteria,
+        task types, and summaries of workflows, profiles, and tools.
+      required:
+      - id
+      - name
+      - defining_constraint
+      properties:
+        checkpoint_types:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CheckpointSchema'
+          propertyNames:
+            type: string
+        context_schema:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ContextField'
+          propertyNames:
+            type: string
+        defining_constraint:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfileSummary'
+        quality_criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualityCriterion'
+        task_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskTypeDescriptor'
+        tool_policies:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ToolPolicy'
+          propertyNames:
+            type: string
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSummary'
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSummary'
+    VerticalSummary:
+      type: object
+      description: Summary of a vertical — returned by `GET /v1/verticals`.
+      required:
+      - id
+      - name
+      - defining_constraint
+      - task_type_count
+      - workflow_count
+      - tool_count
+      properties:
+        defining_constraint:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        task_type_count:
+          type: integer
+          minimum: 0
+        tool_count:
+          type: integer
+          minimum: 0
+        workflow_count:
+          type: integer
+          minimum: 0
+    WorkflowSummary:
+      type: object
+      description: Summary of a vertical's workflow.
+      required:
+      - id
+      - name
+      - description
+      - stage_count
+      - gated_stage_count
+      properties:
+        description:
+          type: string
+        gated_stage_count:
+          type: integer
+          format: int32
+          minimum: 0
+        id:
+          type: string
+        name:
+          type: string
+        stage_count:
+          type: integer
+          format: int32
+          minimum: 0
+    WorkspaceResponse:
+      type: object
+      required:
+      - workspace_id
+      - state
+      - role
+      properties:
+        role:
+          type: string
+        state:
+          type: integer
+          format: int32
+        workspace_id:
+          type: string
+    WorkspaceSummaryItem:
+      type: object
+      required:
+      - id
+      - parent_id
+      - state
+      - owner
+      - task_id
+      properties:
+        id:
+          type: string
+        owner:
+          type: string
+        parent_id:
+          type: string
+        state:
+          type: integer
+          format: int32
+        task_id:
+          type: string
+tags:
+- name: health
+  description: Runtime health
+- name: goals
+  description: Goal submission
+- name: tasks
+  description: Task queries
+- name: workspaces
+  description: Workspace lifecycle
+- name: gates
+  description: Gate responses
+- name: escalations
+  description: Escalation responses
+- name: trail
+  description: Audit trail
+- name: resources
+  description: Resource budget
+- name: verticals
+  description: Vertical discovery

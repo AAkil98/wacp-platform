@@ -1,0 +1,20 @@
+[package]
+name = "wacp-taxonomy"
+description = "WACP taxonomy loader, validation, and VerticalManifest schema for the Workspace Agent Coordination Protocol"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["wacp", "protocol", "agents", "taxonomy"]
+categories = ["data-structures", "config"]
+
+[dependencies]
+wacp-types = { version = "0.1", path = "../wacp-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+thiserror = { workspace = true }
+utoipa = { version = "5", optional = true }
+
+[features]
+openapi = ["utoipa"]

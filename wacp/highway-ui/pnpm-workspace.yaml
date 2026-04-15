@@ -1,0 +1,1 @@
+onlyBuiltDependencies: ["@bufbuild/buf", "esbuild"]

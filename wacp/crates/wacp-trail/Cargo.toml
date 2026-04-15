@@ -1,0 +1,19 @@
+[package]
+name = "wacp-trail"
+description = "WACP — Append-only trail storage"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+wacp-clock = { path = "../wacp-clock" }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zstd = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

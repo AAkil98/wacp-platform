@@ -1,0 +1,15 @@
+[package]
+name = "wacp-security"
+description = "WACP — Security middleware: content filter, secret store, audit events"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]

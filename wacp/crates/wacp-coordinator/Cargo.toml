@@ -1,0 +1,21 @@
+[package]
+name = "wacp-coordinator"
+description = "WACP — Coordinator actor"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+wacp-clock = { path = "../wacp-clock" }
+wacp-trail = { path = "../wacp-trail" }
+wacp-fsm = { path = "../wacp-fsm" }
+wacp-permissions = { path = "../wacp-permissions" }
+wacp-workspace = { path = "../wacp-workspace" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

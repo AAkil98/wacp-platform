@@ -1,0 +1,11 @@
+[package]
+name = "wacp-permissions"
+description = "WACP — Permission engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+wacp-taxonomy = { path = "../wacp-taxonomy" }
+thiserror = { workspace = true }

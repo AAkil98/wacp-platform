@@ -1,0 +1,21 @@
+[package]
+name = "wacp-sdk"
+description = "WACP — Rust agent SDK"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+wacp-types = { path = "../wacp-types" }
+wacp-transport = { path = "../wacp-transport" }
+wacp-tools = { path = "../wacp-tools" }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tonic = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+futures = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true }
+tokio-stream = "0.1"

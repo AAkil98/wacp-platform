@@ -1,0 +1,35 @@
+{
+  "name": "@wacp/cli",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "wacp": "./dist/main.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "generate:manifests": "tsx scripts/generate-manifests.ts"
+  },
+  "dependencies": {
+    "@wacp/local": "file:../wacp-local",
+    "@wacp/swe": "file:../../ecosystem/swe",
+    "@wacp/devops": "file:../../ecosystem/devops",
+    "@wacp/mlops": "file:../../ecosystem/mlops",
+    "@wacp/finance": "file:../../ecosystem/finance",
+    "@wacp/healthcare": "file:../../ecosystem/healthcare",
+    "@wacp/analytics": "file:../../ecosystem/analytics",
+    "@wacp/datasci": "file:../../ecosystem/datasci",
+    "@grpc/grpc-js": "^1.12.0",
+    "@grpc/proto-loader": "^0.7.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}

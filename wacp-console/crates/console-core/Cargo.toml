@@ -22,8 +22,11 @@ rand = { workspace = true }
 base64 = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+tonic = { workspace = true }
+sqlx = { workspace = true }
 
 [dev-dependencies]
+console-test-support = { workspace = true }
 rstest = { workspace = true }
 insta = { workspace = true }
 tempfile = { workspace = true }

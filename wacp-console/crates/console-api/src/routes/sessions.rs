@@ -14,6 +14,7 @@ use std::sync::Arc;
 use console_core::audit::{AuditAction, AuditEntry, log_audit};
 use console_core::authorizer::{self, Action};
 use console_core::error::ConsoleError;
+use console_core::session_launcher::{LaunchError, LaunchOutcome, LaunchStep, SessionLauncher};
 use console_core::session_state;
 use console_core::session_validation::{self, SessionValidationInput};
 use console_db::queries::{session_assignments, sessions};
@@ -474,37 +475,100 @@ async fn launch_session(
     .await
     .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    // The actual gRPC launch sequence (4.6) runs here.
-    // For now, transition directly to active — the launch flow will be
-    // implemented as a separate task that calls the gRPC pool.
-    sessions::transition_state(
-        &state.db,
-        &id,
-        session_state::LAUNCHING,
-        session_state::ACTIVE,
-        &now,
-    )
-    .await
-    .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    // Execute the 5-step gRPC launch sequence. On failure the launcher has
+    // already transitioned the session to FAILED and rolled back any created
+    // workspaces — the handler only maps the error to an HTTP status.
+    let launcher = SessionLauncher::new(state.grpc_pool.clone(), state.db.clone());
+    match launcher.launch(&id).await {
+        Ok(LaunchOutcome::Active {
+            coordinator_workspace_id,
+            ..
+        }) => {
+            log_audit(
+                &state.db,
+                AuditEntry {
+                    user_id: auth.user_id.clone(),
+                    action: AuditAction::SessionLaunch,
+                    target_id: id.clone(),
+                    detail: Some(serde_json::json!({
+                        "coordinator_workspace_id": coordinator_workspace_id,
+                    })),
+                    ip: ctx.ip,
+                    user_agent: ctx.user_agent,
+                },
+            )
+            .await
+            .ok();
+            Ok(Json(serde_json::json!({
+                "id": id,
+                "state": session_state::ACTIVE,
+                "coordinator_workspace_id": coordinator_workspace_id,
+            })))
+        }
+        Ok(LaunchOutcome::AlreadyActive { state }) => Err(ApiError::from(ConsoleError::Conflict(
+            format!("session already in state '{state}'"),
+        ))),
+        Err(err) => Err(map_launch_error(err)),
+    }
+}
 
-    log_audit(
-        &state.db,
-        AuditEntry {
-            user_id: auth.user_id.clone(),
-            action: AuditAction::SessionLaunch,
-            target_id: id.clone(),
-            detail: None,
-            ip: ctx.ip,
-            user_agent: ctx.user_agent,
-        },
-    )
-    .await
-    .ok();
-
-    Ok(Json(serde_json::json!({
-        "id": id,
-        "state": session_state::ACTIVE,
-    })))
+fn map_launch_error(err: LaunchError) -> ApiError {
+    match err {
+        LaunchError::SessionNotFound(id) => ApiError::not_found("session", &id),
+        LaunchError::UnexpectedState(s) => ApiError::from(ConsoleError::Conflict(format!(
+            "session in state '{s}' cannot be launched"
+        ))),
+        LaunchError::NoAssignments => ApiError::from(ConsoleError::Validation {
+            message: "session has no assignments".into(),
+            violations: vec![],
+            warnings: vec![],
+        }),
+        LaunchError::PoolUnavailable => ApiError::from(ConsoleError::Runtime {
+            message: "coordinator channel unavailable".into(),
+            grpc_status: None,
+            service: Some("CoordinatorService".into()),
+            method: None,
+        }),
+        LaunchError::Step {
+            step,
+            reason,
+            source,
+            recoverable,
+        } => {
+            let grpc_status = source.as_ref().map(|s| format!("{:?}", s.code()));
+            let method = match step {
+                LaunchStep::SubmitGoal => Some("SubmitGoal"),
+                LaunchStep::Decompose => Some("Decompose"),
+                LaunchStep::Dispatch => Some("Dispatch"),
+                LaunchStep::Finalize => None,
+            }
+            .map(String::from);
+            if recoverable {
+                ApiError {
+                    status: axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    body: crate::error::ApiErrorBody {
+                        error: "runtime_unavailable".into(),
+                        message: format!("launch {step}: {reason}"),
+                        details: Some(serde_json::json!({
+                            "step": step,
+                            "grpc_status": grpc_status,
+                            "service": "CoordinatorService",
+                            "method": method,
+                            "recoverable": true,
+                        })),
+                    },
+                }
+            } else {
+                ApiError::from(ConsoleError::Runtime {
+                    message: format!("launch {step}: {reason}"),
+                    grpc_status,
+                    service: Some("CoordinatorService".into()),
+                    method,
+                })
+            }
+        }
+        LaunchError::Db(msg) => ApiError::from(ConsoleError::Database(msg)),
+    }
 }
 
 // --- Cancel ---

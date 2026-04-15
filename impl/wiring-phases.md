@@ -76,9 +76,14 @@ W1 (pool → AppState)
 
 ---
 
-### W2 — Launch Flow
+### W2 — Launch Flow   *(DONE — commit TBD)*
 
-**Estimate:** 1 working day. **Coding spec:** `wcon-w2-launch-flow`.
+**Estimate:** 1 working day (actual: ~2h end-to-end). **Coding spec:** `wcon-w2-launch-flow`. **Proto-shape note:** `impl/notes/w2-proto-shapes.md`.
+
+**Deviations landed with the W2 commit:**
+- The original spec wrote a 5-step sequence with a distinct `CreateSession` RPC. That RPC does not exist — `CoordinatorService::SubmitGoal` is itself the session constructor and returns `root_workspace_id` as a side effect. Sequence collapsed to `SubmitGoal → Decompose → Dispatch × N → Finalize` (step 4 = SendDirective is a no-op at launch; `Dispatch` carries the directive). Details in `impl/notes/w2-proto-shapes.md` §8.
+- Runtime-side quirk: `Dispatch` silently drops `request.tools` and `request.budget` (`init.rs:1418-1477`). The launcher sends them for contract fidelity, but tests cannot assert they reach the worker — flagged as a wacp-side W-phase follow-up.
+- `ProgrammableCoordinator` landed in `console-test-support` so future phases (W4, W5, W7) can inject per-RPC failures without respawning tonic servers per test.
 
 | Task | Deliverable | Test layer | Acceptance bar |
 |------|-------------|------------|----------------|

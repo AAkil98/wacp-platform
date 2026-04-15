@@ -100,9 +100,15 @@ W1 (pool → AppState)
 
 ---
 
-### W3 — Session Monitor *(critical path)*
+### W3 — Session Monitor *(DONE — commit `a90ac5f`)*
 
-**Estimate:** 2 working days. **Coding spec:** `wcon-w3-session-monitor`.
+**Estimate:** 2 working days. **Coding spec:** `wcon-w3-session-monitor`. **Proto-shape note:** `impl/notes/w3-stream-shapes.md`.
+
+**Deviations landed with the W3 commit:**
+
+- Runtime ignores every stream's request filter (`impl/notes/w3-stream-shapes.md` §6) — every monitor is a full firehose subscriber and filters by `WorkspaceSet` post-receive.
+- `ListPendingGates` / `ListPendingEscalations` RPCs do not exist; reconnect emits a `Lag` control frame with `refresh_hint` so the frontend re-queries REST instead of resyncing in-band.
+- Memory regression test (T3.15, 100 monitors < 50 MB) is not yet wired — deferred to W7's integration sweep where mock-runtime fixtures already exist.
 
 | Task | Deliverable | Test layer | Acceptance bar |
 |------|-------------|------------|----------------|

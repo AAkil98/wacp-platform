@@ -180,7 +180,13 @@ W1 (pool → AppState)
 
 ---
 
-### W6 — Cross-Session Endpoints
+### W6 — Cross-Session Endpoints *(DONE — commit `0ddcd33`)*
+
+**Deviations landed with the W6 commit:**
+
+- Cursor format diverges from spec §3.3 — instead of a serialized `(session_id, item_id)` struct, the cursor is the base64 of `"<session_id>\x1f<item_id>"`. Using the existing `pagination::encode_cursor` keeps the format aligned with every other paginated endpoint; the unit-separator byte is non-collision-prone and never appears in our id formats.
+- Pending module lives inline in `routes/highway.rs` (no separate `routes/highway/pending.rs` submodule). The aggregator is small enough that splitting would have added a build-graph hop with no readability win.
+- Response envelope is `{ items, cursor, has_more }` — the spec mentioned `next_cursor`. Renamed to `cursor` to match `pagination::PaginatedResponse`. Frontend will read whichever name we settle on; documented here so the OpenAPI generator follows suit in W7.
 
 **Estimate:** 2 hours. **Coding spec:** `wcon-w6-cross-session`.
 

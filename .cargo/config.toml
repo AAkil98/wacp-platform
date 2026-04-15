@@ -1,0 +1,25 @@
+# WSL2 memory-pressure mitigation (2026-04-13)
+#
+# This workspace (16 crates, 308 resolved deps, tonic/prost codegen,
+# bundled rusqlite, ring) peaks well above 12 GB when cargo uses all
+# available cores.  On a 12-core / 12 GB WSL2 instance the OOM killer
+# or Hyper-V balloon driver would shut down the VM mid-build.
+#
+# Mitigations applied:
+#   1. Cap parallel rustc jobs at 2 (was 4, still crashed).
+#   2. Use mold linker — default GNU ld spikes several GB during link
+#      phases; mold uses a fraction of that and is much faster.
+#      Install: sudo apt-get install -y mold
+#   3. Dev codegen-units bumped to 512 in [profile.dev] (Cargo.toml)
+#      so each compilation unit is smaller.
+#
+# jobs = 2 still crashed (2026-04-14), dropped to 1.
+# If you have more RAM allocated to WSL, you can raise jobs.
+[build]
+jobs = 1
+
+# Use mold linker (much lower memory footprint than GNU ld).
+# Falls back to default ld if mold is not installed.
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]

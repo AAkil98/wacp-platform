@@ -1,0 +1,44 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node / pnpm
+**/node_modules/
+**/dist/
+
+# Protobuf generated code
+wacp/proto/gen/
+
+# Python
+sdk-python/src/wacp/proto/
+sdk-python/.pytest_cache/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+build/
+
+# Databases (SQLite WAL files, etc.)
+*.db
+*.db-shm
+*.db-wal
+
+# Runtime dev data
+.wacp-data/
+
+# Environment
+.env
+.env.*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Per-contributor scratch
+draft.md

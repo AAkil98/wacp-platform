@@ -14,7 +14,10 @@ use std::sync::Arc;
 use console_core::audit::{AuditAction, AuditEntry, log_audit};
 use console_core::authorizer::{self, Action};
 use console_core::error::ConsoleError;
+use console_core::event_enricher::EventEnricher;
+use console_core::refusal_synthesizer::RefusalSynthesizer;
 use console_core::session_launcher::{LaunchError, LaunchOutcome, LaunchStep, SessionLauncher};
+use console_core::session_monitor::{self, MonitorConfig, WorkspaceSet};
 use console_core::session_state;
 use console_core::session_validation::{self, SessionValidationInput};
 use console_db::queries::{session_assignments, sessions};
@@ -482,8 +485,38 @@ async fn launch_session(
     match launcher.launch(&id).await {
         Ok(LaunchOutcome::Active {
             coordinator_workspace_id,
-            ..
+            assignments,
         }) => {
+            // W3 — spawn the session monitor so subsequent WS connects see
+            // live frames. Insertion into active_sessions races with any
+            // concurrent attempt to insert (there isn't one in practice —
+            // launch is state-guarded), but the RwLock keeps the observable
+            // state coherent.
+            let ws_set = WorkspaceSet::new(
+                coordinator_workspace_id.clone(),
+                assignments.iter().map(|a| a.workspace_id.clone()),
+            );
+            let enricher = EventEnricher::new(state.taxonomy.clone());
+            let refusals = RefusalSynthesizer::new();
+            let (handle, _join) = session_monitor::spawn(
+                id.clone(),
+                ws_set,
+                state.grpc_pool.clone(),
+                state.db.clone(),
+                enricher,
+                refusals,
+                MonitorConfig::default(),
+            );
+            let active = state.active_sessions.clone();
+            active.write().await.insert(id.clone(), handle);
+            // Watchdog task that removes the handle when the monitor exits
+            // on its own (terminal state / fatal reconnect cap).
+            let session_id_watchdog = id.clone();
+            tokio::spawn(async move {
+                let _ = _join.await;
+                active.write().await.remove(&session_id_watchdog);
+            });
+
             log_audit(
                 &state.db,
                 AuditEntry {

@@ -6,12 +6,20 @@ pub mod routes;
 
 use arc_swap::ArcSwap;
 use axum::Router;
+use console_core::session_monitor::SessionMonitorHandle;
 use console_core::taxonomy::TaxonomyIndex;
 use console_db::DbPool;
 use console_runtime::grpc_pool::GrpcPool;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
+
+/// Shared map of currently-running session monitors. W3 populates on launch
+/// (and recovery); W3 removes on terminal state; W6 reads for cross-session
+/// pending aggregation.
+pub type ActiveSessionsMap = Arc<RwLock<HashMap<String, SessionMonitorHandle>>>;
 
 /// Shared application state injected into all Axum handlers.
 #[derive(Clone)]
@@ -24,6 +32,9 @@ pub struct AppState {
     /// Shared gRPC client pool. Held across all Axum handlers; reconnect is
     /// triggered by callers on per-service `None` responses.
     pub grpc_pool: Arc<GrpcPool>,
+    /// Live session monitors keyed by session_id. W3 inserts on launch;
+    /// monitor removes itself on terminal state exit.
+    pub active_sessions: ActiveSessionsMap,
 }
 
 /// Builds the full API router with per-request tracing and all endpoints.

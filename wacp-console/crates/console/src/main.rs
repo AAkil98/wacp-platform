@@ -166,6 +166,9 @@ async fn main() -> anyhow::Result<()> {
                 taxonomy,
                 runtime_config: config.runtime.clone(),
                 grpc_pool,
+                active_sessions: Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
             };
 
             let frontend_mode = match frontend_path {

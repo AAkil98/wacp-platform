@@ -13,6 +13,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
     globals: true,
+    pool: "forks",
+    maxWorkers: 1,
+    execArgv: ["--max-old-space-size=1536"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov", "json-summary"],

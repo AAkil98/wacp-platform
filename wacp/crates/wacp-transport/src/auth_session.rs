@@ -1,18 +1,32 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use parking_lot::RwLock;
 use ring::rand::{SecureRandom, SystemRandom};
+use sha2::{Digest, Sha256};
 use wacp_types::{UserId, WorkspaceId};
 
 use crate::auth::{AgentIdentity, AuthError, Authenticator};
 
+type TokenDigest = [u8; 32];
+
+fn digest(token: &str) -> TokenDigest {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hasher.finalize().into()
+}
+
 /// Session token authenticator — short-lived tokens with expiry and renewal.
+///
+/// Tokens are returned to the caller once at creation time and never persisted
+/// in plaintext: the in-memory map is keyed by the SHA-256 digest of the
+/// random token, so neither the map structure nor its iteration order leaks
+/// information about the underlying secret.
 pub struct SessionTokenAuthenticator {
     rng: SystemRandom,
-    sessions: RwLock<HashMap<String, SessionEntry>>,
+    sessions: RwLock<HashMap<TokenDigest, SessionEntry>>,
     token_ttl: Duration,
 }
 
@@ -38,7 +52,7 @@ impl SessionTokenAuthenticator {
         let token = self.generate_token();
         let now = Instant::now();
         self.sessions.write().insert(
-            token.clone(),
+            digest(&token),
             SessionEntry {
                 user_id,
                 _created_at: now,
@@ -51,12 +65,12 @@ impl SessionTokenAuthenticator {
 
     /// Validate a session token. Updates last_activity on success.
     pub fn validate_session(&self, token: &str) -> Result<UserId, AuthError> {
+        let key = digest(token);
         let mut sessions = self.sessions.write();
-        let entry = sessions.get_mut(token).ok_or(AuthError::InvalidToken)?;
+        let entry = sessions.get_mut(&key).ok_or(AuthError::InvalidToken)?;
 
         if Instant::now() > entry.expires_at {
-            // Expired — remove and reject
-            sessions.remove(token);
+            sessions.remove(&key);
             return Err(AuthError::InvalidToken);
         }
 
@@ -66,7 +80,7 @@ impl SessionTokenAuthenticator {
 
     /// Explicitly invalidate a session (logout).
     pub fn invalidate_session(&self, token: &str) {
-        self.sessions.write().remove(token);
+        self.sessions.write().remove(&digest(token));
     }
 
     /// Remove all expired sessions.

@@ -175,7 +175,7 @@ Three new implementations of the existing `Authenticator` trait.
 
 ```rust
 pub struct ApiKeyAuthenticator {
-    keys: RwLock<HashMap<String, ApiKeyEntry>>,
+    keys: RwLock<HashMap<TokenDigest, ApiKeyEntry>>,  // TokenDigest = [u8; 32]
     rate_limiter: AuthRateLimiter,
 }
 
@@ -186,13 +186,13 @@ struct ApiKeyEntry {
 }
 ```
 
-API keys are long-lived, stored in config. Each key maps to an identity (workspace + role). The authenticator validates the key, updates `last_used`, and enforces rate limiting on failures.
+API keys are long-lived, stored in config. Each key maps to an identity (workspace + role). The map is keyed by SHA-256 digest of the token (not the token itself), so the HashMap's internal SipHash operates over a digest — bucket-probe leakage carries no information about the original token. The post-lookup workspace-id check uses `subtle::ConstantTimeEq` over byte slices. The authenticator validates the key, updates `last_used`, and enforces rate limiting on failures.
 
 ### 4.2 Session Token Authenticator
 
 ```rust
 pub struct SessionTokenAuthenticator {
-    sessions: RwLock<HashMap<String, SessionEntry>>,
+    sessions: RwLock<HashMap<TokenDigest, SessionEntry>>,  // TokenDigest = [u8; 32]
     token_ttl: Duration,
     rate_limiter: AuthRateLimiter,
 }

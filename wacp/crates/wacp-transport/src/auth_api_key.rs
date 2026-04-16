@@ -2,14 +2,30 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use parking_lot::RwLock;
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use wacp_types::{UserId, WorkspaceId};
 
 use crate::auth::{AgentIdentity, AuthError, AuthRateLimiter, Authenticator};
 
+type TokenDigest = [u8; 32];
+
+fn digest(token: &str) -> TokenDigest {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hasher.finalize().into()
+}
+
 /// API key authenticator — long-lived keys from configuration.
+///
+/// Tokens are stored as SHA-256 digests, never as plaintext. The HashMap is
+/// keyed by digest so the lookup itself runs over a hash of the token rather
+/// than the token bytes — bucket-probe leakage carries no information about
+/// the original token. The post-lookup workspace check uses a constant-time
+/// byte comparison.
 pub struct ApiKeyAuthenticator {
-    agent_keys: RwLock<HashMap<String, ApiKeyEntry>>,
-    human_keys: RwLock<HashMap<String, HumanKeyEntry>>,
+    agent_keys: RwLock<HashMap<TokenDigest, ApiKeyEntry>>,
+    human_keys: RwLock<HashMap<TokenDigest, HumanKeyEntry>>,
     _rate_limiter: AuthRateLimiter,
 }
 
@@ -40,8 +56,9 @@ impl ApiKeyAuthenticator {
         workspace_id: WorkspaceId,
         role: impl Into<String>,
     ) {
+        let key = key.into();
         self.agent_keys.write().insert(
-            key.into(),
+            digest(&key),
             ApiKeyEntry {
                 identity: AgentIdentity {
                     workspace_id,
@@ -54,8 +71,9 @@ impl ApiKeyAuthenticator {
 
     /// Register a human API key.
     pub fn register_human_key(&self, key: impl Into<String>, user_id: UserId) {
+        let key = key.into();
         self.human_keys.write().insert(
-            key.into(),
+            digest(&key),
             HumanKeyEntry {
                 user_id,
                 last_used: None,
@@ -65,12 +83,12 @@ impl ApiKeyAuthenticator {
 
     /// Revoke an agent key.
     pub fn revoke_agent_key(&self, key: &str) {
-        self.agent_keys.write().remove(key);
+        self.agent_keys.write().remove(&digest(key));
     }
 
     /// Revoke a human key.
     pub fn revoke_human_key(&self, key: &str) {
-        self.human_keys.write().remove(key);
+        self.human_keys.write().remove(&digest(key));
     }
 }
 
@@ -81,8 +99,14 @@ impl Authenticator for ApiKeyAuthenticator {
         workspace_id: &WorkspaceId,
     ) -> Result<AgentIdentity, AuthError> {
         let mut keys = self.agent_keys.write();
-        if let Some(entry) = keys.get_mut(token) {
-            if &entry.identity.workspace_id != workspace_id {
+        if let Some(entry) = keys.get_mut(&digest(token)) {
+            // Constant-time equality on workspace IDs: the lookup has already
+            // confirmed the token is valid; this branch only protects against
+            // leaking *which* workspace a known-good token is bound to via
+            // timing of the rejection path.
+            let bound: &str = entry.identity.workspace_id.as_ref();
+            let probed: &str = workspace_id.as_ref();
+            if bound.as_bytes().ct_eq(probed.as_bytes()).unwrap_u8() != 1 {
                 return Err(AuthError::WorkspaceMismatch);
             }
             entry.last_used = Some(Instant::now());
@@ -94,7 +118,7 @@ impl Authenticator for ApiKeyAuthenticator {
 
     fn authenticate_human(&self, token: &str) -> Result<UserId, AuthError> {
         let mut keys = self.human_keys.write();
-        if let Some(entry) = keys.get_mut(token) {
+        if let Some(entry) = keys.get_mut(&digest(token)) {
             entry.last_used = Some(Instant::now());
             Ok(entry.user_id.clone())
         } else {
@@ -132,6 +156,19 @@ mod tests {
         let auth = ApiKeyAuthenticator::new(5, 60);
         let ws1 = WorkspaceId::from("ws-1");
         let ws2 = WorkspaceId::from("ws-2");
+        auth.register_agent_key("key-abc123", ws1, "worker");
+
+        let result = auth.authenticate_agent("key-abc123", &ws2);
+        assert!(matches!(result, Err(AuthError::WorkspaceMismatch)));
+    }
+
+    #[test]
+    fn agent_key_workspace_same_length_mismatch() {
+        // Same-length workspace IDs exercise the constant-time path without
+        // early-out shortcuts.
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws1 = WorkspaceId::from("ws-aaa");
+        let ws2 = WorkspaceId::from("ws-aab");
         auth.register_agent_key("key-abc123", ws1, "worker");
 
         let result = auth.authenticate_agent("key-abc123", &ws2);

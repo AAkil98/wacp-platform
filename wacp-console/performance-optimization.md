@@ -173,6 +173,49 @@ Sequenced steps that would have saved several hours on `ProfilesPage.actions.tes
 
 Testing coverage for the Rust crates (`wacp-console/crates/*`) lives under §12.2 / §13.4 of the audit and has not produced runtime-performance signals in this session. The natural next pass (after §13.7 closes) is to run the T1–T10 coverage benchmarks under `cargo bench` for the hot paths — `console-core::session_monitor` (broadcast fan-out), `console-core::session_launcher` (coordinator sequence), `console-api::middleware` (per-request auth/CSRF). Any findings there should be captured back into this document under a new §9.
 
+## 9. console-db — spec-vs-schema drift from the §13.7.5 coverage sweep
+
+Writing the branch-coverage tests for `console-db` (audit §13.7.5, `testing.rs` harness + `queries/coverage_tests.rs`) surfaced two Rust-side drifts — the direct backend analogue of the frontend drifts recorded in §2.5. The *mechanics of writing the negative-path tests* was again the forcing function: the `NOT NULL constraint failed` panic during test authoring pointed straight at the mismatch.
+
+### 9.1 `session_assignments.profile_id` — type says Optional, schema says NOT NULL
+
+- `migrations/007_session_assignments.sql`: `profile_id TEXT NOT NULL`, `profile_version INTEGER NOT NULL`.
+- `queries/session_assignments.rs::SessionAssignmentRow`: `profile_id: Option<String>`, `profile_version: Option<i64>`.
+- `queries/session_assignments.rs::count_assigned`: `WHERE session_id = ? AND profile_id IS NOT NULL` — defensive clause for a case the schema does not allow.
+
+Consequence today: the `IS NOT NULL` filter in `count_assigned` is dead code against the current schema. A caller that constructs a `SessionAssignmentRow` with `profile_id: None` gets a `NotNullViolation` at `INSERT` time (covered by the new `not_null_violation_when_profile_id_is_none` test), *not* a compile error or a defaulted row. The API surface lies about the field being optional.
+
+Two possible resolutions — pick one, don't leave both:
+1. **Tighten the struct.** Change `profile_id: String` and `profile_version: i64`. The schema becomes the source of truth; callers can't represent an invalid state. Requires touching every construction site.
+2. **Loosen the schema.** If unassigned role slots are actually a valid transient state (e.g., a session configured mid-wizard where not every slot is filled yet), drop the NOT NULL constraint and let the struct's Optional stand. Then `count_assigned`'s defensive clause becomes load-bearing.
+
+Either choice is defensible. What isn't defensible is keeping both: today the code pretends to support a state the database refuses to store.
+
+### 9.2 `profiles::max_version` — NULL aggregate handling is ambiguous
+
+```rust
+let row: Option<(i64,)> = sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")
+    .fetch_optional(pool).await?;
+Ok(row.map(|r| r.0))
+```
+
+SQLite's `MAX(...)` over an empty set returns NULL. sqlx decodes that NULL into `i64` = 0 (observed from the failing test run that expected `None` for a missing profile). So:
+
+- `row.map(|r| r.0)` never hits the `None` branch — aggregate queries always produce one row.
+- For a missing profile, the function returns `Ok(Some(0))` — indistinguishable from "profile exists with version 0" (which the schema allows but is unusual).
+
+Impact is small — all current callers create a profile before asking for `max_version` — but the signature `Option<i64>` implies more than the implementation delivers. Either:
+1. Change the inner tuple to `Option<(Option<i64>,)>` (decode NULL explicitly) so missing vs. present is distinguishable, or
+2. Change the signature to `Result<i64, sqlx::Error>` with the understanding that "no rows" is encoded as 0.
+
+I'd lean toward (1) — the caller is currently doing `unwrap_or(0) + 1` anyway, and an explicit "no versions exist yet" signal is more honest than a sentinel.
+
+### 9.3 Perf signals observed (or not)
+
+- **Test walltime.** 98 tests for `console-db` complete in 0.76 s on the dev box (single-threaded tokio, in-memory DB for happy paths, tempfile-backed DB for `FaultyDb`-driven BUSY tests). No hotspot visible; each test averages ~8 ms.
+- **sqlx migration cost.** Each `create_test_pool()` call re-runs all 9 migrations against a fresh in-memory DB (~3 ms per test). Not worth amortizing today at current test counts, but if the suite grows past ~500 tests, a `lazy_static!` migrated template + `ATTACH DATABASE` clone pattern would cut the setup cost. Note for future.
+- **`FaultyDb::hold_write_lock` — detach-before-begin.** First cut of the harness returned the `PoolConnection` from the companion pool holding a `BEGIN IMMEDIATE`; when dropped, the connection went back to the pool *with the transaction still open*, so the next test's writes against the main pool saw a phantom reserved lock. Fix was to `.detach()` the connection so Drop closes the underlying SQLite handle (which releases the lock at the OS level). Captured in `testing.rs` doc comment. This is the backend mirror of the §3.3 `useEffect`-with-unstable-deps trap: a cleanup that looks correct at the type level but leaks state because the runtime's cleanup contract is weaker than the type implies.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

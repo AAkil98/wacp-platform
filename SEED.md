@@ -17,9 +17,27 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 
 **Specs:** runtime protocol lives in the sibling `wacp-protocol` repo (CC BY-SA 4.0). Console design specs under `wacp-console/specs/` (12 finalized). Anchor spec for the Console: `wcon-vision`.
 
-## Current State (Post M0–M7 merge + W1–W7 wiring)
+## Current State (Post M0–M7 merge + W1–W7 wiring + post-audit workstream)
 
-**Branch:** `main` @ `a6773d6`. Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`).
+**Branch:** `main` @ `5e5733b`. Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`) plus the new `coverage` workflow.
+
+**Since the 2026-04-15 audit (from `a6773d6`)**, these have landed on `main` in order:
+
+| SHA | Subject | Audit anchor |
+|-----|---------|--------------|
+| `71b44b6` | docs(audit-04-15): land audit, move prior audit, fix Phase 4.6 step names | §11 #4, §11 #5 |
+| `60d2245` | ci(deny): add cargo-deny workspace gate | §11 #1 |
+| `7ba4ae8` | ci(release): SBOM (CycloneDX) + Trivy scan on published OCI images | §11 #2 |
+| `d10ed29` | feat(transport): re-key auth HashMaps by SHA-256 digest, constant-time ws check | §11 #3 |
+| `7f0736b` | ci(coverage): land cargo-llvm-cov, vitest v8, coverage.py + Codecov | §12.1 |
+| `840450a` | test(coverage): Rust branch-coverage sweep — §12.2 T1–T10 | §12.2 T1–T10 |
+| `82a4213` | test(frontend): add isolated per-file runner + tighten V8 heap cap | new §13.6 |
+| `d71c4fe` | fix(frontend): a11y label bindings + client double-read | test-adjacent prod fixes |
+| `fe48c7b` | test(frontend): F1–F6/F9 RTL suite + ProfilesPage monolith split | §12.3 F1–F6, F9 |
+| `a510249` | docs(audit-04-15): append §13 post-audit progress | audit update |
+| `5e5733b` | docs(audit-04-15): expand §13.7 — task breakdown with deliverables | §13.7 task packages |
+
+What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy) is in CI; runtime auth is now constant-time via SHA-256 digest rekey; the full coverage-tooling stack (cargo-llvm-cov, Vitest v8, coverage.py, Codecov with per-component flags) is wired; Rust branch-coverage tests landed for T1–T10 (~9,800 lines); frontend RTL tests landed for F1–F6 and F9 (~5,200 lines); and a new workstream (not in the original audit) produced a per-file isolated vitest runner plus a 1536 MB V8 heap cap so the now-much-larger frontend suite runs without crashing WSL.
 
 **Runtime (`wacp/`).** 15 Rust crates, ~1,280 Rust tests + TS matrix (10 packages + 7 verticals, ~1,000 tests) + Python SDK (104 tests across 3.11–3.13). All 35 gRPC RPCs fully wired across `AgentService`, `HighwayService`, `CoordinatorService`. REST gateway exposes 16 `/v1/*` endpoints + `/v1/ws`. OpenAPI drift-checked in CI. Stream A (A1–A9) closed all 8 Console-facing integration gaps; the 17 runtime-side stub/placeholder gaps identified in the subsequent implementation audit are all resolved. Port map canonicalized to `9090/9091/9092/9093/9094/9095`.
 
@@ -35,7 +53,7 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 
 **Working end-to-end against a live runtime:** discovery (roles, tools, verticals, types, search), profile CRUD with validation/versioning/export/import/clone, multi-user auth (Argon2id, CSRF double-submit, rate limiting, 256-bit bootstrap credential at 0o600), session launch + oversight (trail stream, gate queue, escalation inbox, refusal panel, workspace tree, injection bar across 7 WebSocket channels), startup recovery, cross-session pending aggregation.
 
-**Not yet present (tracked, not regressions):** Playwright E2E suite (Phase 7.6–7.10), LLM-stub-dependent integration scenarios (T7.2/T7.3), CI supply-chain scanning (`cargo-deny` / SBOM / Trivy). All called out in `AUDIT-2026-04-15.md` §9–§11.
+**Not yet present (tracked, not regressions):** Playwright E2E suite (Phase 7.6–7.10), LLM-stub-dependent integration scenarios (T7.2/T7.3), and three F-series frontend workstreams (F7 session wizard, F8 rest of oversight, F10 notifications). All broken out with deliverables in `AUDIT-2026-04-15.md` §13.7. Supply-chain scanning is now landed.
 
 ### Milestone history
 
@@ -116,48 +134,56 @@ Four endpoints, three independent Tonic channels + one REST client:
 
 **Spec:** `wcon-data-model`
 
-## Next Steps: Post-audit action items + test coverage push
+## Next Steps: Close §13.7 work packages
 
-The merger (M0–M7) and wiring (W1–W7) are done. The current work item is the `AUDIT-2026-04-15.md` punch list — small pre-release items — followed by the six-week testing-coverage initiative (audit §12) that pushes each surface toward near-100% branch coverage.
+The merger (M0–M7) and wiring (W1–W7) are done. The 2026-04-15 audit's §11 pre-release punch list (items 1–5) is landed, along with §12.1 tooling, §12.2 T1–T10, and §12.3 F1–F6/F9. Remaining work is tracked as ten numbered packages in `AUDIT-2026-04-15.md` §13.7, each with status, blockers, effort, deliverables, and acceptance criterion.
 
 ### Pre-`v0.1.0` punch list (from `AUDIT-2026-04-15.md` §11)
 
-Roughly 4–6 focused hours of work plus the testing initiative:
-
-| # | Item | Effort |
+| # | Item | Status |
 |---|---|---|
-| 1 | CI — add `cargo-deny` to `ci-lint.yml` + `deny.toml` at platform root | 15 min |
-| 2 | CI — add SBOM + Trivy OCI scanning to `release-runtime.yml` + `release-console.yml` | 30 min |
-| 3 | Runtime auth — wrap post-lookup equality with `subtle::ConstantTimeEq` in `wacp/crates/wacp-transport/src/auth_api_key.rs` + `auth_session.rs`; re-key HashMap by hashed-token | 60–90 min |
-| 4 | ~~Doc fix — `wacp-console/IMPLEMENTATION.md` Phase 4.6 step names~~ — **done** (now reads `SubmitGoal → Decompose → Dispatch → envelope`) | 5 min |
-| 5 | ~~Move/cross-link `wacp/AUDIT-2026-04-12.md` so the audit trail sits alongside `AUDIT-2026-04-15.md`~~ — **done** (now at `AUDIT-2026-04-12.md`) | 5 min |
-| 6 | Schedule the LLM stub that unblocks W7 T7.2/T7.3 | separate task |
-| 7 | Plan the frontend test build-out (Phase 7.5–7.10 Playwright E2E) — tracked as part of the testing initiative below | separate initiative |
+| 1 | ~~CI — add `cargo-deny` to `ci-lint.yml` + `deny.toml` at platform root~~ | **done** — `60d2245` |
+| 2 | ~~CI — add SBOM + Trivy OCI scanning to `release-runtime.yml` + `release-console.yml`~~ | **done** — `7ba4ae8` |
+| 3 | ~~Runtime auth — wrap post-lookup equality with `subtle::ConstantTimeEq` + re-key HashMap by hashed-token~~ | **done** (exceeded spec) — `d10ed29` |
+| 4 | ~~Doc fix — `wacp-console/IMPLEMENTATION.md` Phase 4.6 step names~~ | **done** — `71b44b6` |
+| 5 | ~~Move/cross-link `wacp/AUDIT-2026-04-12.md`~~ | **done** — `71b44b6` (now at `AUDIT-2026-04-12.md`) |
+| 6 | Schedule the LLM stub that unblocks W7 T7.2/T7.3 | open — audit §13.7.6 |
+| 7 | Plan the frontend test build-out (Phase 7.5–7.10 Playwright E2E) | in progress — audit §13.7.2/3/4 (F-series) + §13.7.7 (Playwright) |
 
-### Testing coverage initiative (audit §12)
+### Testing coverage initiative (audit §12) — progress snapshot
 
-Six-week rollout, three phases:
-
-| Weeks | Phase | Deliverable |
+| Weeks | Phase | Status |
 |---|---|---|
-| 1–2 | Tooling | `cargo-llvm-cov` (Rust), Vitest `--coverage` + `@vitest/coverage-v8` (TS), `coverage --branch` (Py), Codecov with per-component flags. Thresholds start at baseline; patch ≥ 95%, project drop ≤ 0.5 pt. |
-| 3–4 | Rust branch gap | Work items T1–T11 — `wacp-tools` execution branches, `wacp-llm` provider error paths, `wacp-transport` auth variants, `wacp-security` PII edge cases, coordinator FSM, then `console-core::{session_launcher, session_monitor, recovery}`, `console-api::middleware`, `console-db`. Target: Rust branch 55 → 85%. |
-| 5–6 | Frontend + E2E | Work items F1–F10 (Zustand stores, API hooks, `useSessionStream`, auth/discovery/profiles/wizard/oversight/admin surfaces, notifications) + five Playwright golden scenarios. Requires the A9 mock runtime sidecar (shipped) and the LLM stub (§ 6 above). |
+| 1–2 | Tooling — `cargo-llvm-cov`, Vitest v8, Python `coverage --branch`, Codecov | **landed** — `7f0736b` |
+| 3–4 | Rust branch gap — T1–T10 | **landed** — `840450a` (+~9,800 lines of tests). T11 (`console-db`) remains — audit §13.7.5. |
+| 5–6 | Frontend + E2E | F1–F6 + F9 **landed** — `fe48c7b` (+~5,200 lines). F7 / rest-of-F8 / F10 remain — audit §13.7.2/3/4. Playwright scenarios not started — §13.7.7. Blocked partly on LLM stub (§13.7.6) for golden-path + multi-user. |
 
-Mutation testing (`cargo-mutants`, `stryker`) lands as a weekly job in parallel with the ratchet, scoped to the four critical modules: runtime auth path, `session_launcher`, `session_monitor`, `wacp-tools::execution`.
+Mutation testing (`cargo-mutants`, `stryker`) still pending — audit §13.7.9. Codecov monthly ratchet deferred until baseline stabilizes — audit §13.7.10.
 
-**End-state targets:** Rust 95% branch, Console frontend 95% branch, TS verticals 95% branch, Python SDK 95% branch. Full scope and per-crate/per-component work items in `AUDIT-2026-04-15.md` §12.
+**End-state targets unchanged:** Rust 95% branch, Console frontend 95% branch, TS verticals 95% branch, Python SDK 95% branch.
+
+### New workstream added this session — frontend test-execution stability
+
+Not in the original audit. Running the newly-written F-series RTL suite under `pool: "forks"` with `maxWorkers: 1` and `--max-old-space-size=6144` climbed one worker's RSS past 5 GB across files and killed WSL twice. Two fixes landed:
+
+- `wacp-console/frontend/vitest.config.ts` — `execArgv` lowered from 6144 MB to 1536 MB. Forces V8 GC pressure early; single-file leaks OOM cleanly inside vitest instead of escaping into system memory.
+- `wacp-console/frontend/scripts/run-tests-isolated.sh` + `npm run test:isolated` — per-file process isolation via a shell loop. Commits `82a4213`, `d71c4fe`, `fe48c7b` (suite itself).
+
+One outstanding known issue exposed by this work: `ProfilesPage.actions.test.tsx` OOMs inside its own per-file cap (~8 of 11 tests complete before V8 gives up). The isolated runner reports FAIL for that one file and moves on; every other file passes. Tracked as audit §13.7.1.
 
 ### Resumption Point
 
-**M0–M7 merger, W1–W7 wiring, and runtime implementation audit all complete.** HEAD at `a6773d6` on `main`. Working tree clean.
+**M0–M7 merger, W1–W7 wiring, runtime implementation audit, §11 pre-release punch list (1–5), §12.1 tooling, §12.2 T1–T10, and §12.3 F1–F6/F9 all complete.** HEAD at `5e5733b` on `main`. Working tree clean.
 
 When resuming:
-1. Read `AUDIT-2026-04-15.md` (~15 min) for current health verdict, risk inventory, and testing strategy.
-2. `cd /home/aakil98/mada/wacp-platform` and work the pre-`v0.1.0` punch list above.
-3. Kick off the testing initiative (§12 weeks 1–2 tooling first; the Rust and FE test work is gated on visibility).
-4. When the LLM stub is in place, lift the `#[ignore]` annotations on `integration/tests/` T7.2 and T7.3.
-5. Tag `wacp-runtime-v0.1.0` and `wacp-console-v0.1.0` independently once CI gains `cargo-deny` / SBOM / Trivy and the Rust branch-coverage floor clears 85%.
+1. Read `AUDIT-2026-04-15.md` §13 (~10 min) — the appendix is the authoritative record of what has landed since the audit and what remains. Skip §1–§12 unless you need the underlying rationale; those sections describe the 2026-04-15 snapshot and are largely fossilized now.
+2. `cd /home/aakil98/mada/wacp-platform` and pick a package from §13.7. The tracking table in §13.8 shows ready vs. blocked status. Recommended ordering:
+   - **Start with §13.7.1** (close the `ProfilesPage.actions.test.tsx` leak) — 30–60 min, frees the full `npm run test:isolated` run to exit green and removes the last outstanding known issue in the stability workstream.
+   - **Then any of §13.7.2 / §13.7.3 / §13.7.4** — close the F-series horizontal sweep (F7 session wizard, F8 rest of oversight, F10 notifications). Each is self-contained; order by appetite.
+   - **§13.7.5** (T11 `console-db`) is independent of the frontend work and can run in parallel.
+   - **§13.7.6** (LLM stub) unblocks §13.7.7's golden-path + multi-user Playwright scenarios and §13.7.8's I6 integration suite. Land it before attempting those.
+3. Each §13.7 package's "Acceptance criterion" is what closes it. Update the §13 status tables as items land; keep the appendix current the way §11 items got crossed off above.
+4. Tag `wacp-runtime-v0.1.0` and `wacp-console-v0.1.0` independently once the Rust branch-coverage floor clears 85 % (track via the `cargo-llvm-cov` numbers landed by `7f0736b`) and the frontend horizontal sweep is closed (§13.7.2/3/4).
 
 ### Hollow Code Inventory — closed
 
@@ -275,4 +301,4 @@ wacp-platform/
 | 11 | `wcon-test` | Test Strategy |
 | 12 | `wcon-auth` | Authentication & Authorization |
 
-*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6*
+*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6. Refreshed 2026-04-16 with post-audit progress and §13.7 task packages.*

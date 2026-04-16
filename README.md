@@ -16,7 +16,7 @@ Umbrella monorepo for the Workspace Agent Coordination Protocol (WACP) reference
 
 | Repo | Purpose | License |
 |------|---------|---------|
-| [**Madahub-dev/wacp-protocol**](https://github.com/Madahub-dev/wacp-protocol) | Authoritative protocol specification (20 specs + `PROTOCOL.md` + `TAXONOMY.md`). Deliberately kept separate; spec IDs are path-independent. | CC BY-SA 4.0 |
+| [**AAkil98/wacp-protocol**](https://github.com/AAkil98/wacp-protocol) | Authoritative protocol specification (20 specs + `PROTOCOL.md` + `TAXONOMY.md`). Deliberately kept separate; spec IDs are path-independent. | CC BY-SA 4.0 |
 
 ## Quick Start
 

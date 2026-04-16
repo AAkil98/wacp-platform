@@ -521,8 +521,9 @@ export function Wizard({ onClose }: WizardProps) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
           <div>
-            <label style={fieldLabel}>Max Cost (micros)</label>
+            <label style={fieldLabel} htmlFor="budget-max-cost">Max Cost (micros)</label>
             <input
+              id="budget-max-cost"
               type="number"
               style={inputStyle}
               placeholder="e.g. 5000000"
@@ -538,8 +539,9 @@ export function Wizard({ onClose }: WizardProps) {
           </div>
 
           <div>
-            <label style={fieldLabel}>Max Tokens</label>
+            <label style={fieldLabel} htmlFor="budget-max-tokens">Max Tokens</label>
             <input
+              id="budget-max-tokens"
               type="number"
               style={inputStyle}
               placeholder="e.g. 100000"
@@ -555,8 +557,9 @@ export function Wizard({ onClose }: WizardProps) {
           </div>
 
           <div>
-            <label style={fieldLabel}>Max Wall Time (ms)</label>
+            <label style={fieldLabel} htmlFor="budget-max-wall-time">Max Wall Time (ms)</label>
             <input
+              id="budget-max-wall-time"
               type="number"
               style={inputStyle}
               placeholder="e.g. 3600000"
@@ -633,8 +636,9 @@ export function Wizard({ onClose }: WizardProps) {
           )}
 
           <div style={{ marginTop: 16 }}>
-            <label style={fieldLabel}>Session Name (optional)</label>
+            <label style={fieldLabel} htmlFor="session-name">Session Name (optional)</label>
             <input
+              id="session-name"
               type="text"
               style={inputStyle}
               placeholder="My session"

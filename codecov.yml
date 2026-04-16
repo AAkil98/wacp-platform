@@ -1,0 +1,91 @@
+# Codecov configuration for wacp-platform.
+#
+# Implements the audit's testing-coverage initiative (AUDIT-2026-04-15.md
+# §12.7). Per-language flags carve coverage by surface so that a regression
+# in one component cannot hide behind a rise in another.
+#
+# Threshold posture (start strict on patch, sensible on project):
+#   - patch:   new lines must be ≥ 95% covered
+#   - project: project-wide may not drop more than 0.5 pt vs. main
+#
+# Threshold floor starts at the day-1 baseline (recorded in TASKS.md and
+# the artifacts produced by .github/workflows/coverage.yml on first run).
+# Monthly ratchets tighten the project floor toward the end-state targets:
+#   - Rust 95% line / 95% branch
+#   - Frontend 95% branch
+#   - Python 95% branch
+#
+# Codecov status checks block merge once the baseline has settled.
+
+codecov:
+  require_ci_to_pass: true
+  notify:
+    after_n_builds: 4
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...95"
+
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0.5%
+        if_no_uploads: error
+      rust-wacp:
+        target: auto
+        threshold: 0.5%
+        flags: [rust-wacp]
+      rust-console:
+        target: auto
+        threshold: 0.5%
+        flags: [rust-console]
+      frontend:
+        target: auto
+        threshold: 0.5%
+        flags: [frontend]
+      python:
+        target: auto
+        threshold: 0.5%
+        flags: [python]
+
+    patch:
+      default:
+        target: 95%
+        threshold: 0%
+        if_no_uploads: error
+
+flags:
+  rust-wacp:
+    paths:
+      - wacp/crates/
+    carryforward: true
+  rust-console:
+    paths:
+      - wacp-console/crates/
+    carryforward: true
+  frontend:
+    paths:
+      - wacp-console/frontend/src/
+    carryforward: true
+  python:
+    paths:
+      - wacp/sdk-python/src/
+    carryforward: true
+
+comment:
+  layout: "header, diff, flags, components, files, footer"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "**/tests/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/test-setup.ts"
+  - "**/api/types.ts"
+  - "**/main.tsx"
+  - "**/bin/gen_openapi.rs"
+  - "**/bin/gen-openapi.rs"
+  - "wacp-console/integration/**"

@@ -1,0 +1,202 @@
+name: CI — coverage
+
+# Coverage pipeline (audit AUDIT-2026-04-15.md §12).
+#
+# Three independent jobs collect line/branch coverage per language and upload
+# to Codecov with component flags. Thresholds are configured in the
+# repo-root `codecov.yml`. Day-1 baseline (recorded in TASKS.md):
+#   - wacp-transport (Rust):           ~88% line  /  ~83% region
+#   - wacp-console frontend (TS):      ~15% line  /   ~7% branch
+#   - sdk-python (Python):             unmeasured prior; this job sets the floor
+#
+# This pipeline runs on every push/PR alongside the normal CI workflows so
+# the data is fresh for every change. Codecov status checks (set via
+# `codecov.yml`) gate merges only after the project baseline has settled.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-runtime:
+    name: Coverage — wacp (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage-wacp
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run coverage
+        run: |
+          cargo llvm-cov --lcov --output-path lcov-wacp.info \
+            -p wacp-clock -p wacp-coordinator -p wacp-coordinator-sdk \
+            -p wacp-fsm -p wacp-llm -p wacp-permissions -p wacp-proto \
+            -p wacp-recovery -p wacp-runtime -p wacp-sdk -p wacp-security \
+            -p wacp-taxonomy -p wacp-tools -p wacp-trail -p wacp-transport \
+            -p wacp-types -p wacp-workspace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-wacp
+          path: lcov-wacp.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov-wacp.info
+          flags: rust-wacp
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  rust-console:
+    name: Coverage — wacp-console (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage-console
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+
+      # rust-embed scans wacp-console/frontend/dist/ at cargo-build time;
+      # build the SPA so the wacp-console binary compiles under instrumentation.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+      - name: Build frontend (for rust-embed)
+        working-directory: wacp-console/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run coverage
+        run: |
+          cargo llvm-cov --lcov --output-path lcov-console.info \
+            -p wacp-console -p console-api -p console-core \
+            -p console-db -p console-runtime -p console-test-support
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-console
+          path: lcov-console.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov-console.info
+          flags: rust-console
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  frontend:
+    name: Coverage — frontend (Vitest v8)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wacp-console/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run coverage
+        run: pnpm coverage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-frontend
+          path: wacp-console/frontend/coverage/lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: wacp-console/frontend/coverage/lcov.info
+          flags: frontend
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  python:
+    name: Coverage — sdk-python (branch)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wacp/sdk-python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: pip install -e ".[dev]" coverage[toml]
+
+      - name: Run coverage (branch)
+        run: |
+          coverage run --branch --source=src -m pytest tests/
+          coverage xml -o coverage.xml
+          coverage report
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python
+          path: wacp/sdk-python/coverage.xml
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: wacp/sdk-python/coverage.xml
+          flags: python
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

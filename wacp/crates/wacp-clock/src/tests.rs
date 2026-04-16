@@ -391,3 +391,298 @@ fn bytes_10_bytes_length() {
         );
     }
 }
+
+// ── 100% branch coverage additions ──
+
+#[test]
+fn clock_system_constructor() {
+    let clock = Clock::system();
+    assert_eq!(clock.last(), Timestamp::ZERO);
+}
+
+#[test]
+fn clock_system_produces_nonzero() {
+    let mut clock = Clock::system();
+    let ts = clock.now();
+    assert!(ts > Timestamp::ZERO, "system clock should produce nonzero timestamp");
+}
+
+#[test]
+fn timestamp_zero_constant() {
+    let zero = Timestamp::ZERO;
+    assert_eq!(zero.physical_us(), 0);
+    assert_eq!(zero.logical(), 0);
+}
+
+#[test]
+fn timestamp_new_and_accessors() {
+    let ts = Timestamp::new(42, 7);
+    assert_eq!(ts.physical_us(), 42);
+    assert_eq!(ts.logical(), 7);
+}
+
+#[test]
+fn timestamp_eq_and_ne() {
+    let a = Timestamp::new(100, 5);
+    let b = Timestamp::new(100, 5);
+    let c = Timestamp::new(100, 6);
+    let d = Timestamp::new(101, 5);
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+    assert_ne!(a, d);
+}
+
+#[test]
+fn timestamp_hash_consistency() {
+    use std::collections::HashSet;
+    let a = Timestamp::new(100, 5);
+    let b = Timestamp::new(100, 5);
+    let c = Timestamp::new(100, 6);
+    let mut set = HashSet::new();
+    set.insert(a);
+    assert!(set.contains(&b));
+    assert!(!set.contains(&c));
+    set.insert(c);
+    assert_eq!(set.len(), 2);
+}
+
+#[test]
+fn timestamp_partial_ord() {
+    let a = Timestamp::new(100, 5);
+    let b = Timestamp::new(200, 0);
+    assert!(a.partial_cmp(&b) == Some(std::cmp::Ordering::Less));
+    assert!(b.partial_cmp(&a) == Some(std::cmp::Ordering::Greater));
+    assert!(a.partial_cmp(&a) == Some(std::cmp::Ordering::Equal));
+}
+
+#[test]
+fn timestamp_ord_same_physical_different_logical() {
+    let a = Timestamp::new(100, 0);
+    let b = Timestamp::new(100, 1);
+    let c = Timestamp::new(100, u16::MAX);
+    assert!(a < b);
+    assert!(b < c);
+    assert!(a < c);
+}
+
+#[test]
+fn timestamp_display_zero() {
+    assert_eq!(Timestamp::ZERO.to_string(), "0.0");
+}
+
+#[test]
+fn timestamp_display_large_values() {
+    let ts = Timestamp::new(u64::MAX, u16::MAX);
+    let s = ts.to_string();
+    assert!(s.contains(&u64::MAX.to_string()));
+    assert!(s.contains(&u16::MAX.to_string()));
+}
+
+#[test]
+fn timestamp_debug() {
+    let ts = Timestamp::new(100, 42);
+    let dbg = format!("{ts:?}");
+    assert!(dbg.contains("100"));
+    assert!(dbg.contains("42"));
+}
+
+#[test]
+fn timestamp_clone_copy() {
+    let ts = Timestamp::new(100, 42);
+    let cloned = ts;
+    let copied: Timestamp = ts;
+    assert_eq!(ts, cloned);
+    assert_eq!(ts, copied);
+}
+
+#[test]
+fn manual_time_source_advance_zero() {
+    let src = ManualTimeSource::new(100);
+    src.advance(0);
+    assert_eq!(src.now_us(), 100);
+}
+
+#[test]
+fn manual_time_source_advance_large() {
+    let src = ManualTimeSource::new(0);
+    src.advance(u64::MAX);
+    assert_eq!(src.now_us(), u64::MAX);
+}
+
+#[test]
+fn manual_time_source_set_to_zero() {
+    let src = ManualTimeSource::new(1000);
+    src.set(0);
+    assert_eq!(src.now_us(), 0);
+}
+
+#[test]
+fn clock_now_zero_duration_no_advance() {
+    let mut clock = manual_clock(1000);
+    let a = clock.now();
+    // No time passes: logical increments.
+    let b = clock.now();
+    assert_eq!(a.physical_us(), b.physical_us());
+    assert_eq!(b.logical(), a.logical() + 1);
+}
+
+#[test]
+fn clock_now_after_physical_advance_resets_logical() {
+    let source = ManualTimeSource::new(1000);
+    let mut clock = Clock::new(source);
+    let _ = clock.now(); // (1000, 0)
+    let _ = clock.now(); // (1000, 1)
+    let _ = clock.now(); // (1000, 2)
+
+    clock.time_source.set(2000);
+    let ts = clock.now();
+    assert_eq!(ts.physical_us(), 2000);
+    assert_eq!(ts.logical(), 0, "logical should reset when physical advances");
+}
+
+#[test]
+fn clock_monotonicity_across_many_ticks() {
+    let mut clock = manual_clock(1000);
+    let mut prev = clock.now();
+    for _ in 0..1000 {
+        let next = clock.now();
+        assert!(next > prev, "clock must be strictly monotonic: {prev} >= {next}");
+        prev = next;
+    }
+}
+
+#[test]
+fn clock_send_then_recv() {
+    let source = ManualTimeSource::new(1000);
+    let mut clock = Clock::new(source);
+    let sent = clock.send();
+
+    let remote = Timestamp::new(1500, 0);
+    let received = clock.recv(remote);
+
+    assert!(received > sent);
+    assert!(received > remote);
+}
+
+#[test]
+fn recv_with_zero_remote() {
+    let mut clock = manual_clock(1000);
+    let _ = clock.now(); // (1000, 0)
+
+    let remote = Timestamp::ZERO;
+    let merged = clock.recv(remote);
+    // Local physical (1000) > last.physical (1000)? No, equal.
+    // Local physical (1000) > remote.physical (0)? Yes.
+    // But max_physical = max(1000, 1000, 0) = 1000 = last.physical.
+    // So last.logical.saturating_add(1) = 1.
+    assert_eq!(merged.physical_us(), 1000);
+    assert!(merged.logical() >= 1);
+}
+
+#[test]
+fn recv_when_local_physical_advanced_beyond_both() {
+    let source = ManualTimeSource::new(100);
+    let mut clock = Clock::new(source);
+    let _ = clock.now(); // (100, 0)
+
+    // Advance local time far ahead.
+    clock.time_source.set(9999);
+    let remote = Timestamp::new(500, 10);
+    let merged = clock.recv(remote);
+
+    // local_physical=9999 > last.physical=100 && > remote.physical=500 → logical=0.
+    assert_eq!(merged.physical_us(), 9999);
+    assert_eq!(merged.logical(), 0);
+}
+
+#[test]
+fn recv_when_all_three_physical_different() {
+    // last.physical < remote.physical < local_physical
+    let source = ManualTimeSource::new(300);
+    let mut clock = Clock::new(source);
+    let _ = clock.now(); // last = (300, 0)
+
+    clock.time_source.set(500);
+    let remote = Timestamp::new(400, 10);
+    let merged = clock.recv(remote);
+
+    // max_physical = max(500, 300, 400) = 500 = local_physical
+    // 500 > last.physical(300) && 500 > remote.physical(400) → logical = 0
+    assert_eq!(merged.physical_us(), 500);
+    assert_eq!(merged.logical(), 0);
+}
+
+#[test]
+fn recv_last_returns_most_recent() {
+    let mut clock = manual_clock(1000);
+    assert_eq!(clock.last(), Timestamp::ZERO);
+
+    let a = clock.now();
+    assert_eq!(clock.last(), a);
+
+    let b = clock.send();
+    assert_eq!(clock.last(), b);
+
+    let remote = Timestamp::new(2000, 0);
+    let c = clock.recv(remote);
+    assert_eq!(clock.last(), c);
+}
+
+#[test]
+fn with_initial_preserves_state() {
+    let initial = Timestamp::new(5000, 100);
+    let clock = Clock::with_initial(ManualTimeSource::new(5000), initial);
+    assert_eq!(clock.last(), initial);
+}
+
+#[test]
+fn succ_chain() {
+    let mut ts = Timestamp::new(100, 0);
+    for i in 1..=10u16 {
+        ts = ts.succ();
+        assert_eq!(ts.logical(), i);
+        assert_eq!(ts.physical_us(), 100);
+    }
+}
+
+#[test]
+fn bytes_all_zeros() {
+    let bytes = [0u8; 10];
+    let ts = Timestamp::from_bytes(bytes);
+    assert_eq!(ts, Timestamp::ZERO);
+}
+
+#[test]
+fn bytes_specific_pattern() {
+    // Physical = 1 (big-endian), logical = 1 (big-endian).
+    let mut bytes = [0u8; 10];
+    bytes[7] = 1; // physical_us = 1
+    bytes[9] = 1; // logical = 1
+    let ts = Timestamp::from_bytes(bytes);
+    assert_eq!(ts.physical_us(), 1);
+    assert_eq!(ts.logical(), 1);
+}
+
+#[test]
+fn serde_roundtrip() {
+    let ts = Timestamp::new(123456789, 42);
+    let json = serde_json::to_string(&ts).unwrap();
+    let back: Timestamp = serde_json::from_str(&json).unwrap();
+    assert_eq!(ts, back);
+}
+
+#[test]
+fn serde_zero() {
+    let ts = Timestamp::ZERO;
+    let json = serde_json::to_string(&ts).unwrap();
+    let back: Timestamp = serde_json::from_str(&json).unwrap();
+    assert_eq!(ts, back);
+}
+
+#[test]
+fn serde_max_values() {
+    let ts = Timestamp::new(u64::MAX, u16::MAX);
+    let json = serde_json::to_string(&ts).unwrap();
+    let back: Timestamp = serde_json::from_str(&json).unwrap();
+    assert_eq!(ts, back);
+}

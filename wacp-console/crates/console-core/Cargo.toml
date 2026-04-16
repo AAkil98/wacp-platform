@@ -30,3 +30,5 @@ console-test-support = { workspace = true }
 rstest = { workspace = true }
 insta = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }
+wacp-proto = { workspace = true }

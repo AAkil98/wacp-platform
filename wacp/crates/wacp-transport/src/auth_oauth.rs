@@ -255,4 +255,259 @@ mod tests {
         let identity = auth.authenticate_agent(&token, &ws).unwrap();
         assert_eq!(identity.role, "worker");
     }
+
+    // ── Branch-coverage: decode_jwt and validate_jwt edge cases ──
+
+    #[test]
+    fn jwt_with_no_parts_rejected() {
+        let auth = OAuthAuthenticator::new("issuer", "audience");
+        assert!(matches!(
+            auth.authenticate_human("nodotsatall"),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_two_parts_rejected() {
+        let auth = OAuthAuthenticator::new("issuer", "audience");
+        assert!(matches!(
+            auth.authenticate_human("only.two"),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_four_parts_rejected() {
+        let auth = OAuthAuthenticator::new("issuer", "audience");
+        assert!(matches!(
+            auth.authenticate_human("one.two.three.four"),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_invalid_base64_payload() {
+        let auth = OAuthAuthenticator::new("issuer", "audience");
+        // Valid header, invalid base64 in payload, empty signature.
+        let header = URL_SAFE_NO_PAD.encode(b"{\"alg\":\"none\"}");
+        let token = format!("{header}.!!!invalid-base64!!!.");
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_invalid_json_payload() {
+        let auth = OAuthAuthenticator::new("issuer", "audience");
+        let header = URL_SAFE_NO_PAD.encode(b"{\"alg\":\"none\"}");
+        // Valid base64 but not valid JSON.
+        let payload = URL_SAFE_NO_PAD.encode(b"not json at all");
+        let token = format!("{header}.{payload}.");
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_empty_payload_uses_defaults() {
+        // An empty JSON object {} means all claims default to empty/zero.
+        let auth = OAuthAuthenticator::new("", "");
+        let token = make_test_jwt(&json!({}));
+        // iss="" matches, aud="" matches, exp=0 which is in the past.
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken) // expired (exp=0 < now)
+        ));
+    }
+
+    #[test]
+    fn jwt_missing_sub_returns_empty_user_id() {
+        // When sub is missing, it defaults to "".
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let token = make_test_jwt(&json!({
+            "iss": "iss",
+            "aud": "aud",
+            "exp": future_exp(),
+        }));
+        let user = auth.authenticate_human(&token).unwrap();
+        assert_eq!(user, UserId::from(""));
+    }
+
+    #[test]
+    fn jwt_exp_exactly_now() {
+        // exp == now should NOT expire (the check is `exp < now`).
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = make_test_jwt(&json!({
+            "sub": "user-1",
+            "iss": "iss",
+            "aud": "aud",
+            "exp": now + 2, // small buffer to avoid race
+        }));
+        assert!(auth.authenticate_human(&token).is_ok());
+    }
+
+    #[test]
+    fn jwt_exp_zero_always_expired() {
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let token = make_test_jwt(&json!({
+            "sub": "user-1",
+            "iss": "iss",
+            "aud": "aud",
+            "exp": 0,
+        }));
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_exp_missing_defaults_to_zero() {
+        // When exp is missing from the payload, it defaults to 0 (always expired).
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let token = make_test_jwt(&json!({
+            "sub": "user-1",
+            "iss": "iss",
+            "aud": "aud",
+        }));
+        assert!(matches!(
+            auth.authenticate_human(&token),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn agent_auth_expired_jwt_rejected() {
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let token = make_test_jwt(&json!({
+            "sub": "agent-1",
+            "iss": "iss",
+            "aud": "aud",
+            "exp": past_exp(),
+        }));
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent(&token, &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn agent_auth_wrong_issuer_rejected() {
+        let auth = OAuthAuthenticator::new("correct-issuer", "aud");
+        let token = make_test_jwt(&json!({
+            "sub": "agent-1",
+            "iss": "wrong-issuer",
+            "aud": "aud",
+            "exp": future_exp(),
+        }));
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent(&token, &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn agent_auth_wrong_audience_rejected() {
+        let auth = OAuthAuthenticator::new("iss", "correct-audience");
+        let token = make_test_jwt(&json!({
+            "sub": "agent-1",
+            "iss": "iss",
+            "aud": "wrong-audience",
+            "exp": future_exp(),
+        }));
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent(&token, &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn agent_auth_invalid_structure_rejected() {
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent("not-a-jwt", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn agent_auth_uses_provided_workspace_id() {
+        // The authenticate_agent method should use the provided workspace_id,
+        // not extract it from the token.
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        let token = make_test_jwt(&json!({
+            "sub": "agent-1",
+            "iss": "iss",
+            "aud": "aud",
+            "exp": future_exp(),
+            "role": "observer",
+        }));
+
+        let ws1 = WorkspaceId::from("ws-alpha");
+        let id1 = auth.authenticate_agent(&token, &ws1).unwrap();
+        assert_eq!(id1.workspace_id, ws1);
+
+        let ws2 = WorkspaceId::from("ws-beta");
+        let id2 = auth.authenticate_agent(&token, &ws2).unwrap();
+        assert_eq!(id2.workspace_id, ws2);
+    }
+
+    #[test]
+    fn empty_string_token_rejected() {
+        let auth = OAuthAuthenticator::new("iss", "aud");
+        assert!(matches!(
+            auth.authenticate_human(""),
+            Err(AuthError::InvalidToken)
+        ));
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent("", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn jwt_with_non_string_claims() {
+        // Numeric sub, numeric iss, etc. should fall through to defaults.
+        let auth = OAuthAuthenticator::new("", "");
+        let token = make_test_jwt(&json!({
+            "sub": 12345,
+            "iss": true,
+            "aud": null,
+            "exp": future_exp(),
+        }));
+        // sub=12345 (number, not string) -> defaults to ""
+        // iss=true (bool, not string) -> defaults to ""
+        // aud=null -> defaults to ""
+        // issuer="" matches "", audience="" matches ""
+        let user = auth.authenticate_human(&token).unwrap();
+        assert_eq!(user, UserId::from(""));
+    }
+
+    #[test]
+    fn decode_jwt_directly_invalid_structure() {
+        assert!(decode_jwt("").is_err());
+        assert!(decode_jwt("a").is_err());
+        assert!(decode_jwt("a.b").is_err());
+        assert!(decode_jwt("a.b.c.d").is_err());
+    }
+
+    #[test]
+    fn make_test_jwt_produces_three_part_token() {
+        let token = make_test_jwt(&json!({"sub": "test"}));
+        let parts: Vec<&str> = token.split('.').collect();
+        assert_eq!(parts.len(), 3);
+        // Signature part should be empty.
+        assert!(parts[2].is_empty());
+    }
 }

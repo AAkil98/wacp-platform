@@ -1240,3 +1240,528 @@ fn terminal_state_count() {
         assert!(!s.is_terminal(), "{s:?} should not be terminal");
     }
 }
+
+// ── 100% branch coverage additions ──
+
+#[test]
+fn transition_error_clone() {
+    let err = TransitionError::IllegalTransition {
+        state: "Active".into(),
+        trigger: "AgentReady".into(),
+    };
+    let cloned = err.clone();
+    assert_eq!(format!("{err}"), format!("{cloned}"));
+
+    let err2 = TransitionError::TerminalState {
+        state: "Closed".into(),
+    };
+    let cloned2 = err2.clone();
+    assert_eq!(format!("{err2}"), format!("{cloned2}"));
+}
+
+#[test]
+fn transition_error_debug_format() {
+    let err = TransitionError::IllegalTransition {
+        state: "S".into(),
+        trigger: "T".into(),
+    };
+    let dbg = format!("{err:?}");
+    assert!(dbg.contains("IllegalTransition"));
+    assert!(dbg.contains("S"));
+    assert!(dbg.contains("T"));
+
+    let err2 = TransitionError::TerminalState {
+        state: "Closed".into(),
+    };
+    let dbg2 = format!("{err2:?}");
+    assert!(dbg2.contains("TerminalState"));
+    assert!(dbg2.contains("Closed"));
+}
+
+#[test]
+fn workspace_trigger_debug() {
+    let triggers = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in triggers {
+        let dbg = format!("{t:?}");
+        assert!(!dbg.is_empty(), "WorkspaceTrigger debug should be non-empty");
+    }
+}
+
+#[test]
+fn envelope_trigger_debug() {
+    let triggers = [
+        EnvelopeTrigger::Submit,
+        EnvelopeTrigger::ValidationPassed,
+        EnvelopeTrigger::ValidationFailed,
+        EnvelopeTrigger::Deliver,
+        EnvelopeTrigger::Acknowledge,
+    ];
+    for t in triggers {
+        let dbg = format!("{t:?}");
+        assert!(!dbg.is_empty(), "EnvelopeTrigger debug should be non-empty");
+    }
+}
+
+#[test]
+fn task_trigger_debug() {
+    let triggers = [
+        TaskTrigger::Approve,
+        TaskTrigger::Assign,
+        TaskTrigger::Start,
+        TaskTrigger::Complete,
+        TaskTrigger::Fail,
+        TaskTrigger::Integrate,
+        TaskTrigger::Cancel,
+    ];
+    for t in triggers {
+        let dbg = format!("{t:?}");
+        assert!(!dbg.is_empty(), "TaskTrigger debug should be non-empty");
+    }
+}
+
+#[test]
+fn workspace_trigger_clone_copy() {
+    let t = WorkspaceTrigger::AgentReady;
+    let cloned = t;
+    let copied: WorkspaceTrigger = t;
+    assert_eq!(format!("{t:?}"), format!("{cloned:?}"));
+    assert_eq!(format!("{t:?}"), format!("{copied:?}"));
+}
+
+#[test]
+fn envelope_trigger_clone_copy() {
+    let t = EnvelopeTrigger::Submit;
+    let cloned = t;
+    let copied: EnvelopeTrigger = t;
+    assert_eq!(format!("{t:?}"), format!("{cloned:?}"));
+    assert_eq!(format!("{t:?}"), format!("{copied:?}"));
+}
+
+#[test]
+fn task_trigger_clone_copy() {
+    let t = TaskTrigger::Approve;
+    let cloned = t;
+    let copied: TaskTrigger = t;
+    assert_eq!(format!("{t:?}"), format!("{cloned:?}"));
+    assert_eq!(format!("{t:?}"), format!("{copied:?}"));
+}
+
+#[test]
+fn ws_active_to_failed_agent_failed() {
+    assert_eq!(
+        ws(WorkspaceState::Active, WorkspaceTrigger::AgentFailed).unwrap(),
+        WorkspaceState::Failed
+    );
+}
+
+#[test]
+fn ws_blocked_to_migrating() {
+    assert_eq!(
+        ws(WorkspaceState::Blocked, WorkspaceTrigger::CoordinatorMigrate).unwrap(),
+        WorkspaceState::Migrating
+    );
+}
+
+#[test]
+fn ws_blocked_to_suspended() {
+    assert_eq!(
+        ws(WorkspaceState::Blocked, WorkspaceTrigger::CoordinatorSuspend).unwrap(),
+        WorkspaceState::Suspended
+    );
+}
+
+#[test]
+fn ws_idle_to_failed_budget() {
+    assert_eq!(
+        ws(WorkspaceState::Idle, WorkspaceTrigger::BudgetExceeded).unwrap(),
+        WorkspaceState::Failed
+    );
+}
+
+#[test]
+fn task_cancel_from_pending() {
+    assert_eq!(
+        task(TaskStatus::Pending, TaskTrigger::Cancel).unwrap(),
+        TaskStatus::Cancelled
+    );
+}
+
+#[test]
+fn task_cancel_from_assigned() {
+    assert_eq!(
+        task(TaskStatus::Assigned, TaskTrigger::Cancel).unwrap(),
+        TaskStatus::Cancelled
+    );
+}
+
+#[test]
+fn task_completed_to_failed() {
+    assert_eq!(
+        task(TaskStatus::Completed, TaskTrigger::Fail).unwrap(),
+        TaskStatus::Failed
+    );
+}
+
+#[test]
+fn task_illegal_from_draft() {
+    // Draft can only Approve or Cancel; other triggers are illegal.
+    for t in [
+        TaskTrigger::Assign,
+        TaskTrigger::Start,
+        TaskTrigger::Complete,
+        TaskTrigger::Fail,
+        TaskTrigger::Integrate,
+    ] {
+        assert!(
+            matches!(
+                task(TaskStatus::Draft, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Draft + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn task_illegal_from_completed() {
+    // Completed can Integrate or Fail; everything else is illegal.
+    for t in [
+        TaskTrigger::Approve,
+        TaskTrigger::Assign,
+        TaskTrigger::Start,
+        TaskTrigger::Complete,
+        TaskTrigger::Cancel,
+    ] {
+        assert!(
+            matches!(
+                task(TaskStatus::Completed, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Completed + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn env_illegal_from_validated() {
+    // Validated can only Deliver; everything else is illegal.
+    for t in [
+        EnvelopeTrigger::Submit,
+        EnvelopeTrigger::ValidationPassed,
+        EnvelopeTrigger::ValidationFailed,
+        EnvelopeTrigger::Acknowledge,
+    ] {
+        assert!(
+            matches!(
+                env(EnvelopeState::Validated, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Validated + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn env_illegal_from_delivered() {
+    // Delivered can only Acknowledge; everything else is illegal.
+    for t in [
+        EnvelopeTrigger::Submit,
+        EnvelopeTrigger::ValidationPassed,
+        EnvelopeTrigger::ValidationFailed,
+        EnvelopeTrigger::Deliver,
+    ] {
+        assert!(
+            matches!(
+                env(EnvelopeState::Delivered, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Delivered + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_multi_step_happy_path() {
+    // Walk the full happy path: Idle -> Active -> Integrating -> Closed.
+    let mut state = WorkspaceState::Idle;
+    state = ws(state, WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+    state = ws(state, WorkspaceTrigger::AgentComplete).unwrap();
+    assert_eq!(state, WorkspaceState::Integrating);
+    state = ws(state, WorkspaceTrigger::IntegrationSucceeded).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+    // Terminal — any trigger is rejected.
+    assert!(ws(state, WorkspaceTrigger::AgentReady).is_err());
+}
+
+#[test]
+fn ws_multi_step_block_resume_path() {
+    // Idle -> Active -> Blocked -> Active -> Integrating -> Conflicted -> Closed.
+    let mut state = WorkspaceState::Idle;
+    state = ws(state, WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    state = ws(state, WorkspaceTrigger::AgentBlocked).unwrap();
+    assert_eq!(state, WorkspaceState::Blocked);
+    state = ws(state, WorkspaceTrigger::AgentStarted).unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+    state = ws(state, WorkspaceTrigger::AgentComplete).unwrap();
+    state = ws(state, WorkspaceTrigger::ConflictDetected).unwrap();
+    assert_eq!(state, WorkspaceState::Conflicted);
+    state = ws(state, WorkspaceTrigger::ConflictResolved).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+}
+
+#[test]
+fn ws_multi_step_suspend_resume_path() {
+    // Idle -> Active -> Suspended -> Active -> Integrating -> Closed.
+    let mut state = WorkspaceState::Idle;
+    state = ws(state, WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    state = ws(state, WorkspaceTrigger::CoordinatorSuspend).unwrap();
+    assert_eq!(state, WorkspaceState::Suspended);
+    state = ws(state, WorkspaceTrigger::CoordinatorResume).unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+    state = ws(state, WorkspaceTrigger::AgentComplete).unwrap();
+    state = ws(state, WorkspaceTrigger::IntegrationSucceeded).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+}
+
+#[test]
+fn ws_multi_step_migration_path() {
+    // Idle -> Active -> Migrating -> Active -> Integrating -> Closed.
+    let mut state = WorkspaceState::Idle;
+    state = ws(state, WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    state = ws(state, WorkspaceTrigger::CoordinatorMigrate).unwrap();
+    assert_eq!(state, WorkspaceState::Migrating);
+    state = ws(state, WorkspaceTrigger::MigrationSucceeded).unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+    state = ws(state, WorkspaceTrigger::AgentComplete).unwrap();
+    state = ws(state, WorkspaceTrigger::IntegrationSucceeded).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+}
+
+#[test]
+fn task_multi_step_happy_path() {
+    // Draft -> Pending -> Assigned -> InProgress -> Completed -> Integrated.
+    let mut state = TaskStatus::Draft;
+    state = task(state, TaskTrigger::Approve).unwrap();
+    assert_eq!(state, TaskStatus::Pending);
+    state = task(state, TaskTrigger::Assign).unwrap();
+    assert_eq!(state, TaskStatus::Assigned);
+    state = task(state, TaskTrigger::Start).unwrap();
+    assert_eq!(state, TaskStatus::InProgress);
+    state = task(state, TaskTrigger::Complete).unwrap();
+    assert_eq!(state, TaskStatus::Completed);
+    state = task(state, TaskTrigger::Integrate).unwrap();
+    assert_eq!(state, TaskStatus::Integrated);
+    assert!(task(state, TaskTrigger::Approve).is_err());
+}
+
+#[test]
+fn task_multi_step_fail_and_retry_path() {
+    // Draft -> Pending -> Assigned -> InProgress -> Failed -> Assigned -> InProgress -> Completed -> Integrated.
+    let mut state = TaskStatus::Draft;
+    state = task(state, TaskTrigger::Approve).unwrap();
+    state = task(state, TaskTrigger::Assign).unwrap();
+    state = task(state, TaskTrigger::Start).unwrap();
+    state = task(state, TaskTrigger::Fail).unwrap();
+    assert_eq!(state, TaskStatus::Failed);
+    state = task(state, TaskTrigger::Assign).unwrap();
+    assert_eq!(state, TaskStatus::Assigned);
+    state = task(state, TaskTrigger::Start).unwrap();
+    state = task(state, TaskTrigger::Complete).unwrap();
+    state = task(state, TaskTrigger::Integrate).unwrap();
+    assert_eq!(state, TaskStatus::Integrated);
+}
+
+#[test]
+fn env_multi_step_happy_path() {
+    // Created -> Validated -> Delivered -> Acknowledged.
+    let mut state = EnvelopeState::Created;
+    state = env(state, EnvelopeTrigger::ValidationPassed).unwrap();
+    assert_eq!(state, EnvelopeState::Validated);
+    state = env(state, EnvelopeTrigger::Deliver).unwrap();
+    assert_eq!(state, EnvelopeState::Delivered);
+    state = env(state, EnvelopeTrigger::Acknowledge).unwrap();
+    assert_eq!(state, EnvelopeState::Acknowledged);
+    assert!(env(state, EnvelopeTrigger::Submit).is_err());
+}
+
+#[test]
+fn env_multi_step_rejection_path() {
+    // Created -> Rejected (terminal).
+    let mut state = EnvelopeState::Created;
+    state = env(state, EnvelopeTrigger::ValidationFailed).unwrap();
+    assert_eq!(state, EnvelopeState::Rejected);
+    assert!(env(state, EnvelopeTrigger::ValidationPassed).is_err());
+}
+
+#[test]
+fn ws_conflicted_unresolvable_to_failed() {
+    // Ensure ConflictUnresolvable correctly transitions to Failed.
+    assert_eq!(
+        ws(
+            WorkspaceState::Conflicted,
+            WorkspaceTrigger::ConflictUnresolvable
+        )
+        .unwrap(),
+        WorkspaceState::Failed
+    );
+}
+
+#[test]
+fn ws_all_illegal_from_integrating() {
+    // Every trigger that is NOT IntegrationSucceeded, IntegrationFailed, or ConflictDetected.
+    let illegal = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(
+                ws(WorkspaceState::Integrating, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Integrating + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_all_illegal_from_conflicted() {
+    // Every trigger that is NOT ConflictResolved or ConflictUnresolvable.
+    let illegal = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(
+                ws(WorkspaceState::Conflicted, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Conflicted + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_all_illegal_from_suspended() {
+    // Suspended: only CoordinatorResume and CoordinatorAbort are valid.
+    let illegal = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(
+                ws(WorkspaceState::Suspended, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Suspended + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_all_illegal_from_migrating() {
+    // Migrating: only MigrationSucceeded, MigrationSucceededBlocked, MigrationFailed, CoordinatorAbort.
+    let illegal = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in illegal {
+        assert!(
+            matches!(
+                ws(WorkspaceState::Migrating, t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Migrating + {t:?} should be IllegalTransition"
+        );
+    }
+}

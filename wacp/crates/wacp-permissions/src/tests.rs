@@ -907,3 +907,670 @@ fn empty_engine_denies_unknown_role() {
         "unknown role 'ghost' should be denied checkpoint creation"
     );
 }
+
+// ── 100% branch coverage additions ──
+
+// --- PermissionDenied display and clone ---
+
+#[test]
+fn permission_denied_display_not_in_matrix() {
+    let err = PermissionDenied::NotInPermissionMatrix {
+        rule: "test-rule".into(),
+    };
+    let display = format!("{err}");
+    assert!(display.contains("test-rule"));
+    assert!(display.contains("not in permission matrix"));
+}
+
+#[test]
+fn permission_denied_display_no_port_right() {
+    let err = PermissionDenied::NoPortRight {
+        rule: "port-test".into(),
+    };
+    let display = format!("{err}");
+    assert!(display.contains("port-test"));
+    assert!(display.contains("no port right"));
+}
+
+#[test]
+fn permission_denied_display_checkpoint_not_permitted() {
+    let err = PermissionDenied::CheckpointTypeNotPermitted {
+        rule: "ckpt-rule".into(),
+    };
+    let display = format!("{err}");
+    assert!(display.contains("ckpt-rule"));
+    assert!(display.contains("checkpoint type not permitted"));
+}
+
+#[test]
+fn permission_denied_display_signal_not_permitted() {
+    let err = PermissionDenied::SignalTypeNotPermitted {
+        rule: "sig-rule".into(),
+    };
+    let display = format!("{err}");
+    assert!(display.contains("sig-rule"));
+    assert!(display.contains("signal type not permitted"));
+}
+
+#[test]
+fn permission_denied_clone_and_eq() {
+    let err = PermissionDenied::NotInPermissionMatrix {
+        rule: "test".into(),
+    };
+    let cloned = err.clone();
+    assert_eq!(err, cloned);
+
+    let err2 = PermissionDenied::NoPortRight {
+        rule: "test".into(),
+    };
+    assert_ne!(err, err2);
+}
+
+#[test]
+fn permission_denied_debug() {
+    let variants = [
+        PermissionDenied::NotInPermissionMatrix {
+            rule: "a".into(),
+        },
+        PermissionDenied::NoPortRight {
+            rule: "b".into(),
+        },
+        PermissionDenied::CheckpointTypeNotPermitted {
+            rule: "c".into(),
+        },
+        PermissionDenied::SignalTypeNotPermitted {
+            rule: "d".into(),
+        },
+    ];
+    for v in &variants {
+        let dbg = format!("{v:?}");
+        assert!(!dbg.is_empty());
+    }
+}
+
+// --- Action debug ---
+
+#[test]
+fn action_debug_send_envelope() {
+    let action = Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("a"),
+        receiver_workspace: &ws("b"),
+        origin: EnvelopeOrigin::Agent,
+    };
+    let dbg = format!("{action:?}");
+    assert!(dbg.contains("SendEnvelope"));
+    assert!(dbg.contains("coordinator"));
+}
+
+#[test]
+fn action_debug_create_checkpoint() {
+    let action = Action::CreateCheckpoint {
+        role: "worker",
+        checkpoint_type: "artifact",
+    };
+    let dbg = format!("{action:?}");
+    assert!(dbg.contains("CreateCheckpoint"));
+    assert!(dbg.contains("worker"));
+}
+
+#[test]
+fn action_debug_emit_signal() {
+    let action = Action::EmitSignal {
+        role: "observer",
+        signal_type: SignalType::Ready,
+    };
+    let dbg = format!("{action:?}");
+    assert!(dbg.contains("EmitSignal"));
+    assert!(dbg.contains("observer"));
+}
+
+// --- Signal types exhaustive per role ---
+
+#[test]
+fn coordinator_full_signal_matrix() {
+    let e = base_engine();
+    let allowed = [
+        SignalType::Ready,
+        SignalType::Started,
+        SignalType::Failed,
+        SignalType::Integrate,
+        SignalType::Acknowledged,
+    ];
+    let denied = [
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Complete,
+        SignalType::Escalation,
+        SignalType::Suspend,
+        SignalType::Migrate,
+    ];
+    for st in allowed {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "coordinator",
+                signal_type: st,
+            })
+            .is_ok(),
+            "coordinator should emit {st:?}"
+        );
+    }
+    for st in denied {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "coordinator",
+                signal_type: st,
+            })
+            .is_err(),
+            "coordinator should NOT emit {st:?}"
+        );
+    }
+}
+
+#[test]
+fn worker_full_signal_matrix() {
+    let e = base_engine();
+    let allowed = [
+        SignalType::Ready,
+        SignalType::Started,
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Complete,
+        SignalType::Failed,
+        SignalType::Escalation,
+    ];
+    let denied = [
+        SignalType::Integrate,
+        SignalType::Acknowledged,
+        SignalType::Suspend,
+        SignalType::Migrate,
+    ];
+    for st in allowed {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "worker",
+                signal_type: st,
+            })
+            .is_ok(),
+            "worker should emit {st:?}"
+        );
+    }
+    for st in denied {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "worker",
+                signal_type: st,
+            })
+            .is_err(),
+            "worker should NOT emit {st:?}"
+        );
+    }
+}
+
+#[test]
+fn observer_full_signal_matrix() {
+    let e = base_engine();
+    let allowed = [
+        SignalType::Ready,
+        SignalType::Started,
+        SignalType::Complete,
+        SignalType::Failed,
+        SignalType::Escalation,
+    ];
+    let denied = [
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Integrate,
+        SignalType::Acknowledged,
+        SignalType::Suspend,
+        SignalType::Migrate,
+    ];
+    for st in allowed {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "observer",
+                signal_type: st,
+            })
+            .is_ok(),
+            "observer should emit {st:?}"
+        );
+    }
+    for st in denied {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "observer",
+                signal_type: st,
+            })
+            .is_err(),
+            "observer should NOT emit {st:?}"
+        );
+    }
+}
+
+// --- All signal types tested for all roles (11 signals x 3 base roles = 33 pairs) ---
+
+#[test]
+fn exhaustive_signal_role_matrix() {
+    let e = base_engine();
+    let all_signals = [
+        SignalType::Ready,
+        SignalType::Started,
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Complete,
+        SignalType::Failed,
+        SignalType::Integrate,
+        SignalType::Acknowledged,
+        SignalType::Escalation,
+        SignalType::Suspend,
+        SignalType::Migrate,
+    ];
+    let roles = ["coordinator", "worker", "observer"];
+
+    let mut total_allowed = 0;
+    let mut total_denied = 0;
+    for role in roles {
+        for st in all_signals {
+            let result = e.evaluate(&Action::EmitSignal {
+                role,
+                signal_type: st,
+            });
+            if result.is_ok() {
+                total_allowed += 1;
+            } else {
+                total_denied += 1;
+                assert!(matches!(
+                    result,
+                    Err(PermissionDenied::SignalTypeNotPermitted { .. })
+                ));
+            }
+        }
+    }
+    // coordinator: 5 allowed, 6 denied
+    // worker: 7 allowed, 4 denied
+    // observer: 5 allowed, 6 denied
+    assert_eq!(total_allowed, 17, "expected 17 allowed signal/role combos");
+    assert_eq!(total_denied, 16, "expected 16 denied signal/role combos");
+}
+
+// --- Checkpoint exhaustive ---
+
+#[test]
+fn checkpoint_coordinator_cannot_create_artifact() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::CreateCheckpoint {
+        role: "coordinator",
+        checkpoint_type: "artifact",
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+    ));
+}
+
+#[test]
+fn checkpoint_coordinator_cannot_create_observation() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::CreateCheckpoint {
+        role: "coordinator",
+        checkpoint_type: "observation",
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+    ));
+}
+
+#[test]
+fn checkpoint_worker_cannot_create_observation() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::CreateCheckpoint {
+        role: "worker",
+        checkpoint_type: "observation",
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+    ));
+}
+
+#[test]
+fn checkpoint_observer_cannot_create_artifact() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::CreateCheckpoint {
+        role: "observer",
+        checkpoint_type: "artifact",
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+    ));
+}
+
+#[test]
+fn checkpoint_unknown_type_denied_for_all_roles() {
+    let e = base_engine();
+    for role in ["coordinator", "worker", "observer"] {
+        let result = e.evaluate(&Action::CreateCheckpoint {
+            role,
+            checkpoint_type: "nonexistent",
+        });
+        assert!(
+            matches!(
+                result,
+                Err(PermissionDenied::CheckpointTypeNotPermitted { .. })
+            ),
+            "{role} should be denied unknown checkpoint type"
+        );
+    }
+}
+
+// --- Port rights edge cases ---
+
+#[test]
+fn consume_send_once_nonexistent_holder() {
+    let mut e = base_engine();
+    // No grants at all for this workspace.
+    assert!(!e.consume_send_once(&ws("unknown"), &ws("target")));
+}
+
+#[test]
+fn consume_send_once_wrong_target() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::SendOnce,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    // Try to consume for a different target.
+    assert!(!e.consume_send_once(&ws("w1"), &ws("w3")));
+    // Original still intact.
+    assert!(e.has_send_right(&ws("w1"), &ws("w2")));
+}
+
+#[test]
+fn consume_send_does_not_consume_persistent_send() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    // consume_send_once should return false for persistent Send right.
+    assert!(!e.consume_send_once(&ws("w1"), &ws("w2")));
+    // Persistent Send right still active.
+    assert!(e.has_send_right(&ws("w1"), &ws("w2")));
+}
+
+#[test]
+fn revoke_wrong_type_does_not_affect_other() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    // Revoking SendOnce should not affect existing Send right.
+    e.revoke_port_right(&ws("w1"), &ws("w2"), PortRightType::SendOnce);
+    assert!(e.has_send_right(&ws("w1"), &ws("w2")));
+}
+
+#[test]
+fn revoke_receive_does_not_affect_send() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Receive,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    e.revoke_port_right(&ws("w1"), &ws("w2"), PortRightType::Receive);
+    assert!(e.has_send_right(&ws("w1"), &ws("w2")));
+}
+
+#[test]
+fn receive_right_not_sufficient_for_envelope_send() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Receive,
+        holder: ws("coord"),
+        target: ws("w1"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("coord"),
+        receiver_workspace: &ws("w1"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(matches!(result, Err(PermissionDenied::NoPortRight { .. })));
+}
+
+#[test]
+fn send_once_sufficient_for_envelope_send() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::SendOnce,
+        holder: ws("coord"),
+        target: ws("w1"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("coord"),
+        receiver_workspace: &ws("w1"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(result.is_ok());
+}
+
+// --- Human origin: every action variant ---
+
+#[test]
+fn human_origin_with_unknown_envelope_type() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "ghost",
+        envelope_type: "totally_unknown",
+        receiver_role: "also_unknown",
+        sender_workspace: &ws("a"),
+        receiver_workspace: &ws("b"),
+        origin: EnvelopeOrigin::Human,
+    });
+    assert!(result.is_ok(), "human origin should bypass all checks");
+}
+
+// --- Matrix fallback coverage: receiver base only ---
+
+#[test]
+fn matrix_receiver_base_fallback() {
+    // Create derived receiver role, send with base sender.
+    let yaml = r#"
+id: test
+version: "1.0"
+protocol_version: "0.1"
+roles:
+  - name: lead_worker
+    extends: worker
+    add: []
+envelope_types: []
+checkpoint_types: []
+"#;
+    let t = Taxonomy::load_yaml(yaml, PV).unwrap();
+    let mut e = PermissionEngine::new(&t);
+
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("coord"),
+        target: ws("lead-ws"),
+    });
+
+    // coordinator sends directive to lead_worker: receiver_base = worker.
+    // Matrix has (coordinator, directive, worker) → should pass via receiver base fallback.
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "lead_worker",
+        sender_workspace: &ws("coord"),
+        receiver_workspace: &ws("lead-ws"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(result.is_ok(), "receiver base fallback should allow");
+}
+
+// --- Unknown role in matrix: no base mapping ---
+
+#[test]
+fn unknown_sender_role_denied_in_matrix() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("a"),
+        target: ws("b"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "unknown_role",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("a"),
+        receiver_workspace: &ws("b"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::NotInPermissionMatrix { .. })
+    ));
+}
+
+#[test]
+fn unknown_receiver_role_denied_in_matrix() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("a"),
+        target: ws("b"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "unknown_role",
+        sender_workspace: &ws("a"),
+        receiver_workspace: &ws("b"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(matches!(
+        result,
+        Err(PermissionDenied::NotInPermissionMatrix { .. })
+    ));
+}
+
+// --- Multiple port rights for the same holder ---
+
+#[test]
+fn multiple_send_once_to_same_target() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::SendOnce,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::SendOnce,
+        holder: ws("w1"),
+        target: ws("w2"),
+    });
+    assert!(e.consume_send_once(&ws("w1"), &ws("w2")));
+    // One consumed, second still present.
+    assert!(e.has_send_right(&ws("w1"), &ws("w2")));
+    assert!(e.consume_send_once(&ws("w1"), &ws("w2")));
+    // Both consumed now.
+    assert!(!e.has_send_right(&ws("w1"), &ws("w2")));
+}
+
+// --- Envelope send: no port rights at all ---
+
+#[test]
+fn envelope_send_no_port_rights_at_all() {
+    let e = base_engine();
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "coordinator",
+        envelope_type: "directive",
+        receiver_role: "worker",
+        sender_workspace: &ws("a"),
+        receiver_workspace: &ws("b"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(matches!(result, Err(PermissionDenied::NoPortRight { .. })));
+}
+
+// --- Worker can send result to coordinator ---
+
+#[test]
+fn worker_sends_query_to_coordinator_with_send_once() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::SendOnce,
+        holder: ws("w1"),
+        target: ws("coord"),
+    });
+    let result = e.evaluate(&Action::SendEnvelope {
+        sender_role: "worker",
+        envelope_type: "query",
+        receiver_role: "coordinator",
+        sender_workspace: &ws("w1"),
+        receiver_workspace: &ws("coord"),
+        origin: EnvelopeOrigin::Agent,
+    });
+    assert!(result.is_ok());
+}
+
+// --- Unknown signal type for unknown role ---
+
+#[test]
+fn unknown_role_denied_all_signals() {
+    let e = base_engine();
+    let all_signals = [
+        SignalType::Ready,
+        SignalType::Started,
+        SignalType::Blocked,
+        SignalType::Checkpoint,
+        SignalType::Complete,
+        SignalType::Failed,
+        SignalType::Integrate,
+        SignalType::Acknowledged,
+        SignalType::Escalation,
+        SignalType::Suspend,
+        SignalType::Migrate,
+    ];
+    for st in all_signals {
+        assert!(
+            e.evaluate(&Action::EmitSignal {
+                role: "nonexistent",
+                signal_type: st,
+            })
+            .is_err(),
+            "nonexistent role should be denied {st:?}"
+        );
+    }
+}
+
+// --- Self-send port right ---
+
+#[test]
+fn self_send_port_right() {
+    let mut e = base_engine();
+    e.grant_port_right(PortRight {
+        right_type: PortRightType::Send,
+        holder: ws("w1"),
+        target: ws("w1"),
+    });
+    assert!(e.has_send_right(&ws("w1"), &ws("w1")));
+}

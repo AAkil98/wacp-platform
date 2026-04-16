@@ -479,9 +479,11 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tracing",
  "uuid",
+ "wacp-proto",
 ]
 
 [[package]]
@@ -3756,6 +3758,7 @@ name = "wacp-clock"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "wacp-types",
 ]
 

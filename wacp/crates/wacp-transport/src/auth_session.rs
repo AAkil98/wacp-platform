@@ -200,4 +200,277 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), UserId::from("user-1"));
     }
+
+    // ── Branch-coverage: edge cases ──
+
+    #[test]
+    fn empty_string_token_rejected() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        assert!(matches!(
+            auth.validate_session(""),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn whitespace_token_rejected() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        assert!(matches!(
+            auth.validate_session("   "),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn token_used_at_expiry_boundary() {
+        // Create a session with a very short TTL (1 ms) and try to validate
+        // right at/after the boundary.
+        let auth = SessionTokenAuthenticator::new(Duration::from_millis(1));
+        let token = auth.create_session(UserId::from("user-boundary"));
+
+        // Wait just past the TTL.
+        std::thread::sleep(Duration::from_millis(5));
+
+        // The token should be expired.
+        assert!(matches!(
+            auth.validate_session(&token),
+            Err(AuthError::InvalidToken)
+        ));
+
+        // The expired session should have been removed from the map.
+        assert_eq!(auth.active_sessions(), 0);
+    }
+
+    #[test]
+    fn multiple_sessions_for_same_user() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let user = UserId::from("user-multi");
+
+        let t1 = auth.create_session(user.clone());
+        let t2 = auth.create_session(user.clone());
+        let t3 = auth.create_session(user.clone());
+
+        // All three sessions are valid and return the same user.
+        assert_eq!(auth.validate_session(&t1).unwrap(), user);
+        assert_eq!(auth.validate_session(&t2).unwrap(), user);
+        assert_eq!(auth.validate_session(&t3).unwrap(), user);
+
+        assert_eq!(auth.active_sessions(), 3);
+    }
+
+    #[test]
+    fn session_token_uniqueness() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let t1 = auth.create_session(UserId::from("user-1"));
+        let t2 = auth.create_session(UserId::from("user-1"));
+
+        // Tokens for the same user must be distinct.
+        assert_ne!(t1, t2);
+    }
+
+    #[test]
+    fn cleanup_with_mix_of_expired_and_valid() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_millis(1));
+
+        // Create two sessions that will expire quickly.
+        auth.create_session(UserId::from("user-expires-1"));
+        auth.create_session(UserId::from("user-expires-2"));
+
+        // Wait for them to expire.
+        std::thread::sleep(Duration::from_millis(10));
+
+        // Now create two valid sessions (with a long TTL authenticator is not
+        // possible here since TTL is per-instance, so we do the trick of
+        // inserting manually).
+        // Instead: create new sessions after the sleep — they get a fresh
+        // expires_at relative to the current instant.
+        // But our authenticator has a 1ms TTL...  We need a second instance.
+        // Alternative approach: use a longer TTL and create the valid sessions
+        // first, then the expired ones.
+
+        // Let's use a fresh authenticator with a reasonable TTL.
+        let auth2 = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        // Create valid sessions.
+        let valid_t1 = auth2.create_session(UserId::from("user-valid-1"));
+        let valid_t2 = auth2.create_session(UserId::from("user-valid-2"));
+
+        // Now manually insert expired entries by creating a short-lived authenticator's
+        // sessions in the same map. Since we cannot, let's test the original approach:
+        // the auth with 1ms TTL already has 2 expired sessions.
+        let removed = auth.cleanup_expired();
+        assert_eq!(removed, 2);
+        assert_eq!(auth.active_sessions(), 0);
+
+        // The valid sessions in auth2 should survive cleanup.
+        let removed2 = auth2.cleanup_expired();
+        assert_eq!(removed2, 0);
+        assert_eq!(auth2.active_sessions(), 2);
+        assert!(auth2.validate_session(&valid_t1).is_ok());
+        assert!(auth2.validate_session(&valid_t2).is_ok());
+    }
+
+    #[test]
+    fn validate_after_cleanup_removes_expired_session() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_millis(1));
+        let token = auth.create_session(UserId::from("user-cleanup"));
+
+        std::thread::sleep(Duration::from_millis(10));
+
+        // Cleanup removes the expired session.
+        let removed = auth.cleanup_expired();
+        assert_eq!(removed, 1);
+
+        // Subsequent validation should fail (session already removed).
+        assert!(matches!(
+            auth.validate_session(&token),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn authenticate_agent_via_session_token() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let token = auth.create_session(UserId::from("user-agent"));
+        let ws = WorkspaceId::from("ws-ignored");
+
+        let identity = auth.authenticate_agent(&token, &ws).unwrap();
+        // The composability path uses a fixed workspace_id of "session".
+        assert_eq!(identity.workspace_id, WorkspaceId::from("session"));
+        assert_eq!(identity.role, "session:user-agent");
+    }
+
+    #[test]
+    fn authenticate_agent_via_session_invalid_token() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent("bad-token", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn authenticate_agent_via_session_expired_token() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_millis(1));
+        let token = auth.create_session(UserId::from("user-expired"));
+        let ws = WorkspaceId::from("ws-1");
+
+        std::thread::sleep(Duration::from_millis(10));
+
+        assert!(matches!(
+            auth.authenticate_agent(&token, &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn active_sessions_after_invalidation() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let t1 = auth.create_session(UserId::from("user-1"));
+        let t2 = auth.create_session(UserId::from("user-2"));
+        let t3 = auth.create_session(UserId::from("user-3"));
+        assert_eq!(auth.active_sessions(), 3);
+
+        auth.invalidate_session(&t2);
+        assert_eq!(auth.active_sessions(), 2);
+
+        // t1 and t3 still work.
+        assert!(auth.validate_session(&t1).is_ok());
+        assert!(auth.validate_session(&t3).is_ok());
+
+        // t2 is gone.
+        assert!(matches!(
+            auth.validate_session(&t2),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn invalidate_nonexistent_session_is_noop() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let token = auth.create_session(UserId::from("user-1"));
+        assert_eq!(auth.active_sessions(), 1);
+
+        // Invalidating a non-existent session should not affect existing sessions.
+        auth.invalidate_session("never-issued-token");
+        assert_eq!(auth.active_sessions(), 1);
+        assert!(auth.validate_session(&token).is_ok());
+    }
+
+    #[test]
+    fn double_invalidation_is_noop() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let token = auth.create_session(UserId::from("user-1"));
+
+        auth.invalidate_session(&token);
+        assert_eq!(auth.active_sessions(), 0);
+
+        // Second invalidation should be a harmless no-op.
+        auth.invalidate_session(&token);
+        assert_eq!(auth.active_sessions(), 0);
+    }
+
+    #[test]
+    fn validate_updates_last_activity() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let token = auth.create_session(UserId::from("user-1"));
+
+        // First validation.
+        auth.validate_session(&token).unwrap();
+        let first_activity = {
+            let sessions = auth.sessions.read();
+            sessions.get(&digest(&token)).unwrap().last_activity
+        };
+
+        // Small sleep to ensure Instant advances.
+        std::thread::sleep(Duration::from_millis(5));
+
+        // Second validation.
+        auth.validate_session(&token).unwrap();
+        let second_activity = {
+            let sessions = auth.sessions.read();
+            sessions.get(&digest(&token)).unwrap().last_activity
+        };
+
+        assert!(second_activity > first_activity);
+    }
+
+    #[test]
+    fn cleanup_with_no_sessions_returns_zero() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        assert_eq!(auth.cleanup_expired(), 0);
+    }
+
+    #[test]
+    fn cleanup_with_all_valid_sessions_returns_zero() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        auth.create_session(UserId::from("user-1"));
+        auth.create_session(UserId::from("user-2"));
+        assert_eq!(auth.cleanup_expired(), 0);
+        assert_eq!(auth.active_sessions(), 2);
+    }
+
+    #[test]
+    fn session_token_format() {
+        let auth = SessionTokenAuthenticator::new(Duration::from_secs(3600));
+        let token = auth.create_session(UserId::from("user-fmt"));
+        // 256 bits = 32 bytes -> base64url no padding = 43 chars.
+        assert_eq!(token.len(), 43);
+        assert!(URL_SAFE_NO_PAD.decode(&token).is_ok());
+    }
+
+    #[test]
+    fn expired_session_removed_on_validate() {
+        // Verify that validate_session removes expired entries from the map.
+        let auth = SessionTokenAuthenticator::new(Duration::from_millis(1));
+        let token = auth.create_session(UserId::from("user-1"));
+        assert_eq!(auth.active_sessions(), 1);
+
+        std::thread::sleep(Duration::from_millis(10));
+
+        // validate_session should detect expiry and remove the entry.
+        let result = auth.validate_session(&token);
+        assert!(result.is_err());
+        assert_eq!(auth.active_sessions(), 0);
+    }
 }

@@ -384,4 +384,239 @@ mod tests {
         // Internal map should be empty since disabled.
         assert_eq!(limiter.failures.lock().len(), 0);
     }
+
+    // ── Branch-coverage: AuthError variants ──
+
+    #[test]
+    fn auth_error_display_invalid_token() {
+        let err = AuthError::InvalidToken;
+        assert_eq!(format!("{err}"), "invalid token");
+    }
+
+    #[test]
+    fn auth_error_display_workspace_mismatch() {
+        let err = AuthError::WorkspaceMismatch;
+        assert_eq!(format!("{err}"), "token valid but not for this workspace");
+    }
+
+    #[test]
+    fn auth_error_display_provider_unavailable() {
+        let err = AuthError::ProviderUnavailable;
+        assert_eq!(format!("{err}"), "authentication provider unavailable");
+    }
+
+    #[test]
+    fn auth_error_display_rate_limited() {
+        let err = AuthError::RateLimited;
+        assert_eq!(format!("{err}"), "rate limited");
+    }
+
+    #[test]
+    fn auth_error_debug_all_variants() {
+        // Ensure Debug is implemented for every variant.
+        let _ = format!("{:?}", AuthError::InvalidToken);
+        let _ = format!("{:?}", AuthError::WorkspaceMismatch);
+        let _ = format!("{:?}", AuthError::ProviderUnavailable);
+        let _ = format!("{:?}", AuthError::RateLimited);
+    }
+
+    // ── Branch-coverage: PskAuthenticator ──
+
+    #[test]
+    fn psk_default_creates_equivalent_instance() {
+        let psk = PskAuthenticator::default();
+        let ws = WorkspaceId::from("ws-default");
+        let token = psk.register_agent(ws.clone(), "worker".into());
+        let id = psk.authenticate_agent(&token, &ws).unwrap();
+        assert_eq!(id.workspace_id, ws);
+    }
+
+    #[test]
+    fn psk_empty_token_rejected() {
+        let psk = PskAuthenticator::new();
+        let ws = WorkspaceId::from("ws-1");
+        let err = psk.authenticate_agent("", &ws).unwrap_err();
+        assert!(matches!(err, AuthError::InvalidToken));
+    }
+
+    #[test]
+    fn psk_human_empty_token_rejected() {
+        let psk = PskAuthenticator::new();
+        let err = psk.authenticate_human("").unwrap_err();
+        assert!(matches!(err, AuthError::InvalidToken));
+    }
+
+    #[test]
+    fn psk_revoke_nonexistent_workspace_is_noop() {
+        let psk = PskAuthenticator::new();
+        let ws = WorkspaceId::from("ws-1");
+        let token = psk.register_agent(ws.clone(), "worker".into());
+        // Revoke a workspace that was never registered.
+        psk.revoke_agent(&WorkspaceId::from("ws-nonexistent"));
+        // Original agent should still work.
+        assert!(psk.authenticate_agent(&token, &ws).is_ok());
+    }
+
+    #[test]
+    fn psk_revoke_human_nonexistent_token_is_noop() {
+        let psk = PskAuthenticator::new();
+        let user = UserId::from("user-1");
+        let token = psk.register_human(user.clone());
+        psk.revoke_human("never-issued-token");
+        // Original human token should still work.
+        assert_eq!(psk.authenticate_human(&token).unwrap(), user);
+    }
+
+    #[test]
+    fn psk_multiple_agents_different_workspaces_cross_workspace_auth_fails() {
+        let psk = PskAuthenticator::new();
+        let ws1 = WorkspaceId::from("ws-1");
+        let ws2 = WorkspaceId::from("ws-2");
+        let t1 = psk.register_agent(ws1.clone(), "worker".into());
+        let t2 = psk.register_agent(ws2.clone(), "observer".into());
+
+        // Each agent succeeds against its own workspace.
+        assert!(psk.authenticate_agent(&t1, &ws1).is_ok());
+        assert!(psk.authenticate_agent(&t2, &ws2).is_ok());
+
+        // Cross-workspace authentication fails with WorkspaceMismatch.
+        assert!(matches!(
+            psk.authenticate_agent(&t1, &ws2),
+            Err(AuthError::WorkspaceMismatch)
+        ));
+        assert!(matches!(
+            psk.authenticate_agent(&t2, &ws1),
+            Err(AuthError::WorkspaceMismatch)
+        ));
+    }
+
+    #[test]
+    fn psk_revoke_then_reregister_same_workspace() {
+        let psk = PskAuthenticator::new();
+        let ws = WorkspaceId::from("ws-1");
+        let t1 = psk.register_agent(ws.clone(), "worker".into());
+        psk.revoke_agent(&ws);
+        assert!(psk.authenticate_agent(&t1, &ws).is_err());
+
+        // Re-register a new agent on the same workspace.
+        let t2 = psk.register_agent(ws.clone(), "observer".into());
+        assert_ne!(t1, t2);
+        let id = psk.authenticate_agent(&t2, &ws).unwrap();
+        assert_eq!(id.role, "observer");
+        // Old token still fails.
+        assert!(psk.authenticate_agent(&t1, &ws).is_err());
+    }
+
+    #[test]
+    fn psk_agent_identity_clone() {
+        let psk = PskAuthenticator::new();
+        let ws = WorkspaceId::from("ws-1");
+        let token = psk.register_agent(ws.clone(), "worker".into());
+        let id1 = psk.authenticate_agent(&token, &ws).unwrap();
+        let id2 = id1.clone();
+        assert_eq!(id1.workspace_id, id2.workspace_id);
+        assert_eq!(id1.role, id2.role);
+    }
+
+    // ── Branch-coverage: AuthRateLimiter ──
+
+    #[test]
+    fn rate_limiter_check_unknown_ip_always_ok() {
+        let limiter = AuthRateLimiter::new(3, 60);
+        let ip: IpAddr = "192.168.1.1".parse().unwrap();
+        // An IP with no failures should always pass.
+        assert!(limiter.check(&ip).is_ok());
+    }
+
+    #[test]
+    fn rate_limiter_exactly_at_limit_blocked() {
+        let limiter = AuthRateLimiter::new(1, 60);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        limiter.record_failure(&ip);
+        // Exactly 1 failure with max_failures=1 should block.
+        assert!(matches!(limiter.check(&ip), Err(AuthError::RateLimited)));
+    }
+
+    #[test]
+    fn rate_limiter_evicts_oldest_ip_at_capacity() {
+        // Create a limiter, fill it to MAX_TRACKED_IPS, then add one more.
+        // The oldest entry should be evicted.
+        let limiter = AuthRateLimiter::new(100, 3600);
+
+        // Fill with MAX_TRACKED_IPS distinct IPs.
+        for i in 0..MAX_TRACKED_IPS {
+            let a = ((i >> 24) & 0xFF) as u8;
+            let b = ((i >> 16) & 0xFF) as u8;
+            let c = ((i >> 8) & 0xFF) as u8;
+            let d = (i & 0xFF) as u8;
+            let ip: IpAddr = format!("{a}.{b}.{c}.{d}").parse().unwrap();
+            limiter.record_failure(&ip);
+        }
+
+        assert_eq!(limiter.failures.lock().len(), MAX_TRACKED_IPS);
+
+        // Add one more IP that exceeds the capacity.
+        let extra_ip: IpAddr = "255.255.255.255".parse().unwrap();
+        limiter.record_failure(&extra_ip);
+
+        // The map should still have MAX_TRACKED_IPS entries (one evicted, one added).
+        assert_eq!(limiter.failures.lock().len(), MAX_TRACKED_IPS);
+        // The new IP should be present.
+        assert!(limiter.failures.lock().contains_key(&extra_ip));
+    }
+
+    #[test]
+    fn rate_limiter_existing_ip_not_evicted_at_capacity() {
+        // When we record a failure for an IP already in the map, no eviction
+        // occurs even if we are at capacity.
+        let limiter = AuthRateLimiter::new(100, 3600);
+        let target_ip: IpAddr = "1.2.3.4".parse().unwrap();
+        limiter.record_failure(&target_ip);
+
+        // Fill the rest.
+        for i in 1..MAX_TRACKED_IPS {
+            let a = ((i >> 24) & 0xFF) as u8;
+            let b = ((i >> 16) & 0xFF) as u8;
+            let c = ((i >> 8) & 0xFF) as u8;
+            let d = (i & 0xFF) as u8;
+            let ip: IpAddr = format!("{a}.{b}.{c}.{d}").parse().unwrap();
+            limiter.record_failure(&ip);
+        }
+
+        assert_eq!(limiter.failures.lock().len(), MAX_TRACKED_IPS);
+
+        // Record another failure for the existing IP.
+        limiter.record_failure(&target_ip);
+        // No eviction — still at capacity.
+        assert_eq!(limiter.failures.lock().len(), MAX_TRACKED_IPS);
+        // target_ip now has 2 failures.
+        assert_eq!(limiter.failures.lock().get(&target_ip).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn rate_limiter_multiple_failures_then_partial_window_expiry() {
+        // Record several failures, wait for a partial window, record more,
+        // and verify only the in-window failures count.
+        let limiter = AuthRateLimiter::new(3, 1);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+
+        limiter.record_failure(&ip);
+        limiter.record_failure(&ip);
+
+        // Wait for the window to expire on the first two.
+        std::thread::sleep(Duration::from_millis(1100));
+
+        // Record one more failure (within a new window).
+        limiter.record_failure(&ip);
+
+        // Only 1 failure in the current window — should be allowed.
+        assert!(limiter.check(&ip).is_ok());
+    }
+
+    #[test]
+    fn rate_limiter_check_disabled_always_ok() {
+        let limiter = AuthRateLimiter::new(0, 0);
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        assert!(limiter.check(&ip).is_ok());
+    }
 }

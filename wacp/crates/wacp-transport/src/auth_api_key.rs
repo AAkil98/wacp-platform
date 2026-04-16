@@ -194,4 +194,285 @@ mod tests {
         let result = auth.authenticate_agent("key-to-revoke", &ws);
         assert!(matches!(result, Err(AuthError::InvalidToken)));
     }
+
+    // ── Branch-coverage: edge cases ──
+
+    #[test]
+    fn empty_string_token_rejected() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent("", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+        assert!(matches!(
+            auth.authenticate_human(""),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn whitespace_only_token_rejected() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        assert!(matches!(
+            auth.authenticate_agent("   ", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+        assert!(matches!(
+            auth.authenticate_agent("\t\n", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn very_long_token_rejected() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        let long_key = "x".repeat(2048);
+        // Not registered, so it should fail.
+        assert!(matches!(
+            auth.authenticate_agent(&long_key, &ws),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn very_long_token_registered_and_authenticated() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        let long_key = "k".repeat(2048);
+        auth.register_agent_key(long_key.clone(), ws.clone(), "worker");
+        let id = auth.authenticate_agent(&long_key, &ws).unwrap();
+        assert_eq!(id.role, "worker");
+    }
+
+    #[test]
+    fn register_same_key_twice_overwrites() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws1 = WorkspaceId::from("ws-1");
+        let ws2 = WorkspaceId::from("ws-2");
+
+        auth.register_agent_key("shared-key", ws1.clone(), "first-role");
+        auth.register_agent_key("shared-key", ws2.clone(), "second-role");
+
+        // The second registration should overwrite the first.
+        let id = auth.authenticate_agent("shared-key", &ws2).unwrap();
+        assert_eq!(id.role, "second-role");
+        assert_eq!(id.workspace_id, ws2);
+
+        // The old workspace should fail with WorkspaceMismatch (not InvalidToken).
+        assert!(matches!(
+            auth.authenticate_agent("shared-key", &ws1),
+            Err(AuthError::WorkspaceMismatch)
+        ));
+    }
+
+    #[test]
+    fn revoke_nonexistent_key_is_noop() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        auth.register_agent_key("real-key", ws.clone(), "worker");
+
+        // Revoking a key that was never registered should not affect existing keys.
+        auth.revoke_agent_key("never-registered");
+        assert!(auth.authenticate_agent("real-key", &ws).is_ok());
+    }
+
+    #[test]
+    fn revoke_then_reregister_same_key() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+
+        auth.register_agent_key("recycle-key", ws.clone(), "worker");
+        auth.revoke_agent_key("recycle-key");
+        assert!(matches!(
+            auth.authenticate_agent("recycle-key", &ws),
+            Err(AuthError::InvalidToken)
+        ));
+
+        // Re-register the same key with a different role.
+        auth.register_agent_key("recycle-key", ws.clone(), "observer");
+        let id = auth.authenticate_agent("recycle-key", &ws).unwrap();
+        assert_eq!(id.role, "observer");
+    }
+
+    #[test]
+    fn multiple_agents_different_workspaces() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws1 = WorkspaceId::from("ws-alpha");
+        let ws2 = WorkspaceId::from("ws-beta");
+        let ws3 = WorkspaceId::from("ws-gamma");
+
+        auth.register_agent_key("key-a", ws1.clone(), "worker");
+        auth.register_agent_key("key-b", ws2.clone(), "swe");
+        auth.register_agent_key("key-c", ws3.clone(), "observer");
+
+        // Each key works against its own workspace.
+        assert_eq!(
+            auth.authenticate_agent("key-a", &ws1).unwrap().workspace_id,
+            ws1
+        );
+        assert_eq!(
+            auth.authenticate_agent("key-b", &ws2).unwrap().workspace_id,
+            ws2
+        );
+        assert_eq!(
+            auth.authenticate_agent("key-c", &ws3).unwrap().workspace_id,
+            ws3
+        );
+
+        // Cross-workspace fails.
+        assert!(matches!(
+            auth.authenticate_agent("key-a", &ws2),
+            Err(AuthError::WorkspaceMismatch)
+        ));
+    }
+
+    #[test]
+    fn human_key_success_and_failure() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        auth.register_human_key("hk-valid", UserId::from("user-42"));
+
+        let user = auth.authenticate_human("hk-valid").unwrap();
+        assert_eq!(user, UserId::from("user-42"));
+
+        // Wrong key fails.
+        assert!(matches!(
+            auth.authenticate_human("hk-wrong"),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn revoked_human_key_rejected() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        auth.register_human_key("hk-revoke", UserId::from("user-1"));
+
+        // Authenticate before revocation succeeds.
+        assert!(auth.authenticate_human("hk-revoke").is_ok());
+
+        auth.revoke_human_key("hk-revoke");
+
+        // After revocation, authentication fails.
+        assert!(matches!(
+            auth.authenticate_human("hk-revoke"),
+            Err(AuthError::InvalidToken)
+        ));
+    }
+
+    #[test]
+    fn revoke_nonexistent_human_key_is_noop() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        auth.register_human_key("hk-real", UserId::from("user-1"));
+        auth.revoke_human_key("hk-never-registered");
+        // Existing key still works.
+        assert!(auth.authenticate_human("hk-real").is_ok());
+    }
+
+    #[test]
+    fn authenticate_agent_updates_last_used() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws = WorkspaceId::from("ws-1");
+        auth.register_agent_key("ts-key", ws.clone(), "worker");
+
+        // Before auth, last_used should be None.
+        {
+            let keys = auth.agent_keys.read();
+            let entry = keys.get(&digest("ts-key")).unwrap();
+            assert!(entry.last_used.is_none());
+        }
+
+        auth.authenticate_agent("ts-key", &ws).unwrap();
+
+        // After auth, last_used should be Some.
+        {
+            let keys = auth.agent_keys.read();
+            let entry = keys.get(&digest("ts-key")).unwrap();
+            assert!(entry.last_used.is_some());
+        }
+    }
+
+    #[test]
+    fn authenticate_human_updates_last_used() {
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        auth.register_human_key("hk-ts", UserId::from("user-1"));
+
+        // Before auth, last_used should be None.
+        {
+            let keys = auth.human_keys.read();
+            let entry = keys.get(&digest("hk-ts")).unwrap();
+            assert!(entry.last_used.is_none());
+        }
+
+        auth.authenticate_human("hk-ts").unwrap();
+
+        // After auth, last_used should be Some.
+        {
+            let keys = auth.human_keys.read();
+            let entry = keys.get(&digest("hk-ts")).unwrap();
+            assert!(entry.last_used.is_some());
+        }
+    }
+
+    #[test]
+    fn digest_is_deterministic() {
+        // Same input always produces the same digest.
+        let d1 = digest("test-token");
+        let d2 = digest("test-token");
+        assert_eq!(d1, d2);
+    }
+
+    #[test]
+    fn digest_different_inputs_differ() {
+        let d1 = digest("token-a");
+        let d2 = digest("token-b");
+        assert_ne!(d1, d2);
+    }
+
+    #[test]
+    fn constant_time_eq_different_lengths() {
+        // Verify the ct_eq path handles workspace IDs of different lengths.
+        let auth = ApiKeyAuthenticator::new(5, 60);
+        let ws_short = WorkspaceId::from("ws");
+        let ws_long = WorkspaceId::from("ws-very-long-workspace-id");
+        auth.register_agent_key("key-len", ws_short, "worker");
+
+        let result = auth.authenticate_agent("key-len", &ws_long);
+        assert!(matches!(result, Err(AuthError::WorkspaceMismatch)));
+    }
+
+    #[test]
+    fn concurrent_register_and_authenticate() {
+        use std::sync::Arc;
+
+        let auth = Arc::new(ApiKeyAuthenticator::new(5, 60));
+        let ws = WorkspaceId::from("ws-concurrent");
+
+        // Pre-register a key so the auth thread can find it.
+        auth.register_agent_key("concurrent-key", ws.clone(), "worker");
+
+        let auth_clone = Arc::clone(&auth);
+        let ws_clone = ws.clone();
+        let handle = std::thread::spawn(move || {
+            for i in 0..100 {
+                auth_clone.register_agent_key(
+                    format!("extra-key-{i}"),
+                    ws_clone.clone(),
+                    "worker",
+                );
+            }
+        });
+
+        // Authenticate concurrently.
+        for _ in 0..100 {
+            // The pre-registered key may or may not be blocked by the writer,
+            // but should never panic.
+            let _ = auth.authenticate_agent("concurrent-key", &ws);
+        }
+
+        handle.join().unwrap();
+        // After the thread joins, the key should still be valid.
+        assert!(auth.authenticate_agent("concurrent-key", &ws).is_ok());
+    }
 }

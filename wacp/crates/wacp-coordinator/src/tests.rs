@@ -5364,3 +5364,1638 @@ fn concurrent_workspace_creation_unique_ids() {
         actions.iter().map(|a| a.workspace_id.clone()).collect();
     assert_eq!(ids.len(), 10, "all 10 workspace IDs must be unique");
 }
+
+// ══════════════════════════════════════════
+// Branch Coverage — Workspace FSM (via coordinator tree)
+// ══════════════════════════════════════════
+
+// --- Every valid transition ---
+
+#[test]
+fn ws_fsm_idle_to_active_via_tree() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    tree.insert(make_node(
+        "child",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Idle,
+    ))
+    .unwrap();
+
+    // Simulate FSM transition through coordinator's tree.
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::ReceiveFirstEnvelope)
+            .unwrap();
+    tree.update_status(&ws("child"), new_state);
+    assert_eq!(tree.get(&ws("child")).unwrap().status, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_idle_to_failed_creation_error() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::CreationError).unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_idle_to_failed_timeout() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::TimeoutExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_idle_to_failed_abort() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::CoordinatorAbort)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_idle_to_failed_budget() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::BudgetExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_active_to_blocked() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Blocked);
+}
+
+#[test]
+fn ws_fsm_active_to_migrating() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorMigrate)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Migrating);
+}
+
+#[test]
+fn ws_fsm_active_to_suspended() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorSuspend)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Suspended);
+}
+
+#[test]
+fn ws_fsm_active_to_integrating() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentComplete)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Integrating);
+}
+
+#[test]
+fn ws_fsm_active_to_failed_agent() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentFailed).unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_active_to_failed_abort() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorAbort)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_active_to_failed_timeout() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::TimeoutExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_active_to_failed_budget() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::BudgetExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_blocked_to_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::AgentStarted)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_blocked_to_migrating() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::CoordinatorMigrate)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Migrating);
+}
+
+#[test]
+fn ws_fsm_blocked_to_suspended() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::CoordinatorSuspend)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Suspended);
+}
+
+#[test]
+fn ws_fsm_blocked_to_failed_abort() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::CoordinatorAbort)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_blocked_to_failed_timeout() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::TimeoutExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_blocked_to_failed_budget() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::BudgetExceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_migrating_to_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::MigrationSucceeded)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_migrating_to_blocked() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Migrating,
+        &WorkspaceTrigger::MigrationSucceededBlocked,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Blocked);
+}
+
+#[test]
+fn ws_fsm_migrating_to_failed_migration() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::MigrationFailed)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_migrating_to_failed_abort() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::CoordinatorAbort)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_suspended_to_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Suspended, &WorkspaceTrigger::CoordinatorResume)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_suspended_to_failed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state =
+        WorkspaceFsm::transition(WorkspaceState::Suspended, &WorkspaceTrigger::CoordinatorAbort)
+            .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_integrating_to_closed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Integrating,
+        &WorkspaceTrigger::IntegrationSucceeded,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Closed);
+}
+
+#[test]
+fn ws_fsm_integrating_to_conflicted() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Integrating,
+        &WorkspaceTrigger::ConflictDetected,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Conflicted);
+}
+
+#[test]
+fn ws_fsm_integrating_to_failed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Integrating,
+        &WorkspaceTrigger::IntegrationFailed,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+#[test]
+fn ws_fsm_conflicted_to_closed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Conflicted,
+        &WorkspaceTrigger::ConflictResolved,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Closed);
+}
+
+#[test]
+fn ws_fsm_conflicted_to_failed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Conflicted,
+        &WorkspaceTrigger::ConflictUnresolvable,
+    )
+    .unwrap();
+    assert_eq!(new_state, WorkspaceState::Failed);
+}
+
+// --- Every invalid transition from non-terminal states ---
+
+#[test]
+fn ws_fsm_idle_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Idle, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Idle + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_active_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Active, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Active + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_blocked_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Blocked, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Blocked + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_suspended_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Suspended, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Suspended + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_migrating_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Migrating, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Migrating + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_integrating_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Integrating, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Integrating + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_conflicted_rejects_invalid_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let invalid = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in invalid {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Conflicted, &t),
+                Err(TransitionError::IllegalTransition { .. })
+            ),
+            "Conflicted + {t:?} should be IllegalTransition"
+        );
+    }
+}
+
+// --- Transition from terminal states → rejected ---
+
+#[test]
+fn ws_fsm_closed_rejects_all_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let all_triggers = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in all_triggers {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Closed, &t),
+                Err(TransitionError::TerminalState { .. })
+            ),
+            "Closed + {t:?} should be TerminalState"
+        );
+    }
+}
+
+#[test]
+fn ws_fsm_failed_rejects_all_triggers() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let all_triggers = [
+        WorkspaceTrigger::AgentReady,
+        WorkspaceTrigger::AgentStarted,
+        WorkspaceTrigger::AgentBlocked,
+        WorkspaceTrigger::AgentComplete,
+        WorkspaceTrigger::AgentFailed,
+        WorkspaceTrigger::ReceiveFirstEnvelope,
+        WorkspaceTrigger::CoordinatorAbort,
+        WorkspaceTrigger::CoordinatorSuspend,
+        WorkspaceTrigger::CoordinatorResume,
+        WorkspaceTrigger::CoordinatorMigrate,
+        WorkspaceTrigger::MigrationSucceeded,
+        WorkspaceTrigger::MigrationSucceededBlocked,
+        WorkspaceTrigger::MigrationFailed,
+        WorkspaceTrigger::IntegrationSucceeded,
+        WorkspaceTrigger::IntegrationFailed,
+        WorkspaceTrigger::ConflictDetected,
+        WorkspaceTrigger::ConflictResolved,
+        WorkspaceTrigger::ConflictUnresolvable,
+        WorkspaceTrigger::TimeoutExceeded,
+        WorkspaceTrigger::BudgetExceeded,
+        WorkspaceTrigger::CreationError,
+    ];
+    for t in all_triggers {
+        assert!(
+            matches!(
+                WorkspaceFsm::transition(WorkspaceState::Failed, &t),
+                Err(TransitionError::TerminalState { .. })
+            ),
+            "Failed + {t:?} should be TerminalState"
+        );
+    }
+}
+
+// --- Double-transition to same state ---
+
+#[test]
+fn ws_fsm_double_transition_idle_to_active_then_active_again_rejected() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    // Idle → Active is valid.
+    let state =
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::ReceiveFirstEnvelope)
+            .unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+
+    // Active → Active via ReceiveFirstEnvelope is illegal (not a valid trigger from Active).
+    assert!(matches!(
+        WorkspaceFsm::transition(state, &WorkspaceTrigger::ReceiveFirstEnvelope),
+        Err(TransitionError::IllegalTransition { .. })
+    ));
+}
+
+#[test]
+fn ws_fsm_double_transition_active_to_blocked_then_blocked_again_rejected() {
+    use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
+    let state =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
+            .unwrap();
+    assert_eq!(state, WorkspaceState::Blocked);
+
+    // Blocked + AgentBlocked is illegal.
+    assert!(matches!(
+        WorkspaceFsm::transition(state, &WorkspaceTrigger::AgentBlocked),
+        Err(TransitionError::IllegalTransition { .. })
+    ));
+}
+
+#[test]
+fn ws_fsm_round_trip_active_blocked_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let blocked =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
+            .unwrap();
+    assert_eq!(blocked, WorkspaceState::Blocked);
+
+    let active =
+        WorkspaceFsm::transition(blocked, &WorkspaceTrigger::AgentStarted).unwrap();
+    assert_eq!(active, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_round_trip_active_suspended_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let suspended =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorSuspend)
+            .unwrap();
+    assert_eq!(suspended, WorkspaceState::Suspended);
+
+    let active =
+        WorkspaceFsm::transition(suspended, &WorkspaceTrigger::CoordinatorResume).unwrap();
+    assert_eq!(active, WorkspaceState::Active);
+}
+
+#[test]
+fn ws_fsm_round_trip_active_migrating_active() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let migrating =
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorMigrate)
+            .unwrap();
+    assert_eq!(migrating, WorkspaceState::Migrating);
+
+    let active =
+        WorkspaceFsm::transition(migrating, &WorkspaceTrigger::MigrationSucceeded).unwrap();
+    assert_eq!(active, WorkspaceState::Active);
+}
+
+// --- Multi-step path to terminal ---
+
+#[test]
+fn ws_fsm_full_happy_path_idle_to_closed() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let mut state = WorkspaceState::Idle;
+    state =
+        WorkspaceFsm::transition(state, &WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    assert_eq!(state, WorkspaceState::Active);
+
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::AgentComplete).unwrap();
+    assert_eq!(state, WorkspaceState::Integrating);
+
+    state =
+        WorkspaceFsm::transition(state, &WorkspaceTrigger::IntegrationSucceeded).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+    assert!(state.is_terminal());
+}
+
+#[test]
+fn ws_fsm_path_with_conflict_resolved() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let mut state = WorkspaceState::Active;
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::AgentComplete).unwrap();
+    assert_eq!(state, WorkspaceState::Integrating);
+
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::ConflictDetected).unwrap();
+    assert_eq!(state, WorkspaceState::Conflicted);
+
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::ConflictResolved).unwrap();
+    assert_eq!(state, WorkspaceState::Closed);
+}
+
+#[test]
+fn ws_fsm_tree_update_reflects_fsm_transition() {
+    use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
+    let mut tree = WorkspaceTree::new(ws("root"), uid("owner"));
+    tree.insert(make_node(
+        "ws1",
+        Some("root"),
+        "owner",
+        Originator::System,
+        WorkspaceState::Idle,
+    ))
+    .unwrap();
+
+    // Walk through the full lifecycle via FSM, updating tree at each step.
+    let transitions: Vec<(WorkspaceState, WorkspaceTrigger, WorkspaceState)> = vec![
+        (WorkspaceState::Idle, WorkspaceTrigger::ReceiveFirstEnvelope, WorkspaceState::Active),
+        (WorkspaceState::Active, WorkspaceTrigger::AgentBlocked, WorkspaceState::Blocked),
+        (WorkspaceState::Blocked, WorkspaceTrigger::AgentStarted, WorkspaceState::Active),
+        (WorkspaceState::Active, WorkspaceTrigger::AgentComplete, WorkspaceState::Integrating),
+        (
+            WorkspaceState::Integrating,
+            WorkspaceTrigger::IntegrationSucceeded,
+            WorkspaceState::Closed,
+        ),
+    ];
+
+    for (from, trigger, expected) in &transitions {
+        let current = tree.get(&ws("ws1")).unwrap().status;
+        assert_eq!(current, *from);
+        let new_state = WorkspaceFsm::transition(current, trigger).unwrap();
+        assert_eq!(new_state, *expected);
+        tree.update_status(&ws("ws1"), new_state);
+    }
+
+    assert_eq!(tree.get(&ws("ws1")).unwrap().status, WorkspaceState::Closed);
+}
+
+// ══════════════════════════════════════════
+// Branch Coverage — Budget Enforcement
+// ══════════════════════════════════════════
+
+#[test]
+fn budget_exactly_at_limit_is_exceeded() {
+    // Semantics: usage >= limit counts as Exceeded.
+    let usage = ResourceUsage {
+        tokens: 100,
+        wall_time_ms: 0,
+        storage_bytes: 0,
+        network_bytes: 0,
+        cost_micros: 0,
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+        }
+        other => panic!("expected Exceeded at exact limit, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_one_below_limit_not_exceeded() {
+    let usage = ResourceUsage {
+        tokens: 99,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    // 99 < 100 => not exceeded. 99 >= 80 (80% of 100) => warning.
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Warning(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+        }
+        other => panic!("expected Warning at 99/100, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_above_limit_is_exceeded() {
+    let usage = ResourceUsage {
+        tokens: 150,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+        }
+        other => panic!("expected Exceeded at 150/100, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_below_warning_threshold_is_ok() {
+    let usage = ResourceUsage {
+        tokens: 50,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
+}
+
+#[test]
+fn budget_zero_usage_is_ok() {
+    let usage = ResourceUsage::default();
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: Some(5000),
+        max_storage_bytes: Some(1024),
+        max_network_bytes: Some(2048),
+        max_cost_micros: Some(10000),
+        warning_threshold: 0.8,
+    };
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
+}
+
+#[test]
+fn budget_zero_limit_treated_as_unlimited() {
+    // A limit of Some(0) is treated as unlimited (the check_dim short-circuits).
+    let usage = ResourceUsage {
+        tokens: 999_999,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(0),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok,
+        "zero limit should be treated as unlimited"
+    );
+}
+
+#[test]
+fn budget_none_limit_treated_as_unlimited() {
+    let usage = ResourceUsage {
+        tokens: 999_999,
+        wall_time_ms: 999_999,
+        storage_bytes: 999_999,
+        network_bytes: 999_999,
+        cost_micros: 999_999,
+    };
+    let budget = ResourceBudget::default(); // all None
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok,
+        "None limits should be treated as unlimited"
+    );
+}
+
+#[test]
+fn budget_each_dimension_independently_exceeded() {
+    // tokens exceeded
+    let usage_tokens = ResourceUsage {
+        tokens: 200,
+        ..Default::default()
+    };
+    let budget_tokens = ResourceBudget {
+        max_tokens: Some(100),
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage_tokens, &budget_tokens) {
+        BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"tokens".to_string())),
+        other => panic!("expected Exceeded for tokens, got {other:?}"),
+    }
+
+    // wall_time_ms exceeded
+    let usage_wall = ResourceUsage {
+        wall_time_ms: 200,
+        ..Default::default()
+    };
+    let budget_wall = ResourceBudget {
+        max_wall_time_ms: Some(100),
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage_wall, &budget_wall) {
+        BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"wall_time_ms".to_string())),
+        other => panic!("expected Exceeded for wall_time_ms, got {other:?}"),
+    }
+
+    // storage_bytes exceeded
+    let usage_storage = ResourceUsage {
+        storage_bytes: 200,
+        ..Default::default()
+    };
+    let budget_storage = ResourceBudget {
+        max_storage_bytes: Some(100),
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage_storage, &budget_storage) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"storage_bytes".to_string()));
+        }
+        other => panic!("expected Exceeded for storage_bytes, got {other:?}"),
+    }
+
+    // network_bytes exceeded
+    let usage_net = ResourceUsage {
+        network_bytes: 200,
+        ..Default::default()
+    };
+    let budget_net = ResourceBudget {
+        max_network_bytes: Some(100),
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage_net, &budget_net) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"network_bytes".to_string()));
+        }
+        other => panic!("expected Exceeded for network_bytes, got {other:?}"),
+    }
+
+    // cost_micros exceeded
+    let usage_cost = ResourceUsage {
+        cost_micros: 200,
+        ..Default::default()
+    };
+    let budget_cost = ResourceBudget {
+        max_cost_micros: Some(100),
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage_cost, &budget_cost) {
+        BudgetCheckResult::Exceeded(dims) => assert!(dims.contains(&"cost_micros".to_string())),
+        other => panic!("expected Exceeded for cost_micros, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_exceeded_takes_precedence_over_warning() {
+    // One dimension exceeded, another at warning level.
+    let usage = ResourceUsage {
+        tokens: 200, // exceeded
+        wall_time_ms: 85, // at warning threshold
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+            // wall_time_ms is at warning level but not exceeded — should not appear here.
+            assert!(!dims.contains(&"wall_time_ms".to_string()));
+        }
+        other => panic!("expected Exceeded, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_multiple_dimensions_exceeded() {
+    let usage = ResourceUsage {
+        tokens: 200,
+        wall_time_ms: 300,
+        storage_bytes: 400,
+        network_bytes: 0,
+        cost_micros: 0,
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: Some(100),
+        max_storage_bytes: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Exceeded(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+            assert!(dims.contains(&"wall_time_ms".to_string()));
+            assert!(dims.contains(&"storage_bytes".to_string()));
+        }
+        other => panic!("expected Exceeded, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_warning_threshold_boundary() {
+    // Warning threshold comparison uses f32→f64 conversion. 0.8f32 as f64 is
+    // slightly above 0.8 (~0.800000012), so 100 * 0.8f32_as_f64 ≈ 80.00000119.
+    // Usage of 81 is clearly above that threshold → Warning.
+    let usage = ResourceUsage {
+        tokens: 81,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Warning(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+        }
+        other => panic!("expected Warning at 81/100 with threshold 0.8, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_warning_threshold_just_below() {
+    // Just below warning threshold: 79 < 80.0 => Ok.
+    let usage = ResourceUsage {
+        tokens: 79,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.8,
+        ..Default::default()
+    };
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
+}
+
+#[test]
+fn budget_increase_does_not_touch_unset_dimensions() {
+    let mut budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: None,
+        ..Default::default()
+    };
+    let additional = ResourceBudget {
+        max_tokens: Some(50),
+        max_wall_time_ms: Some(3000),
+        ..Default::default()
+    };
+    BudgetEnforcer::increase_budget(&mut budget, &additional);
+    assert_eq!(budget.max_tokens, Some(150));
+    // increase_budget requires both to be Some for the add — one is None, so it stays None.
+    assert_eq!(budget.max_wall_time_ms, None);
+}
+
+#[test]
+fn budget_increase_all_dimensions() {
+    let mut budget = ResourceBudget {
+        max_tokens: Some(100),
+        max_wall_time_ms: Some(5000),
+        max_storage_bytes: Some(1024),
+        max_network_bytes: Some(2048),
+        max_cost_micros: Some(10000),
+        warning_threshold: 0.8,
+    };
+    let additional = ResourceBudget {
+        max_tokens: Some(50),
+        max_wall_time_ms: Some(2000),
+        max_storage_bytes: Some(512),
+        max_network_bytes: Some(1024),
+        max_cost_micros: Some(5000),
+        warning_threshold: 0.8,
+    };
+    BudgetEnforcer::increase_budget(&mut budget, &additional);
+    assert_eq!(budget.max_tokens, Some(150));
+    assert_eq!(budget.max_wall_time_ms, Some(7000));
+    assert_eq!(budget.max_storage_bytes, Some(1536));
+    assert_eq!(budget.max_network_bytes, Some(3072));
+    assert_eq!(budget.max_cost_micros, Some(15000));
+}
+
+#[test]
+fn budget_warning_threshold_zero_means_always_warn() {
+    // With threshold = 0.0, any nonzero usage should trigger a warning.
+    let usage = ResourceUsage {
+        tokens: 1,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 0.0,
+        ..Default::default()
+    };
+    match BudgetEnforcer::check(&usage, &budget) {
+        BudgetCheckResult::Warning(dims) => {
+            assert!(dims.contains(&"tokens".to_string()));
+        }
+        other => panic!("expected Warning with threshold 0.0, got {other:?}"),
+    }
+}
+
+#[test]
+fn budget_warning_threshold_one_means_never_warn_before_exceed() {
+    // With threshold = 1.0, warning fires only when usage >= limit, but exceeded also fires.
+    // So the result should be Exceeded, not Warning.
+    let usage = ResourceUsage {
+        tokens: 99,
+        ..Default::default()
+    };
+    let budget = ResourceBudget {
+        max_tokens: Some(100),
+        warning_threshold: 1.0,
+        ..Default::default()
+    };
+    // 99 < 100 so not exceeded. 99 >= 100*1.0=100? No, 99 < 100. So Ok.
+    assert_eq!(
+        BudgetEnforcer::check(&usage, &budget),
+        BudgetCheckResult::Ok
+    );
+}
+
+// ══════════════════════════════════════════
+// Branch Coverage — Task Graph (Cycle Detection)
+// ══════════════════════════════════════════
+// The TaskGraph prevents cycles structurally: add_task requires all
+// dependencies to already exist in the graph. This means you cannot
+// form A→B→A because when A is added first, B does not yet exist.
+// The tests below verify this structural invariant.
+
+#[test]
+fn task_graph_empty_graph_properties() {
+    let graph = TaskGraph::new();
+    assert!(graph.roots().is_empty());
+    assert!(graph.is_complete());
+    assert!(graph.ready_tasks().is_empty());
+    assert!(graph.dispatchable().is_empty());
+}
+
+#[test]
+fn task_graph_single_node_no_deps() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("only", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    assert_eq!(graph.roots().len(), 1);
+    assert!(graph.ready_tasks().contains(&&tid("only")));
+    assert_eq!(graph.remaining_deps(&tid("only")), Some(0));
+    assert!(!graph.is_complete());
+}
+
+#[test]
+fn task_graph_single_node_terminal() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("only", vec![], TaskStatus::Integrated))
+        .unwrap();
+    assert!(graph.is_complete());
+}
+
+#[test]
+fn task_graph_linear_chain_no_cycle() {
+    // A → B → C (linear, no cycle possible).
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("B", vec!["A"], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("C", vec!["B"], TaskStatus::Pending))
+        .unwrap();
+
+    assert_eq!(graph.remaining_deps(&tid("C")), Some(0)); // B is already Integrated
+    assert!(graph.ready_tasks().contains(&&tid("C")));
+    assert!(!graph.is_complete()); // C is Pending
+}
+
+#[test]
+fn task_graph_diamond_dependency_no_cycle() {
+    //     A
+    //    / \
+    //   B   C
+    //    \ /
+    //     D
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("B", vec!["A"], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("C", vec!["A"], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("D", vec!["B", "C"], TaskStatus::Pending))
+        .unwrap();
+
+    // D depends on B and C, both depend on A. A is InProgress.
+    assert_eq!(graph.remaining_deps(&tid("B")), Some(1));
+    assert_eq!(graph.remaining_deps(&tid("C")), Some(1));
+    assert_eq!(graph.remaining_deps(&tid("D")), Some(2));
+
+    // When A completes, B and C become ready.
+    let newly_ready = graph.mark_completed(&tid("A"));
+    assert!(newly_ready.contains(&tid("B")));
+    assert!(newly_ready.contains(&tid("C")));
+    assert_eq!(graph.remaining_deps(&tid("D")), Some(2)); // D still blocked
+
+    // When B completes, D's count decrements.
+    let newly_ready = graph.mark_completed(&tid("B"));
+    assert!(newly_ready.is_empty()); // D still has C
+    assert_eq!(graph.remaining_deps(&tid("D")), Some(1));
+
+    // When C completes, D becomes ready.
+    let newly_ready = graph.mark_completed(&tid("C"));
+    assert!(newly_ready.contains(&tid("D")));
+    assert_eq!(graph.remaining_deps(&tid("D")), Some(0));
+}
+
+#[test]
+fn task_graph_direct_cycle_ab_prevented() {
+    // Try to create A→B→A. A is added first, then B depends on A.
+    // Then trying to add a task that A depends on B is impossible because
+    // A already exists (DuplicateTask).
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("B", vec!["A"], TaskStatus::Pending))
+        .unwrap();
+
+    // Cannot re-add A with a dependency on B.
+    let result = graph.add_task(make_task("A", vec!["B"], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DuplicateTask(_))),
+        "re-adding A should fail with DuplicateTask"
+    );
+}
+
+#[test]
+fn task_graph_indirect_cycle_abc_prevented() {
+    // Try to create A→B→C→A. Same structural prevention applies.
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("B", vec!["A"], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("C", vec!["B"], TaskStatus::Pending))
+        .unwrap();
+
+    // Cannot re-add A depending on C.
+    let result = graph.add_task(make_task("A", vec!["C"], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DuplicateTask(_))),
+        "re-adding A with dep on C should fail with DuplicateTask"
+    );
+}
+
+#[test]
+fn task_graph_self_loop_prevented() {
+    // A task cannot depend on itself because it must exist first.
+    let mut graph = TaskGraph::new();
+    // "self-loop" depends on "self-loop", which doesn't exist yet.
+    let result = graph.add_task(make_task("self-loop", vec!["self-loop"], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DependencyNotFound(_))),
+        "self-loop should fail with DependencyNotFound"
+    );
+}
+
+#[test]
+fn task_graph_dependency_on_nonexistent_task() {
+    let mut graph = TaskGraph::new();
+    let result = graph.add_task(make_task("X", vec!["ghost"], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DependencyNotFound(_))),
+        "dependency on nonexistent task should fail"
+    );
+}
+
+#[test]
+fn task_graph_duplicate_task_rejected() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::Pending))
+        .unwrap();
+    let result = graph.add_task(make_task("A", vec![], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DuplicateTask(_))),
+        "duplicate task should fail"
+    );
+}
+
+#[test]
+fn task_graph_forward_cycle_new_node_dep_not_found() {
+    // If someone tries to create B→C where C doesn't exist yet, it fails.
+    // This is the core mechanism that prevents forward references (and thus cycles).
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("A", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    let result = graph.add_task(make_task("B", vec!["C"], TaskStatus::Pending));
+    assert!(
+        matches!(result, Err(GraphError::DependencyNotFound(_))),
+        "forward reference to C should fail"
+    );
+}
+
+#[test]
+fn task_graph_multiple_roots() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("r1", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("r2", vec![], TaskStatus::Pending))
+        .unwrap();
+    graph
+        .add_task(make_task("r3", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    let roots = graph.roots();
+    assert_eq!(roots.len(), 3);
+}
+
+#[test]
+fn task_graph_mark_completed_no_dependents() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("leaf", vec![], TaskStatus::InProgress))
+        .unwrap();
+
+    let newly_ready = graph.mark_completed(&tid("leaf"));
+    assert!(newly_ready.is_empty());
+}
+
+#[test]
+fn task_graph_mark_completed_nonexistent_task() {
+    let mut graph = TaskGraph::new();
+    // Calling mark_completed on a nonexistent task should return empty (no panic).
+    let newly_ready = graph.mark_completed(&tid("ghost"));
+    assert!(newly_ready.is_empty());
+}
+
+#[test]
+fn task_graph_mark_failed_no_dependents() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("leaf", vec![], TaskStatus::InProgress))
+        .unwrap();
+
+    let blocked = graph.mark_failed(&tid("leaf"));
+    assert!(blocked.is_empty());
+}
+
+#[test]
+fn task_graph_is_complete_with_cancelled_tasks() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("t2", vec!["t1"], TaskStatus::Cancelled))
+        .unwrap();
+    // Both Integrated and Cancelled are terminal.
+    assert!(graph.is_complete());
+}
+
+#[test]
+fn task_graph_transition_via_fsm() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
+
+    // Draft → Pending
+    let status = graph.transition(&tid("t1"), TaskTrigger::Approve).unwrap();
+    assert_eq!(status, TaskStatus::Pending);
+
+    // Pending → Assigned
+    let status = graph.transition(&tid("t1"), TaskTrigger::Assign).unwrap();
+    assert_eq!(status, TaskStatus::Assigned);
+
+    // Assigned → InProgress
+    let status = graph.transition(&tid("t1"), TaskTrigger::Start).unwrap();
+    assert_eq!(status, TaskStatus::InProgress);
+
+    // InProgress → Completed
+    let status = graph.transition(&tid("t1"), TaskTrigger::Complete).unwrap();
+    assert_eq!(status, TaskStatus::Completed);
+
+    // Completed → Integrated
+    let status = graph
+        .transition(&tid("t1"), TaskTrigger::Integrate)
+        .unwrap();
+    assert_eq!(status, TaskStatus::Integrated);
+}
+
+#[test]
+fn task_graph_transition_terminal_rejected() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Integrated))
+        .unwrap();
+
+    // Integrated is terminal — all triggers should fail.
+    let result = graph.transition(&tid("t1"), TaskTrigger::Approve);
+    assert!(result.is_err());
+}
+
+#[test]
+fn task_graph_transition_nonexistent_task() {
+    let mut graph = TaskGraph::new();
+    let result = graph.transition(&tid("ghost"), TaskTrigger::Approve);
+    assert!(
+        matches!(result, Err(GraphError::TaskNotFound(_))),
+        "transition on nonexistent task should fail"
+    );
+}
+
+#[test]
+fn task_graph_transition_illegal_trigger() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Draft))
+        .unwrap();
+
+    // Draft + Start is illegal (must go through Approve first).
+    let result = graph.transition(&tid("t1"), TaskTrigger::Start);
+    assert!(result.is_err());
+}
+
+#[test]
+fn task_graph_bind_nonexistent_task() {
+    let mut graph = TaskGraph::new();
+    let result = graph.bind(&tid("ghost"), &ws("ws-1"));
+    assert!(matches!(result, Err(GraphError::TaskNotFound(_))));
+}
+
+#[test]
+fn task_graph_unbind_nonexistent_task_no_panic() {
+    let mut graph = TaskGraph::new();
+    // Should not panic.
+    graph.unbind(&tid("ghost"));
+}
+
+#[test]
+fn task_graph_remaining_deps_nonexistent() {
+    let graph = TaskGraph::new();
+    assert_eq!(graph.remaining_deps(&tid("ghost")), None);
+}
+
+#[test]
+fn task_graph_get_nonexistent() {
+    let graph = TaskGraph::new();
+    assert!(graph.get(&tid("ghost")).is_none());
+}
+
+#[test]
+fn task_graph_dependents_nonexistent() {
+    let graph = TaskGraph::new();
+    let deps = graph.dependents(&tid("ghost"));
+    assert!(deps.is_empty());
+}
+
+#[test]
+fn task_graph_dispatchable_requires_pending_and_zero_deps() {
+    let mut graph = TaskGraph::new();
+    // Draft with zero deps — not dispatchable (not Pending).
+    graph
+        .add_task(make_task("draft", vec![], TaskStatus::Draft))
+        .unwrap();
+    // InProgress with zero deps — not dispatchable (not Pending).
+    graph
+        .add_task(make_task("running", vec![], TaskStatus::InProgress))
+        .unwrap();
+    // Pending with unmet dep — not dispatchable.
+    graph
+        .add_task(make_task("blocked", vec!["running"], TaskStatus::Pending))
+        .unwrap();
+    // Pending with zero deps — dispatchable.
+    graph
+        .add_task(make_task("ready", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    let d = graph.dispatchable();
+    assert!(d.contains(&&tid("ready")));
+    assert!(!d.contains(&&tid("draft")));
+    assert!(!d.contains(&&tid("running")));
+    assert!(!d.contains(&&tid("blocked")));
+}
+
+#[test]
+fn task_graph_cancelled_dep_counts_as_terminal() {
+    // A Cancelled dependency should count as terminal (remaining_deps = 0).
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("dep", vec![], TaskStatus::Cancelled))
+        .unwrap();
+    graph
+        .add_task(make_task("child", vec!["dep"], TaskStatus::Pending))
+        .unwrap();
+
+    assert_eq!(graph.remaining_deps(&tid("child")), Some(0));
+    assert!(graph.ready_tasks().contains(&&tid("child")));
+}
+
+#[test]
+fn task_graph_mixed_terminal_and_non_terminal_deps() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("done", vec![], TaskStatus::Integrated))
+        .unwrap();
+    graph
+        .add_task(make_task("running", vec![], TaskStatus::InProgress))
+        .unwrap();
+    graph
+        .add_task(make_task("child", vec!["done", "running"], TaskStatus::Pending))
+        .unwrap();
+
+    // One dep terminal, one not — remaining = 1.
+    assert_eq!(graph.remaining_deps(&tid("child")), Some(1));
+    assert!(!graph.ready_tasks().contains(&&tid("child")));
+}
+
+#[test]
+fn task_graph_large_fan_out() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("root", vec![], TaskStatus::InProgress))
+        .unwrap();
+
+    for i in 0..20 {
+        graph
+            .add_task(make_task(
+                &format!("child-{i}"),
+                vec!["root"],
+                TaskStatus::Pending,
+            ))
+            .unwrap();
+    }
+
+    let deps = graph.dependents(&tid("root"));
+    assert_eq!(deps.len(), 20);
+
+    // Completing root should make all 20 children ready.
+    let newly_ready = graph.mark_completed(&tid("root"));
+    assert_eq!(newly_ready.len(), 20);
+}
+
+#[test]
+fn task_graph_large_fan_in() {
+    let mut graph = TaskGraph::new();
+    let mut dep_names = Vec::new();
+    for i in 0..10 {
+        let name = format!("dep-{i}");
+        graph
+            .add_task(make_task(&name, vec![], TaskStatus::InProgress))
+            .unwrap();
+        dep_names.push(name);
+    }
+
+    let dep_refs: Vec<&str> = dep_names.iter().map(|s| s.as_str()).collect();
+    graph
+        .add_task(make_task("sink", dep_refs, TaskStatus::Pending))
+        .unwrap();
+
+    assert_eq!(graph.remaining_deps(&tid("sink")), Some(10));
+
+    // Complete all deps.
+    for name in &dep_names {
+        graph.mark_completed(&TaskId::from(name.as_str()));
+    }
+    assert_eq!(graph.remaining_deps(&tid("sink")), Some(0));
+}
+
+#[test]
+fn task_graph_workspace_binding_history_preserved() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    graph.unbind(&tid("t1"));
+
+    // After unbind, workspace_ref is None but history is preserved.
+    let task = graph.get(&tid("t1")).unwrap();
+    assert_eq!(task.workspace_ref, None);
+    assert!(task.workspace_history.contains(&ws("ws-1")));
+}
+
+#[test]
+fn task_graph_task_for_workspace_after_unbind() {
+    let mut graph = TaskGraph::new();
+    graph
+        .add_task(make_task("t1", vec![], TaskStatus::Pending))
+        .unwrap();
+
+    graph.bind(&tid("t1"), &ws("ws-1")).unwrap();
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), Some(&tid("t1")));
+
+    graph.unbind(&tid("t1"));
+    assert_eq!(graph.task_for_workspace(&ws("ws-1")), None);
+}
+
+#[test]
+fn task_graph_default_impl() {
+    // Verify Default implementation works.
+    let graph = TaskGraph::default();
+    assert!(graph.roots().is_empty());
+    assert!(graph.is_complete());
+}

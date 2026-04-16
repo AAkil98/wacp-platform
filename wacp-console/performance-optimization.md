@@ -62,15 +62,16 @@ The F8 build-out (§13.7.3, `92b3ddb`) turned up two concrete drifts between the
 
 - **`RefusalPanel`.** Deliverable called for an "acknowledge action" and per-refusal "expiry". Neither exists — `RefusalPanel.tsx` is purely read-only and the `RefusalEvent` store shape has no `expires_at`. The deliverable was authored against an assumed design.
 - **`InjectionBar`.** Deliverable called for send-to-workspace behavior distinguished by active / paused / completed / failed states, with rejection for terminal ones. The component filters clients-side to `state.toUpperCase() === "ACTIVE"` and never renders the other states as targets; there is no per-state rejection path because there is no per-state send path.
+- **`Notifications` (F10, `543c295`).** Deliverable called for variant toasts (success / warning / error / info), explicit dismiss buttons, stacking rules, browser-notification permission flow, and "99+" badge overflow. The shipping component has **none of that**: two priorities (normal / high), click-to-dismiss (no button), no stacking limit, no `window.Notification` integration, no overflow formatter. More severely, the component is **not imported anywhere** and has no exported API to add toasts — `useState` is private, no `addToast` hook. It is a stub. `NavBadge` in the same file is functional; that's the only live piece.
 
 Both drifts surfaced from the mechanics of writing tests, because `getByLabelText` / `getByRole` queries forced a grep of the actual component contract before a selector could be chosen. You cannot write a test for a button that isn't in the source.
 
 Recommended pattern when drift appears:
 1. Test **actual** behavior, not the presumed shape. Put a short drift note at the top of the test file and in the commit message.
 2. Decide separately whether the absent feature is (a) a latent bug — users expect it and it got lost — or (b) a spec that needs harmonizing with the trimmed-down impl. Do not leave "not yet shipped" features sitting as latent TODOs in audit tables.
-3. For the running app: these two drifts mean operators currently have no way to dismiss a refusal from the panel and no way to inject into a non-active workspace from the UI. Whether those are product gaps is a product call — but they should be surfaced (here and in the UX review), not papered over by pretending the tests cover them.
+3. For the running app: these three drifts mean operators currently have no way to dismiss a refusal from the panel, no way to inject into a non-active workspace, and **no toast feedback at all** (the toast component exists but is never mounted and has no data plumbed in). The `Notifications` case is the most severe because the deliverable implied a running feature and what shipped is a stub — this warrants an explicit follow-up: either wire it up against highway-emitted `notification` channel events or remove the dead component and treat toasts as a future scope.
 
-The broader signal: the AUDIT-2026-04-15 §12.3 deliverables were authored before the frontend tests existed. Writing the tests is the forcing function that realigns spec with impl. Expect more of this as F10 and the E2E scenarios land.
+The broader signal: the AUDIT-2026-04-15 §12.3 deliverables were authored before the frontend tests existed. Writing the tests is the forcing function that realigns spec with impl. Three out of ten F-items surfaced drift in this round (F8 two, F10 one) — expect the E2E scenarios to surface more.
 
 ## 3. App-level patterns worth auditing
 

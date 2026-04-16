@@ -45,6 +45,17 @@ For app performance: the same framing error is easy to make in production — "t
 
 App-code parallel: nothing exactly equivalent, but worth noting that React 19's `StrictMode` double-invocation of effects surfaces exactly this class of cleanup bug in dev — if a future component mounts subscriptions (WebSocket handlers, interval timers, `ResizeObserver`) without matching cleanup in its `useEffect` return, StrictMode will expose it. Keep StrictMode on in dev.
 
+### 2.4 A11y label-binding gap is now a recurring pattern
+
+Two components in two sessions shipped without `htmlFor`/`id` associations between `<label>` and `<input>`:
+
+- `ProfilesPage.tsx` — Autonomy / Visibility radio groups and Budget Limit / Budget Window inputs; fixed in `d71c4fe`.
+- `Wizard.tsx` — three budget inputs (`Max Cost`, `Max Tokens`, `Max Wall Time`) and Session Name; fixed in `e870018`.
+
+The tests surfaced both because RTL's `getByLabelText` enforces the binding contract that a screen reader needs. Behavior for sighted mouse users is unchanged either way, so the gap escapes eyeball review; only the test boundary catches it.
+
+Codebase-wide recommendation (P1): add `eslint-plugin-jsx-a11y` with at least the `label-has-associated-control` rule to the lint stage. That moves this from "caught by tests post-hoc" to "caught at author-time," and incidentally documents the a11y contract in the build. Effort: 15 min. Payoff: kills this class of gap at the door.
+
 ## 3. App-level patterns worth auditing
 
 Direct grep-evidence from the current tree (as of `b17ae49` on `dev`).
@@ -55,12 +66,12 @@ The four largest single components:
 
 | File | LOC | Concerns |
 |---|---|---|
-| `src/surfaces/sessions/Wizard.tsx` | 802 | 6-step wizard, all steps rendered in one component tree; 17 inline `CSSProperties` constants + 2 style functions; local `useState` per step. The next test build-out (`AUDIT-2026-04-15.md` §13.7.2) will exercise this — expect measurable mount cost. |
+| `src/surfaces/sessions/Wizard.tsx` | 802 | 6-step wizard, all steps rendered in one component tree; 17 inline `CSSProperties` constants + 2 style functions; local `useState` per step. **Measured (§13.7.2, `e870018`):** 41 tests in 6.1 s; per-file peak 287 MB. Mount cost is not actually the issue — prior prediction revised. Real issue is the inner-function-component pattern (see below). |
 | `src/surfaces/profiles/ProfilesPage.tsx` | 530 | Sidebar + editor + version panel + delete modal in one component; 14 inline style constants + 1 style function; 11-field form via `useState`. |
 | `src/surfaces/discovery/VerticalsTab.tsx` | 494 | Heavy nested-table renderer; no memoization on rows. |
 | `src/surfaces/discovery/RolesTab.tsx` | 366 | Same pattern as Verticals. |
 
-**Recommendation.** Wizard and ProfilesPage would each benefit from being decomposed into the natural inner components (step-per-file for Wizard; sidebar/editor/versions/delete for ProfilesPage). The reasons are identical for tests and production: smaller mount radius, cheaper re-renders, easier to profile in DevTools, and memoization boundaries become available.
+**Recommendation.** ProfilesPage would benefit from decomposition into its natural subcomponents (sidebar/editor/versions/delete). Wizard has a specific anti-pattern to fix first: the six step renderers (`SelectVerticalStep`, `SelectWorkflowStep`, `AssignProfilesStep`, `ContextStep`, `BudgetOverridesStep`, `ReviewLaunchStep`) are declared as **nested function components inside `Wizard`'s body** (`Wizard.tsx:408–666`). Every Wizard re-render creates fresh function references for all six, and React reconciler treats the active step's component as a new component type — unmounting and remounting the whole step subtree instead of updating it in place. Cheap fix: extract each step to module scope as a normal component that takes the shared state as props. More invasive: extract to its own file. Either way, the re-render radius drops and the mount/unmount churn disappears.
 
 ### 3.2 Functional style helpers — per-render allocation
 
@@ -101,7 +112,7 @@ Rough effort × payoff. Update as items land.
 ### P2 — structural, medium effort
 
 3. **Decompose ProfilesPage.** Split into `ProfilesSidebar`, `ProfileEditor`, `ProfileVersionsPanel`, `DeleteProfileModal`. Mount cost of the page drops; each subcomponent becomes memoizable independently. Effort: 3–4 h. Payoff: smaller re-render radius, easier to profile, foundation for react-hook-form swap. Note: test files already aligned with this split — each sub-surface has its own `.test.tsx`.
-4. **Decompose Wizard.** Six steps as six files, composed by a thin `Wizard` shell. Effort: 4–6 h. Payoff: identical reasoning to ProfilesPage; also makes §13.7.2 test file a natural one-file-per-step layout.
+4. **Extract Wizard step components to module scope.** Quick win ahead of full decomposition: move the six `SelectVerticalStep` / `SelectWorkflowStep` / `AssignProfilesStep` / `ContextStep` / `BudgetOverridesStep` / `ReviewLaunchStep` functions (currently declared inside `Wizard`'s body, §3.1) to module scope or a sibling `steps/` folder, passing state via props instead of closure. Stops the per-render function recreation and the mount/unmount churn when the active step changes. Effort: 1–2 h. Payoff: cheaper step transitions; as a secondary, test-time render cost drops without changing public behavior.
 5. **Route-level lazy loading.** `React.lazy()` + `Suspense` for each surface in `src/App.tsx`. Initial bundle shrinks; cold-load time of `/sessions` stays cheap while the session is being launched. Effort: 1 h + eval.
 
 ### P3 — nice-to-have
@@ -118,13 +129,14 @@ Rough effort × payoff. Update as items land.
 | `d63648a` — module-scoped `QueryClient` + `queryClient.clear()` in `afterEach` of `ProfilesPage.actions.test.tsx` | Defensive, not load-bearing post-diagnosis. Kept because it makes the QC reset intent explicit. |
 | `82a4213` — `execArgv: ["--max-old-space-size=1536"]` in `vitest.config.ts` | Bounds any single vitest worker so a regression surfaces as a clean OOM inside vitest, never as a WSL crash. |
 | `82a4213` — `npm run test:isolated` + `scripts/run-tests-isolated.sh` | Per-file process isolation. Trades ~30 s walltime for a hard upper bound on cross-file heap carry-over. |
+| `e870018` — `Wizard.tsx` a11y label bindings (§2.4) | Second instance of the same gap after `d71c4fe`; raises the case for `eslint-plugin-jsx-a11y`. |
 
 ## 6. Watch-list — what would indicate regression
 
 Signals to act on when they appear:
 
-- **Single test file RSS > 500 MB** during `npm run test:isolated`. Current baseline (post-`d63648a`): every file < 400 MB; session peak 323 MB. A jump above 500 MB means a new component (likely Wizard test files from §13.7.2) has reintroduced an unstable-ref pattern or is mounting an unexpectedly heavy subtree.
-- **`npm run test:isolated` walltime > 90 s.** Current baseline: 54 s. Per-file mean ~3.4 s. Any file breaking 10 s deserves a look.
+- **Single test file RSS > 500 MB** during `npm run test:isolated`. Current baseline (post-`e870018`): every file < 300 MB; **session peak 291 MB** across 17 files. A jump above 500 MB means a new component has reintroduced an unstable-ref pattern or is mounting an unexpectedly heavy subtree.
+- **`npm run test:isolated` walltime > 90 s.** Current baseline: **62 s across 17 files** (per-file mean ~3.6 s). Wizard is the slowest single file at 7 s (41 tests). Any single file breaking 10 s deserves a look.
 - **Vitest `transform` + `setup` + `import` totals > 3 s in the per-file header.** Indicates the module graph is growing fast (too much eagerly-loaded code) — signal for §4 item 5 (route-level splitting).
 - **React DevTools Profiler showing > 16 ms commit time** for a non-initial render on any interactive surface. Indicates the re-render radius is too wide and §4 items 3 / 4 / 6 apply.
 - **Memory graph in browser DevTools showing a growing `detached DOM nodes` count** while navigating between surfaces. Indicates a `useEffect` cleanup is missing in the relevant surface — search its source for `addEventListener`, `setInterval`, `new WebSocket`, `new ResizeObserver` without a matching return function.
@@ -138,6 +150,7 @@ Sequenced steps that would have saved several hours on `ProfilesPage.actions.tes
 3. **Attach an RSS monitor in parallel.** `Monitor`/`ps` / `top` — track peak, but more importantly, track the **shape** of the curve. Linear growth → leak. Sudden jump → single-test allocation spike. Plateau at the cap with no progress → render-loop / pinned event loop.
 4. **Bisect by describe-block.** If a file has multiple describe blocks, run one at a time. The cost is small (file-scoped tests are fast) and it localizes the offending case in minutes.
 5. **Correlate with source code.** Once the offending test is identified, look at what mocks it sets up and compare to the passing tests. `mockImplementation` returning a fresh object is a near-certain smell whenever the consumer uses the result in a dep array.
+6. **Two successive `fireEvent.change` calls don't flush React state between them** (React 19, §13.7.2 evidence). If you need to test "type X, then clear to ''", inject a flush point: `fireEvent.change(input, {target:{value:"X"}}); await waitFor(() => expect(input.value).toBe("X")); fireEvent.change(input, {target:{value:""}});`. Without the `waitFor` the second event reads stale controlled-input state and the subsequent `setState` can appear to no-op. This burned a debug round in §13.7.2; now baked into the pattern library.
 
 ## 8. Backend — not yet investigated
 

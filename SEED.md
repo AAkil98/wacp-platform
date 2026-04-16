@@ -1,40 +1,52 @@
-# WACP Console — Seed Context
+# WACP Platform — Seed Context
 
-> Compressed summary of the full design, current implementation state, and next steps.
-> For detail on any topic, follow the spec references. For task-level implementation detail, see `IMPLEMENTATION.md`.
-> For the wiring strategy (cross-cutting, intended to sit at the monorepo root post-merge), see `impl/wiring-strategy.md`.
-> For the monorepo merge procedure (W0 detail, 7 milestones, decisions still open), see `wacp-console/impl/merge-plan.md`.
+> Compressed summary of the full design, current implementation state, and next steps for the unified `wacp-platform` monorepo.
+> For detail on any topic, follow the spec references. For task-level implementation detail, see `wacp/IMPLEMENTATION.md` (runtime) and `wacp-console/IMPLEMENTATION.md` (console).
+> For the wiring strategy (runtime ↔ console integration plan), see `impl/wiring-strategy.md`.
+> For the monorepo merge procedure (M0–M7), see `impl/merge-plan.md` and `impl/merge-execution-log.md`.
+> For the latest codebase health + testing strategy, see `AUDIT-2026-04-15.md`.
 
 ## What This Is
 
-A full-stack coordination workbench for the WACP ecosystem. Users discover agent roles and capabilities, create and manage agent profiles, launch coordination sessions against a live WACP runtime, and oversee agent work in real-time. The Console is a **client** of the runtime — it connects via gRPC and REST, never modifies protocol behavior, never executes LLM calls.
+The `wacp-platform` monorepo houses two binaries that ship together:
 
-**Spec:** `wcon-vision`
+- **WACP runtime (`wacp/`)** — the protocol reference implementation. Rust workspace (15 crates) + TypeScript CLI/SDK/verticals + Python SDK. Serves gRPC (Agent, Highway, Coordinator) + REST + WebSocket for the 7 verticals.
+- **WACP Console (`wacp-console/`)** — the operator workbench. Rust/Axum backend (6 crates) + React 19 SPA. Discovers agent roles, manages agent profiles, launches coordination sessions, and oversees agent work in real time. The Console is a **client** of the runtime — it connects via gRPC and REST, never modifies protocol behavior, never executes LLM calls.
 
-## Current State (Post Phase 6)
+They are shipped as two binaries with gRPC between them; the monorepo exists for development ergonomics (shared proto codegen, version-locked types, unified CI/fmt/clippy).
 
-**Backend:** 66 REST endpoints across 12 tags, 99 unit tests, zero clippy warnings. Rust workspace with 6 crates (`console`, `console-api`, `console-core`, `console-db`, `console-runtime`, `console-test-support`).
+**Specs:** runtime protocol lives in the sibling `wacp-protocol` repo (CC BY-SA 4.0). Console design specs under `wacp-console/specs/` (12 finalized). Anchor spec for the Console: `wcon-vision`.
 
-**Frontend:** 37 TypeScript files, 9,367 lines. React 19 + Vite 6 + TanStack Query + Zustand. Builds to 376KB JS / 14KB CSS.
+## Current State (Post M0–M7 merge + W1–W7 wiring)
 
-**What works end-to-end (no runtime needed):** Auth (login, logout, session, CSRF, API tokens, bootstrap, rate limiting), user management, audit log, settings, taxonomy discovery (if runtime REST is reachable), profile CRUD with validation/versioning/export/import/clone, health checks.
+**Branch:** `main` @ `a6773d6`. Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`).
 
-**What is structurally complete but hollow (needs runtime wiring):** Session launch (transitions state in SQLite, doesn't create workspaces), gate/escalation/inject actions (write audit log, don't forward to runtime), WebSocket (accepts connection, sends welcome, then idle), cross-session pending endpoints (return empty arrays), session cancellation cleanup (empty match arms), startup recovery (query exists, not wired).
+**Runtime (`wacp/`).** 15 Rust crates, ~1,280 Rust tests + TS matrix (10 packages + 7 verticals, ~1,000 tests) + Python SDK (104 tests across 3.11–3.13). All 35 gRPC RPCs fully wired across `AgentService`, `HighwayService`, `CoordinatorService`. REST gateway exposes 16 `/v1/*` endpoints + `/v1/ws`. OpenAPI drift-checked in CI. Stream A (A1–A9) closed all 8 Console-facing integration gaps; the 17 runtime-side stub/placeholder gaps identified in the subsequent implementation audit are all resolved. Port map canonicalized to `9090/9091/9092/9093/9094/9095`.
 
-**What doesn't exist yet:** Session monitor (Tokio task per session, 4 gRPC stream subscribers), refusal synthesis, event enrichment, notification synthesis.
+**Console (`wacp-console/`).** 6 Rust crates, 66+ REST endpoints, 99+ backend unit tests. React 19 + Vite + TanStack Query + Zustand frontend (37 TS files, 9,367 lines). Now fully wired to the real runtime after W1–W7:
 
-### Phase evaluations
+- **W1** gRPC pool in `AppState`; `/api/health` queries live pool + REST gateway (not mocks).
+- **W2** Launch flow: real `CoordinatorService` sequence (`SubmitGoal` → `Decompose` → `Dispatch×N` → envelope send), rollback via `AbortWorkspace` on partial failure.
+- **W3** `SessionMonitor`: one Tokio task per session, bounded `broadcast` fan-out (cap 256), four stream drivers (Trail, Gates, Escalations, WorkspaceChanges).
+- **W4** Highway forwarding: gate resolve, escalation respond, directive inject all hit real `HighwayService` gRPC.
+- **W5** Cancel calls `AbortWorkspace`; startup recovery scans `state='active'` and respawns monitors.
+- **W6** Cross-session pending endpoints (`/api/gates/pending`, `/api/escalations/pending`, `/api/refusals/pending`) aggregate from live monitor state.
+- **W7** Integration harness (`integration/tests/`) — `lifecycle` and `cross_session` passing; `chaos` covers broadcast backpressure + reconnect. Two scenarios (`T7.2`, `T7.3`) `#[ignore]`-ed pending an LLM stub on the runtime side.
 
-All six phases passed evaluation. Reports at `impl/phase-{1..6}-eval.md`.
+**Working end-to-end against a live runtime:** discovery (roles, tools, verticals, types, search), profile CRUD with validation/versioning/export/import/clone, multi-user auth (Argon2id, CSRF double-submit, rate limiting, 256-bit bootstrap credential at 0o600), session launch + oversight (trail stream, gate queue, escalation inbox, refusal panel, workspace tree, injection bar across 7 WebSocket channels), startup recovery, cross-session pending aggregation.
 
-| Phase | Tests | Endpoints | Key deliverables |
-|-------|-------|-----------|-----------------|
-| 1 | 51 → | 21 | Auth, users, tokens, audit, settings, health, bootstrap, rate limiting |
-| 2 | 71 → | 40 | Taxonomy index, discovery endpoints, search, reload, pagination, OpenAPI |
-| 3 | 87 → | 50 | Profile validation (14 codes + 2 warnings), CRUD, versioning, YAML export/import |
-| 4 | 99 | 66 | Session state machine, validation (12 codes), gRPC pool, CRUD, highway actions, WebSocket |
-| 5 | +3 FE | — | API types codegen, Zustand stores, app shell, login, discovery browser (4 tabs), profiles, settings, admin |
-| 6 | — | — | WebSocket hook, 6-step wizard, oversight dashboard (8 panels), notifications |
+**Not yet present (tracked, not regressions):** Playwright E2E suite (Phase 7.6–7.10), LLM-stub-dependent integration scenarios (T7.2/T7.3), CI supply-chain scanning (`cargo-deny` / SBOM / Trivy). All called out in `AUDIT-2026-04-15.md` §9–§11.
+
+### Milestone history
+
+All milestones passed evaluation. Reports at `wacp-console/impl/phase-{1..6}-eval.md`, `wacp-console/impl/wiring-eval.md` (per-phase W1–W7), and `impl/merge-execution-log.md` (M0–M7).
+
+| Track | Phases | Outcome |
+|---|---|---|
+| Console design | 0–4 (backend) + 5–6 (frontend) | 99 backend tests, 66 endpoints, full SPA |
+| Runtime Stream A | A1–A9 | Port map, CI matrix, cargo-dist, crates.io metadata, OpenAPI, workspace listing, mock runtime |
+| Monorepo merger | M0–M7 | Umbrella workspace, `wacp-proto` extraction, unified CI, hoisted tooling, docker-compose |
+| Wiring | W1–W7 | Real gRPC+REST integration, session monitor, cancel + recovery, cross-session pending, integration tests |
 
 ## Four Surfaces
 
@@ -104,88 +116,63 @@ Four endpoints, three independent Tonic channels + one REST client:
 
 **Spec:** `wcon-data-model`
 
-## Next Step: Wiring Strategy
+## Next Steps: Post-audit action items + test coverage push
 
-**Documents:** `impl/wiring-strategy.md` (cross-cutting plan — intended to sit at the monorepo root post-merge) and `wacp-console/impl/merge-plan.md` (W0 detail — `status: final`, 12 decisions resolved, 6 pre-M0 open items resolved with decisions recorded in §10).
+The merger (M0–M7) and wiring (W1–W7) are done. The current work item is the `AUDIT-2026-04-15.md` punch list — small pre-release items — followed by the six-week testing-coverage initiative (audit §12) that pushes each surface toward near-100% branch coverage.
 
-Phase 7 (distribution) is postponed. The next work is wiring the Console to the real WACP runtime. The strategy has 7 steps:
+### Pre-`v0.1.0` punch list (from `AUDIT-2026-04-15.md` §11)
 
-| Step | What | Effort |
-|------|------|--------|
-| **W0** | Merge `wacp/` and `wacp-console/` into one workspace (see `wacp-console/impl/merge-plan.md`) | 1–2d |
-| **W1** | gRPC pool → AppState (instantiate, connect, inject) | ~2h |
-| **W2** | Real launch flow (CreateSession → SubmitGoal → Dispatch → SendEnvelope) | ~1d |
-| **W3** | Session monitor (4 gRPC stream subscribers, event aggregation, WebSocket broadcast) | ~2d |
-| **W4** | Highway forwarding (gate/escalation/inject → real gRPC calls) | ~4h |
-| **W5** | Cancellation cleanup + startup recovery | ~4h |
-| **W6** | Cross-session pending endpoints from monitor state | ~2h |
+Roughly 4–6 focused hours of work plus the testing initiative:
 
-**Critical path:** W3 (session monitor) — the hardest piece. Everything else is mechanical wiring.
+| # | Item | Effort |
+|---|---|---|
+| 1 | CI — add `cargo-deny` to `ci-lint.yml` + `deny.toml` at platform root | 15 min |
+| 2 | CI — add SBOM + Trivy OCI scanning to `release-runtime.yml` + `release-console.yml` | 30 min |
+| 3 | Runtime auth — wrap post-lookup equality with `subtle::ConstantTimeEq` in `wacp/crates/wacp-transport/src/auth_api_key.rs` + `auth_session.rs`; re-key HashMap by hashed-token | 60–90 min |
+| 4 | ~~Doc fix — `wacp-console/IMPLEMENTATION.md` Phase 4.6 step names~~ — **done** (now reads `SubmitGoal → Decompose → Dispatch → envelope`) | 5 min |
+| 5 | ~~Move/cross-link `wacp/AUDIT-2026-04-12.md` so the audit trail sits alongside `AUDIT-2026-04-15.md`~~ — **done** (now at `AUDIT-2026-04-12.md`) | 5 min |
+| 6 | Schedule the LLM stub that unblocks W7 T7.2/T7.3 | separate task |
+| 7 | Plan the frontend test build-out (Phase 7.5–7.10 Playwright E2E) — tracked as part of the testing initiative below | separate initiative |
 
-**Before writing any wiring code:** Start the real runtime (`cd ../wacp && cargo run --bin wacp-runtime -- serve --config dev/runtime.yaml` pre-merge; `cargo run -p wacp-runtime -- serve --config wacp/dev/runtime.yaml` post-merge), verify REST taxonomy loading works, confirm auth/profiles/settings work standalone.
+### Testing coverage initiative (audit §12)
 
-### Monorepo Decision (Merge Plan in Review)
+Six-week rollout, three phases:
 
-The two repos are not independent. They share proto contracts, type crates, and must version-lock. Merge is **decided** — full plan in `wacp-console/impl/merge-plan.md` (`status: final`). Architectural boundary stays: two binaries, gRPC between them. Merge is about development ergonomics.
+| Weeks | Phase | Deliverable |
+|---|---|---|
+| 1–2 | Tooling | `cargo-llvm-cov` (Rust), Vitest `--coverage` + `@vitest/coverage-v8` (TS), `coverage --branch` (Py), Codecov with per-component flags. Thresholds start at baseline; patch ≥ 95%, project drop ≤ 0.5 pt. |
+| 3–4 | Rust branch gap | Work items T1–T11 — `wacp-tools` execution branches, `wacp-llm` provider error paths, `wacp-transport` auth variants, `wacp-security` PII edge cases, coordinator FSM, then `console-core::{session_launcher, session_monitor, recovery}`, `console-api::middleware`, `console-db`. Target: Rust branch 55 → 85%. |
+| 5–6 | Frontend + E2E | Work items F1–F10 (Zustand stores, API hooks, `useSessionStream`, auth/discovery/profiles/wizard/oversight/admin surfaces, notifications) + five Playwright golden scenarios. Requires the A9 mock runtime sidecar (shipped) and the LLM stub (§ 6 above). |
 
-**12 decisions resolved** (§2 of merge-plan):
+Mutation testing (`cargo-mutants`, `stryker`) lands as a weekly job in parallel with the ratchet, scoped to the four critical modules: runtime auth path, `session_launcher`, `session_monitor`, `wacp-tools::execution`.
 
-| # | Area | Value |
-|---|------|-------|
-| D1 | Merge direction | New umbrella repo `wacp-platform/` |
-| D2 | Git history | `git subtree add` from both — preserves history |
-| D3 | Frontends | Independent at M0–M7 (`highway-ui` + `console/frontend` untouched); B/C revisit post-M7 |
-| D4 | Cargo workspace | Single unified workspace, 22 crates as members |
-| D5 | Proto codegen | New `wacp-proto` crate owns `tonic_build`; both consumers depend on it |
-| D6 | CI | Per-project workflows (`ci-wacp.yml`, `ci-console.yml`) with `paths:` filters + shared `ci-lint.yml` |
-| D7 | Specs/docs | Per-subdir trees preserved; `wiring-strategy.md` promotes to umbrella root at M5 |
-| D8 | Branch naming | `main` (protected) + `dev` (integration) |
-| D9 | Remote | `github.com/Madahub-dev/wacp-platform` |
-| D10 | Release tagging | Per-subproject tags: `wacp-runtime-v*` + `wacp-console-v*`, independent cadence |
-| D11 | Console distribution | **OCI image only (ADR-009 supersedes ADR-004); cargo-dist deferred** |
-| D12 | Docker | Per-subdir Dockerfiles (runtime exists; console written at M5); root `docker-compose.yml` for dev |
-
-**Sibling repo (out of scope):** `../wacp-protocol/` holds protocol specs (deliberately separate). Spec IDs are path-independent, so cross-references work unchanged.
-
-**8 execution milestones:** M0 pre-flight → M1 umbrella + subtree import → M2 Cargo workspace union → M3 `wacp-proto` extraction → M4 path-dep flip → M5 tooling + Dockerfiles + ADR-009 + wiring-strategy relocation → M6 CI rewrite → M7 validate + tag `monorepo-v0`.
-
-**6 pre-M0 open items resolved** (§10 of merge-plan). Decision summary:
-
-1. **§10.1** — Commit `wacp/.cargo/config.toml` (WSL2 OOM mitigation: `jobs=1` + mold linker); hoist to umbrella root at M5. Done on `wacp` dev branch (commit `d010336`).
-2. **§10.2** — Console currently CLI-flag-only (no config-file, no env). Add clap `env = "WACP_RUNTIME_*_ADDRESS"` attributes on five flags at M5, bundled with compose + Dockerfile. Also adds `WACP_CONSOLE_LISTEN` since `[::1]:8080` is container-hostile.
-3. **§10.3** — `rust-embed` is a declared-but-unused dep (Phase 7 integration postponed). Implement at M5: new `crates/console/src/assets.rs` with `#[folder = "$CARGO_MANIFEST_DIR/../../frontend/dist/"]`; wire `.fallback_service` with SPA history fallback; honour the currently-discarded `--frontend-path` dev override.
-4. **§10.4** — Real scratch-tag push to ghcr.io + cleanup runbook. `*-test` `if:` guards skip the 4-target matrix on `release-runtime.yml`, so validation runs docker-only (~5 min vs ~40 min). `act` rejected — can't test OIDC/ghcr-login step.
-5. **§10.5** — Confirmed live: `cd wacp/packages/wacp-cli && pnpm install --frozen-lockfile` → 8 `file:` deps, 825 ms. Two unrelated `.gitignore` anomalies surfaced: `wacp/.gitignore:5` ignores `Cargo.lock` (drop at M5 union); `node_modules/` relies on user's global gitignore in both repos (add explicit `**/node_modules/` at M5).
-6. **§10.6** — Hybrid port: TS/Python/proto job bodies copy verbatim with mechanical `wacp/` path-prefix updates; `rust` job rewrites for `-p wacp-*` scoping; workflow trigger adds `paths:` filter. Post-M4, `ci-console.yml` loses its cross-repo checkout dance — ~100-line simplification.
-
-**Revised effort estimate:** 1–2 working days (not the original 4h).
+**End-state targets:** Rust 95% branch, Console frontend 95% branch, TS verticals 95% branch, Python SDK 95% branch. Full scope and per-crate/per-component work items in `AUDIT-2026-04-15.md` §12.
 
 ### Resumption Point
 
-**M0 + M1 + M2 complete.** Umbrella repo `wacp-platform` exists at `/home/aakil98/mada/wacp-platform/` — not yet pushed to any remote; HEAD at `d8b3d4d` on `main`. See `impl/merge-execution-log.md` for full state: commit anchors in all three repos, plan deviations discovered en route (three files hoisted from M5 → M2 for WSL2 safety; `git log --follow` incompatibility with subtree), and the precise M3 next-step procedure.
+**M0–M7 merger, W1–W7 wiring, and runtime implementation audit all complete.** HEAD at `a6773d6` on `main`. Working tree clean.
 
 When resuming:
-1. Read `impl/merge-execution-log.md` (~5 min) for current state + outstanding plan corrections.
-2. `cd /home/aakil98/mada/wacp-platform` — `git log --oneline -5` should show `d8b3d4d` at HEAD.
-3. Execute M3 → M7 (merge-plan `§5.4` onward, cross-referenced against the execution log's §6 corrections).
-4. Post-M7, begin W1 (gRPC pool → AppState) on umbrella `dev` branch.
+1. Read `AUDIT-2026-04-15.md` (~15 min) for current health verdict, risk inventory, and testing strategy.
+2. `cd /home/aakil98/mada/wacp-platform` and work the pre-`v0.1.0` punch list above.
+3. Kick off the testing initiative (§12 weeks 1–2 tooling first; the Rust and FE test work is gated on visibility).
+4. When the LLM stub is in place, lift the `#[ignore]` annotations on `integration/tests/` T7.2 and T7.3.
+5. Tag `wacp-runtime-v0.1.0` and `wacp-console-v0.1.0` independently once CI gains `cargo-deny` / SBOM / Trivy and the Rust branch-coverage floor clears 85%.
 
-**ADR-009 is new and supersedes ADR-004.** Update the ADR table below when M5 writes it.
+### Hollow Code Inventory — closed
 
-### Hollow Code Inventory
+All eight hollow components identified pre-wiring are now real. For the record:
 
-8 scaffolded components that need real gRPC calls:
-
-| Component | Current state | What it needs |
-|-----------|--------------|---------------|
-| gRPC pool | Built, never instantiated | Add to AppState, connect on startup |
-| Launch flow | SQLite state transitions only | 5-step gRPC sequence |
-| Session monitor | Doesn't exist | Tokio task with 4 stream subscribers |
-| Gate resolution | Audit log only | `HighwayService::RespondToGate` |
-| Escalation response | Audit log only | `HighwayService::RespondToEscalation` |
-| Directive injection | Audit log only | `HighwayService::InjectEnvelope` |
-| Cancel cleanup | Empty match arms | `CoordinatorService::AbortWorkspace` |
-| Startup recovery | Query exists, not wired | Verify workspaces, re-subscribe streams |
+| Component | Pre-W state | Post-W state (file:line proof) |
+|---|---|---|
+| gRPC pool | Built, never instantiated | Instantiated + connected in `wacp-console/crates/console/src/main.rs:150–162`; injected into `AppState` |
+| Launch flow | SQLite state transitions only | `SubmitGoal → Decompose → Dispatch` sequence in `wacp-console/crates/console-core/src/session_launcher.rs:154–347`; rollback at `:375–396` |
+| Session monitor | Didn't exist | Tokio task with 4 stream drivers in `wacp-console/crates/console-core/src/session_monitor.rs` (drivers at `:644/675/706/737`) |
+| Gate resolution | Audit log only | `HighwayService::respond_to_gate` at `wacp-console/crates/console-api/src/routes/highway.rs:73–120` |
+| Escalation response | Audit log only | `HighwayService::respond_to_escalation` at `…/highway.rs:260–335` |
+| Directive injection | Audit log only | `HighwayService::send_envelope` at `…/highway.rs:409–500` |
+| Cancel cleanup | Empty match arms | `CoordinatorService::AbortWorkspace` at `wacp-console/crates/console-api/src/routes/sessions.rs:687` |
+| Startup recovery | Query exists, not wired | Scan + probe + respawn at `wacp-console/crates/console-core/src/recovery.rs:67–119` |
 
 ## Key Invariants
 
@@ -210,33 +197,65 @@ When resuming:
 | 006 | Apache-2.0 license |
 | 007 | Profile YAML format versioning (format_version: 1) |
 | 008 | OpenAPI as shared contract (utoipa → openapi-typescript) |
-| 009 | *(pending — written at M5)* OCI-only console distribution; cargo-dist deferred; `rust-embed` retained inside Dockerfile cargo build stage |
+| 009 | OCI-only console distribution; cargo-dist deferred; `rust-embed` retained inside Dockerfile cargo build stage |
 
-**Full ADR text:** `SPEC_BUILD.md` (ADR-009 will live at umbrella `impl/adr-009-oci-only-console.md` post-merge).
+**Full ADR text:** `wacp-console/SPEC_BUILD.md` + `impl/adr-009-oci-only-console.md`.
 
 ## Workspace Layout
 
 ```
-wacp-console/
-├── Cargo.toml                  # workspace root (6 member crates)
+wacp-platform/
+├── Cargo.toml                  # umbrella workspace (all Rust crates from both trees)
+├── Cargo.lock                  # unified lockfile
 ├── rust-toolchain.toml         # pin Rust stable
-├── openapi.yaml                # generated (66 operations, 12 tags)
-├── crates/
-│   ├── console/                # binary — CLI, tracing, startup, taxonomy build
-│   ├── console-api/            # Axum routes, handlers, OpenAPI, pagination, WebSocket
-│   ├── console-core/           # domain logic: auth, profiles, sessions, taxonomy, validation
-│   ├── console-db/             # sqlx types, queries, migrations
-│   ├── console-runtime/        # gRPC pool, REST client, proto codegen, upstream re-exports
-│   └── console-test-support/   # mock runtime (gRPC + REST), fixtures
-├── migrations/                 # sqlx SQL migration files (9 tables)
-├── frontend/                   # Vite + React 19 + TypeScript SPA
-│   ├── src/api/                # types.ts (generated), client.ts, hooks/
-│   ├── src/store/              # auth.ts, ui.ts, session.ts (Zustand)
-│   ├── src/components/         # Layout, Sidebar, AdminGuard, Notifications
-│   ├── src/realtime/           # useSessionStream.ts (WebSocket hook)
-│   └── src/surfaces/           # auth, discovery, profiles, sessions, oversight, settings, admin
-├── specs/                      # 12 finalized design specs
-└── impl/                       # phase evals, wiring strategy
+├── docker-compose.yml          # dev stack: runtime + console + postgres
+├── SEED.md                     # this file
+├── AUDIT-2026-04-15.md         # post-wiring health audit + testing strategy
+├── impl/                       # merge-plan, merge-execution-log, wiring-strategy, ADR-009
+├── .github/workflows/          # ci-lint / ci-wacp / ci-console / release-runtime / release-console
+│
+├── wacp/                       # runtime subtree
+│   ├── crates/                 # 15 Rust crates
+│   │   ├── wacp-proto/         # shared tonic_build codegen (M3)
+│   │   ├── wacp-runtime/       # binary — gRPC server, config, TLS
+│   │   ├── wacp-coordinator/   # orchestrator: workspace tree, task graph
+│   │   ├── wacp-transport/     # gRPC/REST/WS gateway, auth
+│   │   ├── wacp-highway/       # signals, gates, escalations
+│   │   ├── wacp-tools/         # tool execution, cancellation, retries
+│   │   ├── wacp-llm/           # provider adapters (Anthropic, OpenAI)
+│   │   ├── wacp-security/      # PII filter, policies
+│   │   ├── wacp-taxonomy/      # VerticalManifest + derived roles
+│   │   ├── wacp-types/         # primitives
+│   │   └── …                   # fsm, clock, permissions, trail, workspace, sdk, coordinator-sdk
+│   ├── packages/               # @wacp/cli, @wacp/local (TypeScript)
+│   ├── ecosystem/              # 7 verticals: swe, devops, mlops, finance, healthcare, analytics, datasci
+│   ├── sdk-python/             # Python bindings
+│   ├── highway-ui/             # legacy highway webapp
+│   ├── openapi.yaml            # runtime REST spec (16 endpoints)
+│   ├── proto/                  # .proto definitions
+│   ├── impl/                   # 17 impl specs + phase evals
+│   └── IMPLEMENTATION.md       # runtime forward strategy
+│
+└── wacp-console/               # console subtree
+    ├── crates/
+    │   ├── console/            # binary — CLI, tracing, startup, taxonomy build, rust-embed assets
+    │   ├── console-api/        # Axum routes, handlers, OpenAPI, pagination, WebSocket
+    │   ├── console-core/       # auth, profiles, sessions, taxonomy, session_launcher, session_monitor, recovery
+    │   ├── console-db/         # sqlx types, queries, migrations
+    │   ├── console-runtime/    # GrpcPool, REST client, upstream re-exports
+    │   └── console-test-support/ # mock runtime (real Tonic/Axum), fixtures
+    ├── migrations/             # 9 SQL tables
+    ├── frontend/               # Vite + React 19 + TypeScript SPA
+    │   ├── src/api/            # types.ts (generated), client.ts, hooks/
+    │   ├── src/store/          # auth.ts, ui.ts, session.ts (Zustand)
+    │   ├── src/components/     # Layout, Sidebar, AdminGuard, Notifications
+    │   ├── src/realtime/       # useSessionStream.ts (WebSocket hook)
+    │   └── src/surfaces/       # auth, discovery, profiles, sessions, oversight, settings, admin
+    ├── integration/            # W7 cross-binary integration + chaos tests
+    ├── openapi.yaml            # console REST spec (66 operations, 12 tags)
+    ├── specs/                  # 12 finalized design specs + 7 wiring coding specs
+    ├── impl/                   # phase evals + wiring evals
+    └── IMPLEMENTATION.md       # console forward strategy
 ```
 
 ## Design Specs (all final)
@@ -256,4 +275,4 @@ wacp-console/
 | 11 | `wcon-test` | Test Strategy |
 | 12 | `wcon-auth` | Authentication & Authorization |
 
-*WACP Console -- authored by AKIL Abderrahim and Claude Opus 4.6*
+*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6*

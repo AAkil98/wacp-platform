@@ -1,14 +1,38 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import type React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import { ProfilesPage } from "./ProfilesPage";
 import {
   SAMPLE_PROFILES,
   SAMPLE_PROFILE_DETAIL,
   SAMPLE_ROLES,
-  queryWrapper,
   makeMutationMock,
   defaultQueryResult,
 } from "./ProfilesPage.test-helpers";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: false, gcTime: 0, staleTime: Infinity },
+    mutations: { retry: false },
+  },
+});
+
+function wrapper() {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  queryClient.clear();
+});
 
 // ---- File-scoped mocks ----
 
@@ -63,7 +87,7 @@ describe("ProfilesPage — clone flow", () => {
     mockCloneProfile.mockReturnValue(cloneMut);
     mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -79,7 +103,7 @@ describe("ProfilesPage — clone flow", () => {
     mockCloneProfile.mockReturnValue(cloneMut);
     mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -98,7 +122,7 @@ describe("ProfilesPage — clone flow", () => {
     mockCloneProfile.mockReturnValue(cloneMut);
     mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -115,7 +139,7 @@ describe("ProfilesPage — delete flow", () => {
   });
 
   it("shows confirmation dialog when Delete is clicked", async () => {
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -130,7 +154,7 @@ describe("ProfilesPage — delete flow", () => {
   });
 
   it("shows warning about sessions being affected", async () => {
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -148,7 +172,7 @@ describe("ProfilesPage — delete flow", () => {
     const deleteMut = makeMutationMock();
     mockDeleteProfile.mockReturnValue(deleteMut);
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -162,7 +186,7 @@ describe("ProfilesPage — delete flow", () => {
   });
 
   it("hides confirmation dialog when Cancel is clicked", async () => {
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -180,7 +204,7 @@ describe("ProfilesPage — delete flow", () => {
     const deleteMut = makeMutationMock(undefined, { isPending: true });
     mockDeleteProfile.mockReturnValue(deleteMut);
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -201,7 +225,7 @@ describe("ProfilesPage — export YAML", () => {
   it("renders Export YAML button for existing profile", async () => {
     mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {
@@ -217,18 +241,9 @@ describe("ProfilesPage — selection switching", () => {
   });
 
   it("switches between profiles when different items are clicked", async () => {
-    mockProfile.mockImplementation((id: string) => {
-      if (id === "p1") return defaultQueryResult(SAMPLE_PROFILE_DETAIL);
-      if (id === "p2") return defaultQueryResult({
-        ...SAMPLE_PROFILE_DETAIL,
-        id: "p2",
-        name: "Beta Bot",
-        role_ref: "operator",
-      });
-      return defaultQueryResult(undefined);
-    });
+    mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
 
     fireEvent.click(screen.getByText("Alpha Agent"));
     await waitFor(() => {
@@ -244,7 +259,7 @@ describe("ProfilesPage — selection switching", () => {
   it("clears delete dialog when switching profiles", async () => {
     mockProfile.mockReturnValue(defaultQueryResult(SAMPLE_PROFILE_DETAIL));
 
-    render(<ProfilesPage />, { wrapper: queryWrapper() });
+    render(<ProfilesPage />, { wrapper: wrapper() });
     fireEvent.click(screen.getByText("Alpha Agent"));
 
     await waitFor(() => {

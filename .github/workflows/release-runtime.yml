@@ -129,6 +129,9 @@ jobs:
     # No -test guard here: runs on scratch tags too so the OCI push path
     # is what gets validated. See §10.4.
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -150,6 +153,7 @@ jobs:
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           file: wacp/Dockerfile
@@ -157,3 +161,60 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
+
+  sbom:
+    name: SBOM (CycloneDX) for OCI image
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/wacp-runtime@${{ needs.docker.outputs.digest }}
+          format: cyclonedx-json
+          output-file: wacp-runtime-${{ github.ref_name }}.cdx.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-runtime-${{ github.ref_name }}
+          path: wacp-runtime-${{ github.ref_name }}.cdx.json
+          if-no-files-found: error
+
+      - name: Attach SBOM to GitHub Release
+        if: ${{ !endsWith(github.ref_name, '-test') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "wacp-runtime-${{ github.ref_name }}.cdx.json" \
+            --clobber
+
+  trivy:
+    name: Trivy — scan OCI image
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Trivy image scan (HIGH, CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/wacp-runtime@${{ needs.docker.outputs.digest }}
+          format: sarif
+          output: trivy-runtime.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-runtime-${{ github.ref_name }}
+          path: trivy-runtime.sarif
+          if-no-files-found: warn

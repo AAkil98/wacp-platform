@@ -1,5 +1,8 @@
 pub mod queries;
 
+#[cfg(test)]
+pub(crate) mod testing;
+
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 use std::path::Path;

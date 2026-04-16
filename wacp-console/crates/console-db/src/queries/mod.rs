@@ -6,6 +6,8 @@ pub mod session_assignments;
 pub mod sessions;
 pub mod settings;
 #[cfg(test)]
+mod coverage_tests;
+#[cfg(test)]
 mod tests;
 pub mod user_sessions;
 pub mod users;

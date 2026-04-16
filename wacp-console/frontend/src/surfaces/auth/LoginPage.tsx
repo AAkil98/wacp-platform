@@ -41,15 +41,15 @@ export function LoginPage() {
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Username</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+            <label htmlFor="login-username" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Username</label>
+            <input id="login-username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
               autoFocus required />
           </div>
           <div>
-            <label className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            <label htmlFor="login-password" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Password</label>
+            <input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
               required />

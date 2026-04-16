@@ -377,14 +377,15 @@ export function ProfilesPage() {
             <div style={formGrid}>
               {/* Name */}
               <div style={fullSpan}>
-                <label style={fieldLabel}>Name</label>
-                <input style={inputStyle} value={form.name} onChange={(e) => updateField("name", e.target.value)} />
+                <label htmlFor="pf-name" style={fieldLabel}>Name</label>
+                <input id="pf-name" style={inputStyle} value={form.name} onChange={(e) => updateField("name", e.target.value)} />
               </div>
 
               {/* Description */}
               <div style={fullSpan}>
-                <label style={fieldLabel}>Description</label>
+                <label htmlFor="pf-description" style={fieldLabel}>Description</label>
                 <textarea
+                  id="pf-description"
                   style={{ ...inputStyle, minHeight: 60 }}
                   value={form.description}
                   onChange={(e) => updateField("description", e.target.value)}
@@ -393,8 +394,8 @@ export function ProfilesPage() {
 
               {/* Role */}
               <div>
-                <label style={fieldLabel}>Role</label>
-                <select style={inputStyle} value={form.role_ref} onChange={(e) => updateField("role_ref", e.target.value)}>
+                <label htmlFor="pf-role" style={fieldLabel}>Role</label>
+                <select id="pf-role" style={inputStyle} value={form.role_ref} onChange={(e) => updateField("role_ref", e.target.value)}>
                   <option value="">-- Select role --</option>
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>{r.name || r.id}</option>
@@ -404,32 +405,32 @@ export function ProfilesPage() {
 
               {/* LLM Provider */}
               <div>
-                <label style={fieldLabel}>LLM Provider</label>
-                <input style={inputStyle} value={form.llm_provider} onChange={(e) => updateField("llm_provider", e.target.value)} placeholder="e.g. anthropic" />
+                <label htmlFor="pf-provider" style={fieldLabel}>LLM Provider</label>
+                <input id="pf-provider" style={inputStyle} value={form.llm_provider} onChange={(e) => updateField("llm_provider", e.target.value)} placeholder="e.g. anthropic" />
               </div>
 
               {/* LLM Model */}
               <div>
-                <label style={fieldLabel}>LLM Model</label>
-                <input style={inputStyle} value={form.llm_model} onChange={(e) => updateField("llm_model", e.target.value)} placeholder="e.g. claude-sonnet-4-20250514" />
+                <label htmlFor="pf-model" style={fieldLabel}>LLM Model</label>
+                <input id="pf-model" style={inputStyle} value={form.llm_model} onChange={(e) => updateField("llm_model", e.target.value)} placeholder="e.g. claude-sonnet-4-20250514" />
               </div>
 
               {/* Temperature */}
               <div>
-                <label style={fieldLabel}>Temperature</label>
-                <input style={inputStyle} type="number" step={0.1} min={0} max={2} value={form.temperature} onChange={(e) => updateField("temperature", parseFloat(e.target.value) || 0)} />
+                <label htmlFor="pf-temperature" style={fieldLabel}>Temperature</label>
+                <input id="pf-temperature" style={inputStyle} type="number" step={0.1} min={0} max={2} value={form.temperature} onChange={(e) => updateField("temperature", parseFloat(e.target.value) || 0)} />
               </div>
 
               {/* Max Tokens */}
               <div>
-                <label style={fieldLabel}>Max Tokens</label>
-                <input style={inputStyle} type="number" min={1} value={form.max_tokens} onChange={(e) => updateField("max_tokens", parseInt(e.target.value, 10) || 0)} />
+                <label htmlFor="pf-max-tokens" style={fieldLabel}>Max Tokens</label>
+                <input id="pf-max-tokens" style={inputStyle} type="number" min={1} value={form.max_tokens} onChange={(e) => updateField("max_tokens", parseInt(e.target.value, 10) || 0)} />
               </div>
 
               {/* Autonomy */}
               <div>
-                <label style={fieldLabel}>Autonomy</label>
-                <div style={{ display: "flex", gap: 16, paddingTop: 6 }}>
+                <div id="pf-autonomy-label" style={fieldLabel}>Autonomy</div>
+                <div role="radiogroup" aria-labelledby="pf-autonomy-label" style={{ display: "flex", gap: 16, paddingTop: 6 }}>
                   {(["autonomous", "assisted", "supervised"] as const).map((opt) => (
                     <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                       <input type="radio" name="autonomy" value={opt} checked={form.autonomy === opt} onChange={() => updateField("autonomy", opt)} />
@@ -441,8 +442,8 @@ export function ProfilesPage() {
 
               {/* Visibility */}
               <div>
-                <label style={fieldLabel}>Visibility</label>
-                <div style={{ display: "flex", gap: 16, paddingTop: 6 }}>
+                <div id="pf-visibility-label" style={fieldLabel}>Visibility</div>
+                <div role="radiogroup" aria-labelledby="pf-visibility-label" style={{ display: "flex", gap: 16, paddingTop: 6 }}>
                   {(["private", "shared"] as const).map((opt) => (
                     <label key={opt} style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                       <input type="radio" name="visibility" value={opt} checked={form.visibility === opt} onChange={() => updateField("visibility", opt)} />
@@ -454,14 +455,14 @@ export function ProfilesPage() {
 
               {/* Budget Limit */}
               <div>
-                <label style={fieldLabel}>Budget Limit</label>
-                <input style={inputStyle} type="number" min={0} step={0.01} value={form.budget_limit} onChange={(e) => updateField("budget_limit", parseFloat(e.target.value) || 0)} />
+                <label htmlFor="pf-budget-limit" style={fieldLabel}>Budget Limit</label>
+                <input id="pf-budget-limit" style={inputStyle} type="number" min={0} step={0.01} value={form.budget_limit} onChange={(e) => updateField("budget_limit", parseFloat(e.target.value) || 0)} />
               </div>
 
               {/* Budget Window (seconds) */}
               <div>
-                <label style={fieldLabel}>Budget Window (seconds)</label>
-                <input style={inputStyle} type="number" min={0} value={form.budget_window_secs} onChange={(e) => updateField("budget_window_secs", parseInt(e.target.value, 10) || 0)} />
+                <label htmlFor="pf-budget-window" style={fieldLabel}>Budget Window (seconds)</label>
+                <input id="pf-budget-window" style={inputStyle} type="number" min={0} value={form.budget_window_secs} onChange={(e) => updateField("budget_window_secs", parseInt(e.target.value, 10) || 0)} />
               </div>
             </div>
 

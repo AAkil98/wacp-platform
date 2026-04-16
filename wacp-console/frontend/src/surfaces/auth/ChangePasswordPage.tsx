@@ -37,15 +37,15 @@ export function ChangePasswordPage() {
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
-            <label className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Current Password</label>
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
+            <label htmlFor="chpw-current" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Current Password</label>
+            <input id="chpw-current" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
               autoFocus required />
           </div>
           <div>
-            <label className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>New Password</label>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+            <label htmlFor="chpw-new" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>New Password</label>
+            <input id="chpw-new" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
               required minLength={12} />

@@ -54,11 +54,12 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    const raw = await response.text();
     let body: unknown;
     try {
-      body = await response.json();
+      body = JSON.parse(raw);
     } catch {
-      body = await response.text();
+      body = raw;
     }
     const code = (body as { error?: string })?.error ?? `HTTP_${response.status}`;
     throw new ApiError(response.status, code, body);

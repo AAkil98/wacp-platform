@@ -164,7 +164,7 @@ Naming convention `WAx` ("wiring, agent-side x") distinguishes from the `Wx` pha
 
 Original WA4 proposed wiring `AgentRequest::SendEnvelope`. A closer reading of `init.rs:765–:826` shows it is already wired — see §2.4. T7.7 / T7.8 therefore do not need a new dispatch path; they un-`#[ignore]` on WA2 (signals drive FSM so 10 sessions can reach `Complete`) and WA3 (gates make traffic high enough to exercise slow-consumer pacing).
 
-### 3.5 Phase WA5 — Dispatch-failure injection for T7.5 (DEFERRED)
+### 3.5 Phase WA5 — Dispatch-failure injection for T7.5 (LANDED)
 
 **What.** A test-only knob that makes the second `CoordinatorService::Dispatch` in a multi-task launch return an error, so the Console's W2 rollback assertion can fire.
 
@@ -176,7 +176,7 @@ This phase is harness-side only (no runtime changes) and can land in parallel wi
 
 **Validation.** T7.5 un-`#[ignore]`s.
 
-**Deferral note (2026-04-17).** During the WA3.5 + WA3.6 session it became clear the original 2 h estimate was light. The `tower::Service` interceptor approach hits a typing wall: `GrpcPool` stores `CoordinatorServiceClient<Channel>` with a fixed channel type, so swapping in an intercepted channel requires either making `GrpcPool` generic over `T: Service<Request<…>>` (ripples through every consumer) or building a full mock CoordinatorService server that forwards 12 RPCs + 1 streaming RPC to the real runtime (~150–200 lines of mostly-mechanical boilerplate). Either path is ~3–4 h, not 2. T7.5 stays `#[ignore]`-ed with the reason updated to point here. WA5 is independent of the un-ignore sweep — it can land any time without coordination with the other unblocks.
+**Implementation note (2026-04-17).** Landed via `dec6385`. Took the tonic mock-server path (12 unary RPCs + 1 streaming RPC forward to the real runtime, `dispatch` short-circuits with Unavailable on the Nth call). The mock lives inline in `tests/chaos.rs::failure_proxy` rather than in `runtime_harness.rs` per the original strategy — keeps `tonic` + `wacp-transport` as dev-deps (one less Cargo.toml churn). Each forwarded RPC is a one-line `self.upstream.clone().method(req).await`; streaming is pumped via a spawned task. ~3 h actual.
 
 ---
 
@@ -210,12 +210,11 @@ WA5: Dispatch-failure injection (harness-side)                ~2 hours
                     `// Future:` comments in each test file.)
 ```
 
-**Total effort (revised after WA3.5 + WA3.6 landing on 2026-04-17):**
-- Landed: WA1 (2 h), WA2 (2 h), WA3 narrowed (1.5 h), WA3.5 (4–5 h), WA3.6 (2–3 h). Total landed ≈ 11.5–13.5 h.
-- Deferred: WA5 (3–4 h after re-estimation; was 2 h), un-ignore sweep (5 tests × 2–4 h = 10–20 h). Total deferred ≈ 13–24 h.
-- Full §13.7.6b end-state estimate: 24–37 h. Original 9–12 h was ~50–75 % undersized across the board.
+**Total effort (final, 2026-04-17 close):**
+- Landed: WA1 (2 h), WA2 (2 h), WA3 narrowed (1.5 h), WA3.5 (4–5 h), WA3.6 (2–3 h), WA5 (3 h), T7.3 + WorkspaceState fix (1.5 h), un-ignore sweep T7.2/T7.7/T7.8/T7.10 (1.5 h thanks to the WA3.5/WA3.6/WA5 ground prep + the discovered direct-broadcast pattern for T7.8). Total ≈ 17.5–19 h.
+- Original 9–12 h estimate was undersized by ~50–75 %. Two new bugs surfaced (Rust↔proto enum offset on GateType + WorkspaceState) that wouldn't have appeared in unit tests alone — the integration sweep was the forcing function.
 
-**Critical path:** WA3 (checkpoints → actor) → WA3.5 (gate fan + resume) → un-ignore sweep. WA3.6 is parallelizable. WA5 is fully independent (harness-side only).
+**Critical path:** WA3 (checkpoints → actor) → WA3.5 (gate fan + resume) → un-ignore sweep. WA3.6 was parallelizable but had its own async-cascade ripples. WA5 was fully independent (harness-side only) and shipped late in the day.
 
 ---
 

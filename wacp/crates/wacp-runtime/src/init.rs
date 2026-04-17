@@ -471,8 +471,8 @@ impl Runtime {
                 };
                 let proto_ev = Ok(wacp_v1::WorkspaceStateChange {
                     workspace_id: workspace_id.to_string(),
-                    previous: *from as i32,
-                    current: *to as i32,
+                    previous: workspace_state_to_proto(*from) as i32,
+                    current: workspace_state_to_proto(*to) as i32,
                     trigger: trigger.into(),
                     timestamp: None,
                 });
@@ -510,7 +510,7 @@ impl Runtime {
                 let proto_ev = Ok(wacp_v1::WorkspaceStateChange {
                     workspace_id: archived.id.to_string(),
                     previous: 0, // unknown prior state
-                    current: archived.terminal_state as i32,
+                    current: workspace_state_to_proto(archived.terminal_state) as i32,
                     trigger: "terminated".into(),
                     timestamp: None,
                 });
@@ -2059,6 +2059,27 @@ fn gate_type_to_proto(gt: GateType) -> wacp_transport::wacp_v1::GateType {
         GateType::ConflictResolution => P::ConflictResolution,
         GateType::WorkspaceAbort => P::WorkspaceAbort,
         GateType::CheckpointApproval => P::CheckpointApproval,
+    }
+}
+
+/// Map the internal `WorkspaceState` enum onto its proto counterpart. Same
+/// enum-offset trap as `gate_type_to_proto`: internal `Idle = 0`, proto
+/// `UNSPECIFIED = 0` + `IDLE = 1`. Miscasting surfaces as garbage state
+/// values on StreamWorkspaceChanges — the Console's monitor then fails
+/// its completion-detection comparison against `proto::Closed`. First
+/// observed biting T7.3: `Closed as i32 = 7` but proto 7 is `Conflicted`.
+fn workspace_state_to_proto(ws: WorkspaceState) -> wacp_transport::wacp_v1::WorkspaceState {
+    use wacp_transport::wacp_v1::WorkspaceState as P;
+    match ws {
+        WorkspaceState::Idle => P::Idle,
+        WorkspaceState::Active => P::Active,
+        WorkspaceState::Blocked => P::Blocked,
+        WorkspaceState::Suspended => P::Suspended,
+        WorkspaceState::Migrating => P::Migrating,
+        WorkspaceState::Integrating => P::Integrating,
+        WorkspaceState::Conflicted => P::Conflicted,
+        WorkspaceState::Closed => P::Closed,
+        WorkspaceState::Failed => P::Failed,
     }
 }
 

@@ -177,7 +177,9 @@ pub struct MockHighwayService {
 
 impl MockHighwayService {
     pub fn with_config(config: Arc<HighwayConfig>) -> Self {
-        Self { config: Some(config) }
+        Self {
+            config: Some(config),
+        }
     }
 
     fn outcome_for(&self, kind: HighwayRpc) -> HighwayOutcome {

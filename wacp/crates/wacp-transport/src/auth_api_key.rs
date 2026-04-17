@@ -456,11 +456,7 @@ mod tests {
         let ws_clone = ws.clone();
         let handle = std::thread::spawn(move || {
             for i in 0..100 {
-                auth_clone.register_agent_key(
-                    format!("extra-key-{i}"),
-                    ws_clone.clone(),
-                    "worker",
-                );
+                auth_clone.register_agent_key(format!("extra-key-{i}"), ws_clone.clone(), "worker");
             }
         });
 

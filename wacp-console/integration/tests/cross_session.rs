@@ -162,7 +162,11 @@ async fn run_one_session_to_completion(
         Ok(a) => a,
         Err(_) => return false,
     };
-    if agent.signal(wacp_types::SignalType::Complete).await.is_err() {
+    if agent
+        .signal(wacp_types::SignalType::Complete)
+        .await
+        .is_err()
+    {
         return false;
     }
 
@@ -172,10 +176,7 @@ async fn run_one_session_to_completion(
         return false;
     }
 
-    let row = sessions::get_by_id(&state.db, &sid)
-        .await
-        .ok()
-        .flatten();
+    let row = sessions::get_by_id(&state.db, &sid).await.ok().flatten();
     let ok = row
         .as_ref()
         .map(|r| r.state == session_state::COMPLETED)

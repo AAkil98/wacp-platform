@@ -12,6 +12,7 @@ dist
 dist-ssr
 coverage
 *.local
+*.tsbuildinfo
 
 # Playwright E2E artifacts (§13.7.7)
 playwright-report

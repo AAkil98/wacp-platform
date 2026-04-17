@@ -19,8 +19,7 @@
 use crate::{DbPool, run_migrations};
 use sqlx::Connection;
 use sqlx::sqlite::{
-    SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePoolOptions,
-    SqliteSynchronous,
+    SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
 };
 use std::future::Future;
 use std::path::PathBuf;
@@ -199,10 +198,12 @@ mod self_tests {
         drop(lock);
 
         // After release, the write succeeds.
-        sqlx::query("INSERT INTO settings (key, value, updated_at) VALUES ('k', 'v', '2026-04-16')")
-            .execute(&db.pool)
-            .await
-            .expect("post-release write");
+        sqlx::query(
+            "INSERT INTO settings (key, value, updated_at) VALUES ('k', 'v', '2026-04-16')",
+        )
+        .execute(&db.pool)
+        .await
+        .expect("post-release write");
     }
 
     #[tokio::test]

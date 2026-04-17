@@ -1297,9 +1297,8 @@ mod tests {
             root_workspace_id: "ws-root".into(),
         });
         // Return 0 task_ids for 2 assignments.
-        h.coord.set_decompose_ok(proto::DecomposeResponse {
-            task_ids: vec![],
-        });
+        h.coord
+            .set_decompose_ok(proto::DecomposeResponse { task_ids: vec![] });
 
         let launcher = SessionLauncher::new(h.pool.clone(), h.db.clone());
         let err = launcher.launch(session_id).await.unwrap_err();
@@ -1629,9 +1628,7 @@ mod tests {
                 LaunchOutcome::AlreadyActive { state } => {
                     assert_eq!(state, *terminal_state);
                 }
-                o => panic!(
-                    "expected AlreadyActive for state={terminal_state}, got {o:?}"
-                ),
+                o => panic!("expected AlreadyActive for state={terminal_state}, got {o:?}"),
             }
             assert!(h.coord.submit_goal_calls().is_empty());
         }
@@ -1724,10 +1721,7 @@ mod tests {
         };
         assert_eq!(e4.reason_code(), "launch_finalize: db locked");
 
-        assert_eq!(
-            LaunchError::NoAssignments.reason_code(),
-            "no_assignments"
-        );
+        assert_eq!(LaunchError::NoAssignments.reason_code(), "no_assignments");
         assert_eq!(
             LaunchError::PoolUnavailable.reason_code(),
             "pool_unavailable"

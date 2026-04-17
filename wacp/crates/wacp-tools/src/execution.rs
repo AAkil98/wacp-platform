@@ -1089,8 +1089,7 @@ mod tests {
         for i in 0..5 {
             let cap = cap.clone();
             handles.push(tokio::spawn(async move {
-                let handler =
-                    |_ctx: &ToolContext, args: serde_json::Value| async move { Ok(args) };
+                let handler = |_ctx: &ToolContext, args: serde_json::Value| async move { Ok(args) };
                 execute(
                     &handler,
                     &cap,

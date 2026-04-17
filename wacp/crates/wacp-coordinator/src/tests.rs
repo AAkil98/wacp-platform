@@ -1750,11 +1750,16 @@ fn make_dispatch_request(ws_id: &str, task_id: &str) -> crate::orchestrator::Dis
 #[tokio::test]
 async fn wa3_6_caches_checkpoint_from_event() {
     let (event_tx, _event_rx) = tokio::sync::mpsc::channel(64);
-    let mut coord =
-        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let mut coord = crate::orchestrator::Coordinator::new(
+        WorkspaceId::from("root"),
+        UserId::from("u"),
+        event_tx,
+    );
     let cp = make_test_checkpoint("ws-a", "cp-1");
     coord
-        .handle_event(&wacp_workspace::WorkspaceEvent::CheckpointCreated(cp.clone()))
+        .handle_event(&wacp_workspace::WorkspaceEvent::CheckpointCreated(
+            cp.clone(),
+        ))
         .await;
     let cached = coord.last_checkpoint.get("ws-a").expect("cached");
     assert_eq!(cached.id, CheckpointId::from("cp-1"));
@@ -1763,8 +1768,11 @@ async fn wa3_6_caches_checkpoint_from_event() {
 #[tokio::test]
 async fn wa3_6_terminate_clears_checkpoint_cache() {
     let (event_tx, _event_rx) = tokio::sync::mpsc::channel(64);
-    let mut coord =
-        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let mut coord = crate::orchestrator::Coordinator::new(
+        WorkspaceId::from("root"),
+        UserId::from("u"),
+        event_tx,
+    );
     let cp = make_test_checkpoint("ws-a", "cp-1");
     coord
         .handle_event(&wacp_workspace::WorkspaceEvent::CheckpointCreated(cp))
@@ -1809,8 +1817,11 @@ async fn wa3_6_complete_signal_drives_workspace_to_closed_no_checkpoint() {
     use wacp_workspace::AgentMessage;
     use wacp_workspace::actor::CoordinatorCommand;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
-    let mut coord =
-        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let mut coord = crate::orchestrator::Coordinator::new(
+        WorkspaceId::from("root"),
+        UserId::from("u"),
+        event_tx,
+    );
     coord.dispatch(make_dispatch_request("ws-a", "t-1"));
 
     // Activate via first envelope, drain the Idle→Active StateChanged.
@@ -1869,8 +1880,11 @@ async fn wa3_6_complete_signal_with_checkpoint_drives_to_closed() {
     use wacp_workspace::AgentMessage;
     use wacp_workspace::actor::CoordinatorCommand;
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
-    let mut coord =
-        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let mut coord = crate::orchestrator::Coordinator::new(
+        WorkspaceId::from("root"),
+        UserId::from("u"),
+        event_tx,
+    );
     coord.dispatch(make_dispatch_request("ws-a", "t-1"));
 
     {

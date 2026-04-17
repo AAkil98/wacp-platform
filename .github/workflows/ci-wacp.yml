@@ -32,6 +32,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Repo .cargo/config.toml sets `-C link-arg=-fuse-ld=mold` for
+      # x86_64-unknown-linux-gnu; install mold so rustc can link.
+      - uses: rui314/setup-mold@v1
+
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -184,6 +188,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: rui314/setup-mold@v1
 
       - name: Verify Rust codegen
         run: cargo build -p wacp-proto

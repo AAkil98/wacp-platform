@@ -193,9 +193,8 @@ async fn main() -> anyhow::Result<()> {
                 "gRPC pool initialized"
             );
 
-            let active_sessions = Arc::new(tokio::sync::RwLock::new(
-                std::collections::HashMap::new(),
-            ));
+            let active_sessions =
+                Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
             // W5 — startup recovery. Iterate sessions left in ACTIVE from the
             // previous boot, probe each via GetWorkspace, then either respawn

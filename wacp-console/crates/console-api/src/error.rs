@@ -200,26 +200,18 @@ impl ApiError {
     /// runtime is unreachable or unhealthy.
     pub fn from_tonic(s: tonic::Status, service: &'static str, method: &'static str) -> Self {
         let (status, code, message) = match s.code() {
-            tonic::Code::NotFound => (
-                StatusCode::NOT_FOUND,
-                "not_found",
-                s.message().to_string(),
-            ),
-            tonic::Code::FailedPrecondition => (
-                StatusCode::CONFLICT,
-                "conflict",
-                s.message().to_string(),
-            ),
+            tonic::Code::NotFound => (StatusCode::NOT_FOUND, "not_found", s.message().to_string()),
+            tonic::Code::FailedPrecondition => {
+                (StatusCode::CONFLICT, "conflict", s.message().to_string())
+            }
             tonic::Code::Unavailable | tonic::Code::DeadlineExceeded => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "runtime_unavailable",
                 s.message().to_string(),
             ),
-            tonic::Code::PermissionDenied => (
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                s.message().to_string(),
-            ),
+            tonic::Code::PermissionDenied => {
+                (StatusCode::FORBIDDEN, "forbidden", s.message().to_string())
+            }
             _ => (
                 StatusCode::BAD_GATEWAY,
                 "runtime_error",

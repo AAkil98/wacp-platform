@@ -144,8 +144,12 @@ mod settings_tests {
     #[tokio::test]
     async fn get_all_settings_returns_rows_sorted() {
         let pool = create_test_pool().await.unwrap();
-        settings::upsert_setting(&pool, "b", "2", NOW).await.unwrap();
-        settings::upsert_setting(&pool, "a", "1", NOW).await.unwrap();
+        settings::upsert_setting(&pool, "b", "2", NOW)
+            .await
+            .unwrap();
+        settings::upsert_setting(&pool, "a", "1", NOW)
+            .await
+            .unwrap();
         let rows = settings::get_all_settings(&pool).await.unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].key, "a");
@@ -251,7 +255,11 @@ mod users_tests {
     async fn update_role_and_set_must_change_password_paths() {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "u1", "a").await;
-        assert!(users::update_role(&pool, "u1", "operator", NOW).await.unwrap());
+        assert!(
+            users::update_role(&pool, "u1", "operator", NOW)
+                .await
+                .unwrap()
+        );
         assert_eq!(
             users::get_by_id(&pool, "u1")
                 .await
@@ -261,25 +269,39 @@ mod users_tests {
             "operator"
         );
         // missing id → false
-        assert!(!users::update_role(&pool, "missing", "operator", NOW)
-            .await
-            .unwrap());
+        assert!(
+            !users::update_role(&pool, "missing", "operator", NOW)
+                .await
+                .unwrap()
+        );
 
-        assert!(users::set_must_change_password(&pool, "u1", NOW)
-            .await
-            .unwrap());
-        assert!(users::get_by_id(&pool, "u1").await.unwrap().unwrap().must_change_password);
-        assert!(!users::set_must_change_password(&pool, "missing", NOW)
-            .await
-            .unwrap());
+        assert!(
+            users::set_must_change_password(&pool, "u1", NOW)
+                .await
+                .unwrap()
+        );
+        assert!(
+            users::get_by_id(&pool, "u1")
+                .await
+                .unwrap()
+                .unwrap()
+                .must_change_password
+        );
+        assert!(
+            !users::set_must_change_password(&pool, "missing", NOW)
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
     async fn update_password_and_disable_missing_id_returns_false() {
         let pool = create_test_pool().await.unwrap();
-        assert!(!users::update_password(&pool, "missing", "$h$", NOW)
-            .await
-            .unwrap());
+        assert!(
+            !users::update_password(&pool, "missing", "$h$", NOW)
+                .await
+                .unwrap()
+        );
         assert!(!users::disable_user(&pool, "missing", NOW).await.unwrap());
         assert!(!users::enable_user(&pool, "missing", NOW).await.unwrap());
     }
@@ -329,7 +351,11 @@ mod users_tests {
                 .await
                 .unwrap_err(),
         );
-        expect_pool_closed(&users::update_role(&pool, "u", "admin", NOW).await.unwrap_err());
+        expect_pool_closed(
+            &users::update_role(&pool, "u", "admin", NOW)
+                .await
+                .unwrap_err(),
+        );
         expect_pool_closed(&users::disable_user(&pool, "u", NOW).await.unwrap_err());
         expect_pool_closed(&users::enable_user(&pool, "u", NOW).await.unwrap_err());
         expect_pool_closed(
@@ -410,12 +436,26 @@ mod user_sessions_tests {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "u1", "a").await;
         user_sessions::insert_session(
-            &pool, "s1", "u1", "h1", "ip", "ua", NOW, "2026-04-15T00:00:00Z",
+            &pool,
+            "s1",
+            "u1",
+            "h1",
+            "ip",
+            "ua",
+            NOW,
+            "2026-04-15T00:00:00Z",
         )
         .await
         .unwrap();
         user_sessions::insert_session(
-            &pool, "s2", "u1", "h2", "ip", "ua", NOW, "2026-05-01T00:00:00Z",
+            &pool,
+            "s2",
+            "u1",
+            "h2",
+            "ip",
+            "ua",
+            NOW,
+            "2026-05-01T00:00:00Z",
         )
         .await
         .unwrap();
@@ -423,22 +463,28 @@ mod user_sessions_tests {
             .await
             .unwrap();
         assert_eq!(n, 1);
-        assert!(user_sessions::get_by_token_hash(&pool, "h1", NOW)
-            .await
-            .unwrap()
-            .is_none());
-        assert!(user_sessions::get_by_token_hash(&pool, "h2", NOW)
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            user_sessions::get_by_token_hash(&pool, "h1", NOW)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            user_sessions::get_by_token_hash(&pool, "h2", NOW)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
     async fn delete_missing_returns_false() {
         let pool = create_test_pool().await.unwrap();
-        assert!(!user_sessions::delete_session(&pool, "missing")
-            .await
-            .unwrap());
+        assert!(
+            !user_sessions::delete_session(&pool, "missing")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -446,12 +492,26 @@ mod user_sessions_tests {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "u1", "a").await;
         user_sessions::insert_session(
-            &pool, "s1", "u1", "h1", "ip", "ua", NOW, "2026-04-20T00:00:00Z",
+            &pool,
+            "s1",
+            "u1",
+            "h1",
+            "ip",
+            "ua",
+            NOW,
+            "2026-04-20T00:00:00Z",
         )
         .await
         .unwrap();
         let err = user_sessions::insert_session(
-            &pool, "s2", "u1", "h1", "ip", "ua", NOW, "2026-04-20T00:00:00Z",
+            &pool,
+            "s2",
+            "u1",
+            "h1",
+            "ip",
+            "ua",
+            NOW,
+            "2026-04-20T00:00:00Z",
         )
         .await
         .unwrap_err();
@@ -462,7 +522,14 @@ mod user_sessions_tests {
     async fn fk_violation_missing_user() {
         let pool = create_test_pool().await.unwrap();
         let err = user_sessions::insert_session(
-            &pool, "s1", "ghost", "h", "ip", "ua", NOW, "2026-04-20T00:00:00Z",
+            &pool,
+            "s1",
+            "ghost",
+            "h",
+            "ip",
+            "ua",
+            NOW,
+            "2026-04-20T00:00:00Z",
         )
         .await
         .unwrap_err();
@@ -488,7 +555,11 @@ mod user_sessions_tests {
                 .await
                 .unwrap_err(),
         );
-        expect_pool_closed(&user_sessions::cleanup_expired(&pool, NOW).await.unwrap_err());
+        expect_pool_closed(
+            &user_sessions::cleanup_expired(&pool, NOW)
+                .await
+                .unwrap_err(),
+        );
     }
 
     #[tokio::test]
@@ -533,12 +604,16 @@ mod api_tokens_tests {
 
         let tok = api_tokens::get_by_id(&pool, "t1").await.unwrap().unwrap();
         assert_eq!(tok.name, "n");
-        assert!(api_tokens::get_by_id(&pool, "missing")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            api_tokens::get_by_id(&pool, "missing")
+                .await
+                .unwrap()
+                .is_none()
+        );
 
-        api_tokens::update_last_used(&pool, "t1", NOW).await.unwrap();
+        api_tokens::update_last_used(&pool, "t1", NOW)
+            .await
+            .unwrap();
         let tok = api_tokens::get_by_id(&pool, "t1").await.unwrap().unwrap();
         assert_eq!(tok.last_used_at.as_deref(), Some(NOW));
 
@@ -580,24 +655,30 @@ mod api_tokens_tests {
         )
         .await
         .unwrap();
-        assert!(api_tokens::get_by_token_hash(&pool, "h1", NOW)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            api_tokens::get_by_token_hash(&pool, "h1", NOW)
+                .await
+                .unwrap()
+                .is_none()
+        );
 
         // active then revoked
         api_tokens::insert_token(&pool, "t2", "u1", "ok", "h2", NOW, None)
             .await
             .unwrap();
-        assert!(api_tokens::get_by_token_hash(&pool, "h2", NOW)
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            api_tokens::get_by_token_hash(&pool, "h2", NOW)
+                .await
+                .unwrap()
+                .is_some()
+        );
         api_tokens::revoke_token(&pool, "t2", NOW).await.unwrap();
-        assert!(api_tokens::get_by_token_hash(&pool, "h2", NOW)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            api_tokens::get_by_token_hash(&pool, "h2", NOW)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -611,9 +692,11 @@ mod api_tokens_tests {
         // second revoke is a no-op (WHERE revoked_at IS NULL)
         assert!(!api_tokens::revoke_token(&pool, "t1", NOW).await.unwrap());
         // missing id also returns false
-        assert!(!api_tokens::revoke_token(&pool, "missing", NOW)
-            .await
-            .unwrap());
+        assert!(
+            !api_tokens::revoke_token(&pool, "missing", NOW)
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -750,7 +833,10 @@ mod profiles_tests {
         let ids: Vec<&str> = bob_view.iter().map(|p| p.id.as_str()).collect();
         assert!(ids.contains(&"pa1"), "shared must be visible: {ids:?}");
         assert!(ids.contains(&"pb1"), "own must be visible: {ids:?}");
-        assert!(!ids.contains(&"pa2"), "alice private must be hidden: {ids:?}");
+        assert!(
+            !ids.contains(&"pa2"),
+            "alice private must be hidden: {ids:?}"
+        );
     }
 
     #[tokio::test]
@@ -758,17 +844,9 @@ mod profiles_tests {
         let pool = create_test_pool().await.unwrap();
         seed_two_users_with_profiles(&pool).await;
         // cursor after "Alice Dev" — returns profiles with name > "Alice Dev"
-        let rest = profiles::list_visible(
-            &pool,
-            "alice",
-            true,
-            None,
-            None,
-            10,
-            Some("Alice Dev"),
-        )
-        .await
-        .unwrap();
+        let rest = profiles::list_visible(&pool, "alice", true, None, None, 10, Some("Alice Dev"))
+            .await
+            .unwrap();
         let names: Vec<&str> = rest.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["Alice QA", "Bob Dev"]);
     }
@@ -780,13 +858,17 @@ mod profiles_tests {
         let p = sample_profile("pa1", 1, "alice", "dup");
         profiles::insert_profile(&pool, &p).await.unwrap();
         // Without exclude — dup exists.
-        assert!(profiles::name_exists_for_user(&pool, "dup", "alice", None)
-            .await
-            .unwrap());
+        assert!(
+            profiles::name_exists_for_user(&pool, "dup", "alice", None)
+                .await
+                .unwrap()
+        );
         // Excluding the owning id — treated as absent.
-        assert!(!profiles::name_exists_for_user(&pool, "dup", "alice", Some("pa1"))
-            .await
-            .unwrap());
+        assert!(
+            !profiles::name_exists_for_user(&pool, "dup", "alice", Some("pa1"))
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -861,10 +943,12 @@ mod profiles_tests {
     #[tokio::test]
     async fn get_version_missing_returns_none() {
         let pool = create_test_pool().await.unwrap();
-        assert!(profiles::get_version(&pool, "p1", 1)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            profiles::get_version(&pool, "p1", 1)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -936,7 +1020,10 @@ mod sessions_tests {
     async fn seed_sessions_for(pool: &DbPool, owner: &str, ids: &[&str]) {
         for id in ids {
             let mut row = sample_session(id, owner);
-            row.created_at = format!("2026-04-1{}T00:00:00Z", ids.iter().position(|x| x == id).unwrap());
+            row.created_at = format!(
+                "2026-04-1{}T00:00:00Z",
+                ids.iter().position(|x| x == id).unwrap()
+            );
             sessions::insert_session(pool, &row).await.unwrap();
         }
     }
@@ -967,15 +1054,9 @@ mod sessions_tests {
         assert_eq!(v[0].id, "s2");
 
         // cursor: pick sessions created before "2026-04-11T00:00:00Z" — i.e. s1 only
-        let page = sessions::list_by_owner(
-            &pool,
-            "alice",
-            None,
-            10,
-            Some("2026-04-11T00:00:00Z"),
-        )
-        .await
-        .unwrap();
+        let page = sessions::list_by_owner(&pool, "alice", None, 10, Some("2026-04-11T00:00:00Z"))
+            .await
+            .unwrap();
         let ids: Vec<&str> = page.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["s1"]);
 
@@ -1012,16 +1093,20 @@ mod sessions_tests {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "alice", "alice").await;
         seed_sessions_for(&pool, "alice", &["s1"]).await;
-        assert!(sessions::update_context(&pool, "s1", "{\"k\":1}")
-            .await
-            .unwrap());
+        assert!(
+            sessions::update_context(&pool, "s1", "{\"k\":1}")
+                .await
+                .unwrap()
+        );
         // move out of configuring, then update must fail
         sessions::transition_state(&pool, "s1", "configuring", "validating", NOW)
             .await
             .unwrap();
-        assert!(!sessions::update_context(&pool, "s1", "{\"k\":2}")
-            .await
-            .unwrap());
+        assert!(
+            !sessions::update_context(&pool, "s1", "{\"k\":2}")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1029,12 +1114,16 @@ mod sessions_tests {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "alice", "alice").await;
         seed_sessions_for(&pool, "alice", &["s1"]).await;
-        assert!(sessions::set_coordinator_workspace_id(&pool, "s1", "ws1")
-            .await
-            .unwrap());
-        assert!(!sessions::set_coordinator_workspace_id(&pool, "missing", "ws1")
-            .await
-            .unwrap());
+        assert!(
+            sessions::set_coordinator_workspace_id(&pool, "s1", "ws1")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !sessions::set_coordinator_workspace_id(&pool, "missing", "ws1")
+                .await
+                .unwrap()
+        );
         let s = sessions::get_by_id(&pool, "s1").await.unwrap().unwrap();
         assert_eq!(s.coordinator_workspace_id.as_deref(), Some("ws1"));
     }
@@ -1057,7 +1146,9 @@ mod sessions_tests {
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].id, "s1");
         assert_eq!(
-            sessions::count_by_state(&pool, "configuring").await.unwrap(),
+            sessions::count_by_state(&pool, "configuring")
+                .await
+                .unwrap(),
             1
         );
         assert_eq!(sessions::count_by_state(&pool, "active").await.unwrap(), 1);
@@ -1079,9 +1170,11 @@ mod sessions_tests {
             ("launching", "active"),
             ("active", "completed"),
         ] {
-            assert!(sessions::transition_state(&pool, "s1", from, to, NOW)
-                .await
-                .unwrap());
+            assert!(
+                sessions::transition_state(&pool, "s1", from, to, NOW)
+                    .await
+                    .unwrap()
+            );
         }
         let s = sessions::get_by_id(&pool, "s1").await.unwrap().unwrap();
         assert_eq!(s.state, "completed");
@@ -1093,9 +1186,11 @@ mod sessions_tests {
             ("validating", "launching"),
             ("launching", "failed"),
         ] {
-            assert!(sessions::transition_state(&pool, "s2", from, to, NOW)
-                .await
-                .unwrap());
+            assert!(
+                sessions::transition_state(&pool, "s2", from, to, NOW)
+                    .await
+                    .unwrap()
+            );
         }
         let s = sessions::get_by_id(&pool, "s2").await.unwrap().unwrap();
         assert_eq!(s.state, "failed");
@@ -1108,7 +1203,12 @@ mod sessions_tests {
         seed_user(&pool, "alice", "alice").await;
         seed_sessions_for(&pool, "alice", &["s1"]).await;
         // non-existent session → None
-        assert!(sessions::cancel(&pool, "missing", NOW).await.unwrap().is_none());
+        assert!(
+            sessions::cancel(&pool, "missing", NOW)
+                .await
+                .unwrap()
+                .is_none()
+        );
         // walk s1 to completed
         for (from, to) in [
             ("configuring", "validating"),
@@ -1184,11 +1284,13 @@ mod sessions_tests {
                 .await
                 .unwrap_err(),
         );
-        expect_pool_closed(&sessions::update_context(&pool, "s", "{}").await.unwrap_err());
-        expect_pool_closed(&sessions::list_active(&pool).await.unwrap_err());
         expect_pool_closed(
-            &sessions::count_by_state(&pool, "active").await.unwrap_err(),
+            &sessions::update_context(&pool, "s", "{}")
+                .await
+                .unwrap_err(),
         );
+        expect_pool_closed(&sessions::list_active(&pool).await.unwrap_err());
+        expect_pool_closed(&sessions::count_by_state(&pool, "active").await.unwrap_err());
     }
 
     #[tokio::test]
@@ -1256,10 +1358,12 @@ mod session_assignments_tests {
             .unwrap()
             .unwrap();
         assert_eq!(got.role_ref, "developer");
-        assert!(session_assignments::get_by_id(&pool, "missing")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            session_assignments::get_by_id(&pool, "missing")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1290,7 +1394,12 @@ mod session_assignments_tests {
                 .await
                 .unwrap();
         }
-        assert_eq!(session_assignments::count_assigned(&pool, "s1").await.unwrap(), 2);
+        assert_eq!(
+            session_assignments::count_assigned(&pool, "s1")
+                .await
+                .unwrap(),
+            2
+        );
 
         let replacement = vec![
             sample_assignment("b1", "s1", "p1", 1, 0),
@@ -1300,7 +1409,12 @@ mod session_assignments_tests {
         session_assignments::replace_assignments(&pool, "s1", &replacement)
             .await
             .unwrap();
-        assert_eq!(session_assignments::count_assigned(&pool, "s1").await.unwrap(), 3);
+        assert_eq!(
+            session_assignments::count_assigned(&pool, "s1")
+                .await
+                .unwrap(),
+            3
+        );
         let ids: Vec<String> = session_assignments::list_by_session(&pool, "s1")
             .await
             .unwrap()
@@ -1318,12 +1432,16 @@ mod session_assignments_tests {
         session_assignments::insert_assignment(&pool, &r)
             .await
             .unwrap();
-        assert!(session_assignments::set_workspace_id(&pool, "a1", "w1")
-            .await
-            .unwrap());
-        assert!(!session_assignments::set_workspace_id(&pool, "missing", "w1")
-            .await
-            .unwrap());
+        assert!(
+            session_assignments::set_workspace_id(&pool, "a1", "w1")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !session_assignments::set_workspace_id(&pool, "missing", "w1")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1371,7 +1489,9 @@ mod session_assignments_tests {
                 .unwrap();
         }
         assert_eq!(
-            session_assignments::count_assigned(&pool, "s1").await.unwrap(),
+            session_assignments::count_assigned(&pool, "s1")
+                .await
+                .unwrap(),
             3
         );
     }
@@ -1444,10 +1564,12 @@ mod session_assignments_tests {
             .execute(&pool)
             .await
             .unwrap();
-        assert!(session_assignments::get_by_id(&pool, "a1")
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            session_assignments::get_by_id(&pool, "a1")
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1459,7 +1581,9 @@ mod session_assignments_tests {
                 .unwrap_err(),
         );
         expect_pool_closed(
-            &session_assignments::get_by_id(&pool, "a").await.unwrap_err(),
+            &session_assignments::get_by_id(&pool, "a")
+                .await
+                .unwrap_err(),
         );
         let r = sample_assignment("a", "s", "p", 1, 0);
         expect_pool_closed(
@@ -1522,10 +1646,28 @@ mod audit_log_tests {
         seed_user(pool, "bob", "bob").await;
         let entries: [(&str, &str, &str, &str, &str); 5] = [
             ("e1", "alice", "2026-04-10T00:00:00Z", "auth.login", "user"),
-            ("e2", "alice", "2026-04-11T00:00:00Z", "profile.create", "profile"),
+            (
+                "e2",
+                "alice",
+                "2026-04-11T00:00:00Z",
+                "profile.create",
+                "profile",
+            ),
             ("e3", "bob", "2026-04-12T00:00:00Z", "auth.login", "user"),
-            ("e4", "bob", "2026-04-13T00:00:00Z", "session.launch", "session"),
-            ("e5", "alice", "2026-04-14T00:00:00Z", "profile.update", "profile"),
+            (
+                "e4",
+                "bob",
+                "2026-04-13T00:00:00Z",
+                "session.launch",
+                "session",
+            ),
+            (
+                "e5",
+                "alice",
+                "2026-04-14T00:00:00Z",
+                "profile.update",
+                "profile",
+            ),
         ];
         for (id, user, ts, action, target_kind) in entries {
             audit_log::insert_entry(
@@ -1555,25 +1697,16 @@ mod audit_log_tests {
             .unwrap();
         assert_eq!(alice.len(), 3);
 
-        let logins = audit_log::list_entries(
-            &pool, None, Some("auth.login"), None, None, None, 50, None,
-        )
-        .await
-        .unwrap();
+        let logins =
+            audit_log::list_entries(&pool, None, Some("auth.login"), None, None, None, 50, None)
+                .await
+                .unwrap();
         assert_eq!(logins.len(), 2);
 
-        let profiles = audit_log::list_entries(
-            &pool,
-            None,
-            None,
-            Some("profile"),
-            None,
-            None,
-            50,
-            None,
-        )
-        .await
-        .unwrap();
+        let profiles =
+            audit_log::list_entries(&pool, None, None, Some("profile"), None, None, 50, None)
+                .await
+                .unwrap();
         assert_eq!(profiles.len(), 2);
     }
 
@@ -1652,7 +1785,16 @@ mod audit_log_tests {
     async fn fk_user_violation() {
         let pool = create_test_pool().await.unwrap();
         let err = audit_log::insert_entry(
-            &pool, "e1", "ghost", NOW, "auth.login", "user", "x", None, "ip", "ua",
+            &pool,
+            "e1",
+            "ghost",
+            NOW,
+            "auth.login",
+            "user",
+            "x",
+            None,
+            "ip",
+            "ua",
         )
         .await
         .unwrap_err();
@@ -1664,12 +1806,30 @@ mod audit_log_tests {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "alice", "alice").await;
         audit_log::insert_entry(
-            &pool, "e1", "alice", NOW, "auth.login", "user", "x", None, "ip", "ua",
+            &pool,
+            "e1",
+            "alice",
+            NOW,
+            "auth.login",
+            "user",
+            "x",
+            None,
+            "ip",
+            "ua",
         )
         .await
         .unwrap();
         let err = audit_log::insert_entry(
-            &pool, "e1", "alice", NOW, "auth.login", "user", "x", None, "ip", "ua",
+            &pool,
+            "e1",
+            "alice",
+            NOW,
+            "auth.login",
+            "user",
+            "x",
+            None,
+            "ip",
+            "ua",
         )
         .await
         .unwrap_err();
@@ -1811,17 +1971,20 @@ mod login_attempts_tests {
                 .await
                 .unwrap_err(),
         );
-        expect_pool_closed(&login_attempts::cleanup_before(&pool, NOW).await.unwrap_err());
+        expect_pool_closed(
+            &login_attempts::cleanup_before(&pool, NOW)
+                .await
+                .unwrap_err(),
+        );
     }
 
     #[tokio::test]
     async fn busy_on_write() {
         let db = FaultyDb::new().await;
         let lock = db.hold_write_lock().await;
-        let err =
-            login_attempts::record_attempt(&db.pool, "la1", "10.0.0.1", "admin", NOW, false)
-                .await
-                .unwrap_err();
+        let err = login_attempts::record_attempt(&db.pool, "la1", "10.0.0.1", "admin", NOW, false)
+            .await
+            .unwrap_err();
         assert_eq!(
             err.as_database_error().and_then(|e| e.code()).as_deref(),
             Some("5")

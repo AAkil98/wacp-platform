@@ -92,13 +92,8 @@ async fn t7_2_open_ws_drive_gate_observe_resume() {
         .into_inner();
     let ws_id = submit.root_workspace_id;
 
-    let client = TestClient::seed_user(
-        &console.state,
-        &console.base_url(),
-        "u-1",
-        "operator",
-    )
-    .await;
+    let client =
+        TestClient::seed_user(&console.state, &console.base_url(), "u-1", "operator").await;
     let sid = format!("s-{}", uuid::Uuid::new_v4());
     seed_active_session(&console.state.db, &sid, "u-1", &ws_id).await;
 
@@ -263,13 +258,8 @@ async fn t7_3_session_completes_emits_final_frame() {
     assert!(!ws_id.is_empty());
 
     // Seed user + active session referencing the workspace.
-    let client = TestClient::seed_user(
-        &console.state,
-        &console.base_url(),
-        "u-1",
-        "operator",
-    )
-    .await;
+    let client =
+        TestClient::seed_user(&console.state, &console.base_url(), "u-1", "operator").await;
     let sid = format!("s-{}", uuid::Uuid::new_v4());
     seed_active_session(&console.state.db, &sid, "u-1", &ws_id).await;
 
@@ -394,9 +384,7 @@ async fn t7_3_session_completes_emits_final_frame() {
 
 // ---- helpers ---------------------------------------------------------------
 
-async fn coord_client(
-    rt: &RuntimeHarness,
-) -> CoordinatorServiceClient<tonic::transport::Channel> {
+async fn coord_client(rt: &RuntimeHarness) -> CoordinatorServiceClient<tonic::transport::Channel> {
     let coord_url = format!("http://{}", rt.coordinator_addr());
     let channel = tonic::transport::Channel::from_shared(coord_url)
         .expect("coord url")
@@ -406,12 +394,7 @@ async fn coord_client(
     CoordinatorServiceClient::new(channel)
 }
 
-async fn seed_active_session(
-    db: &console_db::DbPool,
-    sid: &str,
-    owner: &str,
-    coord_ws: &str,
-) {
+async fn seed_active_session(db: &console_db::DbPool, sid: &str, owner: &str, coord_ws: &str) {
     sqlx::query(
         "INSERT OR IGNORE INTO users (id, username, username_lower, display_name, password_hash,
             console_role, must_change_password, created_at, updated_at)

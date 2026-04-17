@@ -134,7 +134,7 @@ export function SettingsPage() {
     }
     setLocalValues(vals);
     setDirty({});
-  }, [settingsQuery.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settingsQuery.dataUpdatedAt]);
 
   function handleChange(key: string, value: string) {
     setLocalValues((prev) => ({ ...prev, [key]: value }));

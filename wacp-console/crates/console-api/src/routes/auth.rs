@@ -22,7 +22,9 @@ use console_db::queries::{user_sessions, users};
 
 use crate::AppState;
 use crate::error::ApiError;
-use crate::middleware::{Auth, AuthAllowPendingChange, RequestContext, is_bearer_auth, validate_csrf};
+use crate::middleware::{
+    Auth, AuthAllowPendingChange, RequestContext, is_bearer_auth, validate_csrf,
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()

@@ -34,6 +34,10 @@ jobs:
         with:
           key: mutants-wacp-transport
 
+      # Repo .cargo/config.toml sets `-C link-arg=-fuse-ld=mold`; install
+      # mold so cargo-mutants' repeated compiles can link.
+      - uses: rui314/setup-mold@v1
+
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -70,6 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           key: mutants-wacp-tools
@@ -102,6 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           key: mutants-console-launcher
@@ -134,6 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
           key: mutants-console-monitor

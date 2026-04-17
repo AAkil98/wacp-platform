@@ -260,10 +260,7 @@ mod tests {
             HeaderValue::from_static("wcon_sid=abc=def; other=val"),
         );
         // split_once('=') means value is "abc=def"
-        assert_eq!(
-            extract_cookie(&headers, "wcon_sid"),
-            Some("abc=def".into())
-        );
+        assert_eq!(extract_cookie(&headers, "wcon_sid"), Some("abc=def".into()));
     }
 
     // ---------------------------------------------------------------
@@ -405,10 +402,7 @@ mod tests {
         let cookie = format!("wcon_csrf={long_token}");
         let mut headers = HeaderMap::new();
         headers.insert(COOKIE, HeaderValue::from_str(&cookie).unwrap());
-        headers.insert(
-            "x-csrf-token",
-            HeaderValue::from_str(&long_token).unwrap(),
-        );
+        headers.insert("x-csrf-token", HeaderValue::from_str(&long_token).unwrap());
         validate_csrf(&headers, false).unwrap();
     }
 
@@ -518,10 +512,12 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "forbidden");
-        assert!(json["message"]
-            .as_str()
-            .unwrap()
-            .contains("viewer cannot perform CreateUser"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("viewer cannot perform CreateUser")
+        );
     }
 
     // ---------------------------------------------------------------
@@ -664,14 +660,9 @@ mod tests {
         for &action in &ALL_ACTIONS {
             let result = authorizer::authorize(&user, action);
             if VIEWER_ALLOWED.contains(&action) {
-                result.unwrap_or_else(|_| {
-                    panic!("viewer should be allowed {action:?}")
-                });
+                result.unwrap_or_else(|_| panic!("viewer should be allowed {action:?}"));
             } else {
-                assert!(
-                    result.is_err(),
-                    "viewer should be denied {action:?}"
-                );
+                assert!(result.is_err(), "viewer should be denied {action:?}");
             }
         }
     }
@@ -689,14 +680,9 @@ mod tests {
         for &action in &ALL_ACTIONS {
             let result = authorizer::authorize(&user, action);
             if operator_allowed.contains(&action) {
-                result.unwrap_or_else(|_| {
-                    panic!("operator should be allowed {action:?}")
-                });
+                result.unwrap_or_else(|_| panic!("operator should be allowed {action:?}"));
             } else {
-                assert!(
-                    result.is_err(),
-                    "operator should be denied {action:?}"
-                );
+                assert!(result.is_err(), "operator should be denied {action:?}");
             }
         }
     }
@@ -761,10 +747,7 @@ mod tests {
         let user = user_with_role(ConsoleRole::Viewer);
         let err = authorizer::authorize(&user, Action::CreateUser).unwrap_err();
         if let ConsoleError::Forbidden(msg) = err {
-            assert!(
-                msg.contains("viewer"),
-                "message should mention role: {msg}"
-            );
+            assert!(msg.contains("viewer"), "message should mention role: {msg}");
             assert!(
                 msg.contains("CreateUser"),
                 "message should mention action: {msg}"
@@ -908,7 +891,11 @@ mod tests {
     fn all_actions_array_has_expected_count() {
         // If someone adds a new Action variant, this test reminds them
         // to add it to ALL_ACTIONS and update the permission tier arrays.
-        assert_eq!(ALL_ACTIONS.len(), 38, "action count changed — update test matrix");
+        assert_eq!(
+            ALL_ACTIONS.len(),
+            38,
+            "action count changed — update test matrix"
+        );
 
         // Verify tier arrays account for all 38 actions
         let viewer_count = VIEWER_ALLOWED.len();

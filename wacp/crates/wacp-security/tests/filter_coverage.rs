@@ -80,7 +80,10 @@ fn api_key_sk_prefix_too_short_no_match() {
     // Only 19 alphanumeric chars after "sk-" -- must NOT match
     let input = "sk-aaaabbbbccccddddeee";
     let r = f.filter(input);
-    assert_eq!(r.output, input, "19-char key body should not trigger api_key rule");
+    assert_eq!(
+        r.output, input,
+        "19-char key body should not trigger api_key rule"
+    );
     assert!(r.redactions.is_empty());
 }
 
@@ -183,7 +186,9 @@ fn private_key_generic_header() {
 #[test]
 fn private_key_with_body() {
     let f = ContentFilter::with_defaults();
-    let r = f.filter("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----");
+    let r = f.filter(
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----",
+    );
     assert!(r.output.contains("[REDACTED_PRIVATE_KEY]"));
     // The rule only matches the BEGIN line, body remains
     assert!(r.output.contains("MIIEpAIBAAKCAQEA"));
@@ -284,7 +289,10 @@ fn ssn_embedded_in_larger_number_no_match() {
     // \b boundaries prevent matching inside longer numeric strings
     let input = "9999123-45-67899999";
     let r = f.filter(input);
-    assert_eq!(r.output, input, "SSN-like pattern inside larger string should not match due to word boundaries");
+    assert_eq!(
+        r.output, input,
+        "SSN-like pattern inside larger string should not match due to word boundaries"
+    );
 }
 
 // ── 2g. credit_card rule ─────────────────────────────────────────────────
@@ -554,7 +562,10 @@ fn already_redacted_email_marker_unchanged() {
     let f = ContentFilter::with_defaults();
     let input = "Contact [REDACTED_EMAIL] for info";
     let r = f.filter(input);
-    assert_eq!(r.output, input, "Already-redacted markers should pass through");
+    assert_eq!(
+        r.output, input,
+        "Already-redacted markers should pass through"
+    );
     assert!(r.redactions.is_empty());
 }
 
@@ -613,7 +624,10 @@ fn mix_of_redacted_and_live_pii() {
     let f = ContentFilter::with_defaults();
     let input = "[REDACTED_EMAIL] sent to real@example.com";
     let r = f.filter(input);
-    assert!(r.output.contains("[REDACTED_EMAIL] sent to [REDACTED_EMAIL]"));
+    assert!(
+        r.output
+            .contains("[REDACTED_EMAIL] sent to [REDACTED_EMAIL]")
+    );
     // Only the live email should be in redactions
     assert_eq!(r.redactions.len(), 1);
 }
@@ -811,7 +825,10 @@ fn mix_of_enabled_and_disabled_rules() {
     // Use tokens that do not match any default rules
     let r = f.filter("XAAX and XBBX");
     assert!(r.output.contains("[A]"));
-    assert!(r.output.contains("XBBX"), "Disabled rule_b should not redact XBBX");
+    assert!(
+        r.output.contains("XBBX"),
+        "Disabled rule_b should not redact XBBX"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -932,8 +949,10 @@ fn pii_split_across_lines_private_key_header_still_matches() {
     let f = ContentFilter::with_defaults();
     let input = "-----BEGIN RSA PRIVATE\nKEY-----";
     let r = f.filter(input);
-    assert!(r.output.contains("[REDACTED_PRIVATE_KEY]"),
-        "\\s+ in regex matches newlines, so split header is still caught");
+    assert!(
+        r.output.contains("[REDACTED_PRIVATE_KEY]"),
+        "\\s+ in regex matches newlines, so split header is still caught"
+    );
 }
 
 #[test]
@@ -942,8 +961,10 @@ fn pii_split_private_key_words_does_not_match() {
     let f = ContentFilter::with_defaults();
     let input = "-----BEGIN RSA PRIV\nATE KEY-----";
     let r = f.filter(input);
-    assert!(!r.output.contains("[REDACTED_PRIVATE_KEY]"),
-        "Broken keyword should not match");
+    assert!(
+        !r.output.contains("[REDACTED_PRIVATE_KEY]"),
+        "Broken keyword should not match"
+    );
 }
 
 #[test]
@@ -963,8 +984,14 @@ fn double_filtering_is_idempotent() {
     let input = "Contact user@example.com for key sk-aaaabbbbccccddddeeee";
     let first = f.filter(input);
     let second = f.filter(&first.output);
-    assert_eq!(first.output, second.output, "Filtering twice should produce same output");
-    assert!(second.redactions.is_empty(), "Second pass should find nothing new");
+    assert_eq!(
+        first.output, second.output,
+        "Filtering twice should produce same output"
+    );
+    assert!(
+        second.redactions.is_empty(),
+        "Second pass should find nothing new"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

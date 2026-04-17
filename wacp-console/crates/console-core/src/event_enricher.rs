@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use console_runtime::proto as proto;
+use console_runtime::proto;
 use serde::Serialize;
 
 use crate::taxonomy::TaxonomyIndex;
@@ -87,7 +87,6 @@ impl EventEnricher {
             context_len: raw.context.len() as u64,
         }
     }
-
 }
 
 #[derive(Debug, Clone, Serialize)]

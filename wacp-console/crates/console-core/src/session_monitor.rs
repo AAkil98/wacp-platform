@@ -38,7 +38,7 @@ use std::time::Duration;
 use console_db::DbPool;
 use console_db::queries::sessions;
 use console_runtime::grpc_pool::GrpcPool;
-use console_runtime::proto as proto;
+use console_runtime::proto;
 use serde::Serialize;
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -155,9 +155,19 @@ pub enum FrameEvent {
     Escalation(EnrichedEscalation),
     WorkspaceChange(WorkspaceChange),
     Refusal(Refusal),
-    SessionLifecycle { state: String, reason: Option<String> },
-    Lag { refresh_hint: Vec<&'static str>, reason: String },
-    MonitorError { stream: &'static str, transient: bool, message: String },
+    SessionLifecycle {
+        state: String,
+        reason: Option<String>,
+    },
+    Lag {
+        refresh_hint: Vec<&'static str>,
+        reason: String,
+    },
+    MonitorError {
+        stream: &'static str,
+        transient: bool,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -354,12 +364,15 @@ impl Monitor {
                 Ok(resp) => {
                     let view = resp.into_inner();
                     if !view.role.is_empty() {
-                        self.workspace_labels.insert(view.id.clone(), view.role.clone());
+                        self.workspace_labels
+                            .insert(view.id.clone(), view.role.clone());
                     }
                     self.workspace_states
                         .insert(view.id.clone(), workspace_state_string(view.state()));
                 }
-                Err(e) => warn!(session_id = %self.session_id, workspace_id = %ws, error = %e, "GetWorkspace failed at seed"),
+                Err(e) => {
+                    warn!(session_id = %self.session_id, workspace_id = %ws, error = %e, "GetWorkspace failed at seed")
+                }
             }
         }
     }
@@ -402,14 +415,8 @@ impl Monitor {
             let cfg = cfg.clone();
             let pool = pool.clone();
             out.push(tokio::spawn(async move {
-                run_stream_driver(
-                    "workspace_changes",
-                    pool,
-                    cfg,
-                    tx,
-                    workspace_changes_driver,
-                )
-                .await;
+                run_stream_driver("workspace_changes", pool, cfg, tx, workspace_changes_driver)
+                    .await;
             }));
         }
         out
@@ -437,7 +444,11 @@ impl Monitor {
                 if raw.event_type == "gate_resolved"
                     && let Some(gate_id) = parse_gate_id(&raw.body)
                 {
-                    self.pending.gates.write().await.retain(|g| g.gate_id != gate_id);
+                    self.pending
+                        .gates
+                        .write()
+                        .await
+                        .retain(|g| g.gate_id != gate_id);
                 }
                 let label = self.workspace_labels.get(&raw.workspace_id).cloned();
                 let enriched = self.enricher.enrich_trail(&raw, label.as_deref());
@@ -627,7 +638,10 @@ async fn run_stream_driver<F, Fut>(
     loop {
         match driver(pool.clone(), tx.clone(), stream_name).await {
             Ok(()) => {
-                warn!(stream = stream_name, "stream ended (no error) — reconnecting");
+                warn!(
+                    stream = stream_name,
+                    "stream ended (no error) — reconnecting"
+                );
             }
             Err(reason) => {
                 warn!(stream = stream_name, error = %reason, "stream driver errored");
@@ -662,7 +676,10 @@ async fn trail_driver(
     tx: mpsc::Sender<StreamEvent>,
     _: &'static str,
 ) -> Result<(), String> {
-    let mut client = pool.highway().await.ok_or_else(|| "highway unavailable".to_string())?;
+    let mut client = pool
+        .highway()
+        .await
+        .ok_or_else(|| "highway unavailable".to_string())?;
     let mut stream = client
         .stream_trail(proto::StreamTrailRequest {
             workspace_id: String::new(),
@@ -685,7 +702,10 @@ async fn gates_driver(
     tx: mpsc::Sender<StreamEvent>,
     _: &'static str,
 ) -> Result<(), String> {
-    let mut client = pool.highway().await.ok_or_else(|| "highway unavailable".to_string())?;
+    let mut client = pool
+        .highway()
+        .await
+        .ok_or_else(|| "highway unavailable".to_string())?;
     let mut stream = client
         .stream_gates(proto::StreamGatesRequest::default())
         .await
@@ -704,7 +724,10 @@ async fn escalations_driver(
     tx: mpsc::Sender<StreamEvent>,
     _: &'static str,
 ) -> Result<(), String> {
-    let mut client = pool.highway().await.ok_or_else(|| "highway unavailable".to_string())?;
+    let mut client = pool
+        .highway()
+        .await
+        .ok_or_else(|| "highway unavailable".to_string())?;
     let mut stream = client
         .stream_escalations(proto::StreamEscalationsRequest {
             user_id: String::new(),
@@ -725,7 +748,10 @@ async fn workspace_changes_driver(
     tx: mpsc::Sender<StreamEvent>,
     _: &'static str,
 ) -> Result<(), String> {
-    let mut client = pool.highway().await.ok_or_else(|| "highway unavailable".to_string())?;
+    let mut client = pool
+        .highway()
+        .await
+        .ok_or_else(|| "highway unavailable".to_string())?;
     let mut stream = client
         .stream_workspace_changes(proto::StreamWorkspaceChangesRequest {
             workspace_id: String::new(),
@@ -745,7 +771,7 @@ async fn workspace_changes_driver(
 // Small util shared with enricher. Kept local to avoid a public API churn.
 // ============================================================================
 mod event_enricher_util {
-    use console_runtime::proto as proto;
+    use console_runtime::proto;
     pub(super) fn timestamp_rfc3339(ts: &Option<proto::Timestamp>) -> String {
         let Some(ts) = ts else {
             return String::new();
@@ -822,7 +848,9 @@ mod tests {
             budget_max_tokens: None,
             budget_max_wall_time_ms: None,
         };
-        sessions::insert_session(db, &row).await.expect("insert session");
+        sessions::insert_session(db, &row)
+            .await
+            .expect("insert session");
     }
 
     fn ws_set() -> WorkspaceSet {
@@ -840,9 +868,18 @@ mod tests {
 
     #[test]
     fn workspace_state_roundtrip() {
-        assert_eq!(workspace_state_string(proto::WorkspaceState::Active), "active");
-        assert_eq!(workspace_state_string(proto::WorkspaceState::Closed), "closed");
-        assert_eq!(workspace_state_string(proto::WorkspaceState::Failed), "failed");
+        assert_eq!(
+            workspace_state_string(proto::WorkspaceState::Active),
+            "active"
+        );
+        assert_eq!(
+            workspace_state_string(proto::WorkspaceState::Closed),
+            "closed"
+        );
+        assert_eq!(
+            workspace_state_string(proto::WorkspaceState::Failed),
+            "failed"
+        );
     }
 
     #[test]
@@ -905,7 +942,10 @@ mod tests {
             proto::WorkspaceState::Closed,
             proto::WorkspaceState::Failed,
         ] {
-            assert!(!workspace_state_string(s).is_empty(), "missing label for {s:?}");
+            assert!(
+                !workspace_state_string(s).is_empty(),
+                "missing label for {s:?}"
+            );
         }
     }
 
@@ -930,7 +970,11 @@ mod tests {
     }
 
     fn frame(channel: Channel, event: FrameEvent) -> Frame {
-        Frame { channel, session_id: "s-1".into(), event }
+        Frame {
+            channel,
+            session_id: "s-1".into(),
+            event,
+        }
     }
 
     #[test]
@@ -1032,7 +1076,13 @@ mod tests {
             pending: Arc::new(PendingState::default()),
         };
         let mut sub = handle.subscribe();
-        let f = frame(Channel::Trail, FrameEvent::Lag { refresh_hint: vec![], reason: "x".into() });
+        let f = frame(
+            Channel::Trail,
+            FrameEvent::Lag {
+                refresh_hint: vec![],
+                reason: "x".into(),
+            },
+        );
         tx.send(f.clone()).expect("send");
         let received = sub.try_recv().expect("frame");
         assert_eq!(received.session_id, "s-1");
@@ -1042,9 +1092,15 @@ mod tests {
     fn timestamp_rfc3339_handles_none_and_logical() {
         use event_enricher_util::timestamp_rfc3339;
         assert_eq!(timestamp_rfc3339(&None), "");
-        let ts = Some(proto::Timestamp { physical_us: 1_700_000_000_000_000, logical: 0 });
+        let ts = Some(proto::Timestamp {
+            physical_us: 1_700_000_000_000_000,
+            logical: 0,
+        });
         assert!(timestamp_rfc3339(&ts).contains("2023"));
-        let ts2 = Some(proto::Timestamp { physical_us: 1_700_000_000_000_000, logical: 9 });
+        let ts2 = Some(proto::Timestamp {
+            physical_us: 1_700_000_000_000_000,
+            logical: 9,
+        });
         assert!(timestamp_rfc3339(&ts2).ends_with("#9"));
     }
 
@@ -1067,9 +1123,7 @@ mod tests {
             cfg: tiny_cfg(),
             broadcast_tx,
             pending,
-            workspace_labels: HashMap::from([
-                ("ws-1".to_string(), "swe:implementer".to_string()),
-            ]),
+            workspace_labels: HashMap::from([("ws-1".to_string(), "swe:implementer".to_string())]),
             workspace_states: HashMap::new(),
         };
         (monitor, rx)
@@ -1160,7 +1214,10 @@ mod tests {
         let ev = StreamEvent::Trail(trail_entry("ws-outsider", "signal", b"x"));
         let terminal = mon.handle_event(ev).await;
         assert!(terminal.is_none());
-        assert!(rx.try_recv().is_err(), "no frame should be broadcast for outsider ws");
+        assert!(
+            rx.try_recv().is_err(),
+            "no frame should be broadcast for outsider ws"
+        );
     }
 
     #[tokio::test]
@@ -1354,7 +1411,10 @@ mod tests {
             proto::WorkspaceState::Closed,
         ));
         let terminal = mon.handle_event(ev).await;
-        assert!(terminal.is_none(), "non-root workspace close should not terminate");
+        assert!(
+            terminal.is_none(),
+            "non-root workspace close should not terminate"
+        );
         let f = rx.try_recv().expect("workspace frame");
         assert_eq!(f.channel, Channel::Workspaces);
         // No session lifecycle frame should follow.
@@ -1392,7 +1452,11 @@ mod tests {
         assert!(terminal.is_none());
         let f = rx.try_recv().expect("lag frame");
         assert_eq!(f.channel, Channel::Control);
-        if let FrameEvent::Lag { refresh_hint, reason } = &f.event {
+        if let FrameEvent::Lag {
+            refresh_hint,
+            reason,
+        } = &f.event
+        {
             assert_eq!(refresh_hint, &vec!["gates"]);
             assert!(reason.contains("gates reconnected"));
             assert!(reason.contains("2 attempts"));
@@ -1417,7 +1481,12 @@ mod tests {
         assert_eq!(terminal.as_deref(), Some(session_state::FAILED));
         let f = rx.try_recv().expect("error frame");
         assert_eq!(f.channel, Channel::Control);
-        if let FrameEvent::MonitorError { stream, transient, message } = &f.event {
+        if let FrameEvent::MonitorError {
+            stream,
+            transient,
+            message,
+        } = &f.event
+        {
             assert_eq!(*stream, "trail");
             assert!(!transient);
             assert!(message.contains("reconnect cap"));
@@ -1577,7 +1646,9 @@ mod tests {
         // But should receive future events
         mon.handle_event(StreamEvent::Trail(trail_entry("ws-1", "signal", b"late")))
             .await;
-        let f = late_rx.try_recv().expect("late subscriber should get new events");
+        let f = late_rx
+            .try_recv()
+            .expect("late subscriber should get new events");
         assert_eq!(f.channel, Channel::Trail);
     }
 
@@ -1762,9 +1833,7 @@ mod tests {
                       _name: &'static str|
          -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<(), String>> + Send>,
-        > {
-            Box::pin(async { Err("always fails".into()) })
-        };
+        > { Box::pin(async { Err("always fails".into()) }) };
 
         let handle = tokio::spawn(async move {
             run_stream_driver("test_stream", pool, cfg, tx, driver).await;

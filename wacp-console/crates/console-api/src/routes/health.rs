@@ -111,9 +111,7 @@ mod tests {
                 rest_address,
             },
             grpc_pool: pool,
-            active_sessions: Arc::new(tokio::sync::RwLock::new(
-                std::collections::HashMap::new(),
-            )),
+            active_sessions: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         })
     }
 

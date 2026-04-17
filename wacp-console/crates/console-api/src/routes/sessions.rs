@@ -642,21 +642,16 @@ async fn cancel_session(
     // up as a 5xx and the session stays ACTIVE — otherwise the operator is
     // left with a session marked CANCELLED locally but still alive on the
     // runtime. BestEffortAbort runs after the DB transition (tolerated).
-    if matches!(
-        cancel_action,
-        session_state::CancelAction::AbortWorkspace
-    ) {
-        let workspace_id = session
-            .coordinator_workspace_id
-            .as_deref()
-            .ok_or_else(|| {
-                ApiError::from(ConsoleError::Conflict(
-                    "Session has no coordinator workspace; cannot abort".into(),
-                ))
-            })?;
-        let mut coord = state.grpc_pool.coordinator().await.ok_or_else(|| {
-            ApiError::runtime_unavailable("CoordinatorService", "AbortWorkspace")
+    if matches!(cancel_action, session_state::CancelAction::AbortWorkspace) {
+        let workspace_id = session.coordinator_workspace_id.as_deref().ok_or_else(|| {
+            ApiError::from(ConsoleError::Conflict(
+                "Session has no coordinator workspace; cannot abort".into(),
+            ))
         })?;
+        let mut coord =
+            state.grpc_pool.coordinator().await.ok_or_else(|| {
+                ApiError::runtime_unavailable("CoordinatorService", "AbortWorkspace")
+            })?;
         coord
             .abort_workspace(console_runtime::proto::AbortWorkspaceRequest {
                 workspace_id: workspace_id.to_string(),
@@ -682,10 +677,7 @@ async fn cancel_session(
     // happens to reject (or be unreachable), the session is still CANCELLED
     // and the operator's only loss is a possibly-leaked partial launch on
     // the coordinator side — recovery on next restart will reconcile.
-    if matches!(
-        cancel_action,
-        session_state::CancelAction::BestEffortAbort
-    )
+    if matches!(cancel_action, session_state::CancelAction::BestEffortAbort)
         && let Some(workspace_id) = session.coordinator_workspace_id.as_deref()
         && let Some(mut coord) = state.grpc_pool.coordinator().await
     {
@@ -861,9 +853,7 @@ mod cancel_tests {
     use axum::http::{Request, StatusCode};
     use console_core::authenticator;
     use console_core::config::RuntimeConfig;
-    use console_core::session_monitor::{
-        Frame, MonitorCmd, PendingState, SessionMonitorHandle,
-    };
+    use console_core::session_monitor::{Frame, MonitorCmd, PendingState, SessionMonitorHandle};
     use console_core::taxonomy_builder;
     use console_db::create_test_pool;
     use console_db::queries::api_tokens;
@@ -1030,7 +1020,11 @@ mod cancel_tests {
             broadcast_tx: broadcast::channel::<Frame>(8).0,
             pending: Arc::new(PendingState::default()),
         };
-        state.active_sessions.write().await.insert(sid.into(), handle);
+        state
+            .active_sessions
+            .write()
+            .await
+            .insert(sid.into(), handle);
         cmd_rx
     }
 
@@ -1051,8 +1045,7 @@ mod cancel_tests {
 
     #[tokio::test]
     async fn cancel_active_calls_abort_then_marks_cancelled_and_drops_monitor() {
-        let (fx, _rt) =
-            fixture("u-1", session_state::ACTIVE, Some("ws-coord")).await;
+        let (fx, _rt) = fixture("u-1", session_state::ACTIVE, Some("ws-coord")).await;
         let mut cmd_rx = install_dummy_monitor(&fx.state, &fx.sid).await;
         let app = router().with_state(fx.state.clone());
 
@@ -1120,8 +1113,7 @@ mod cancel_tests {
 
     #[tokio::test]
     async fn cancel_already_cancelled_returns_409() {
-        let (fx, _rt) =
-            fixture("u-1", session_state::CANCELLED, Some("ws-coord")).await;
+        let (fx, _rt) = fixture("u-1", session_state::CANCELLED, Some("ws-coord")).await;
         let app = router().with_state(fx.state.clone());
 
         let resp = app
@@ -1135,8 +1127,7 @@ mod cancel_tests {
     async fn cancel_launching_uses_best_effort_and_succeeds_even_with_dead_pool() {
         // BestEffortAbort tolerates a runtime failure — the cancel still
         // succeeds and the session is marked CANCELLED.
-        let fx =
-            fixture_with_dead_pool("u-1", session_state::LAUNCHING, Some("ws-coord")).await;
+        let fx = fixture_with_dead_pool("u-1", session_state::LAUNCHING, Some("ws-coord")).await;
         let app = router().with_state(fx.state.clone());
 
         let resp = app
@@ -1178,7 +1169,11 @@ mod cancel_tests {
         let app = router().with_state(fx.state.clone());
 
         let resp = app
-            .oneshot(cancel_request(&fx.sid, &stranger_token, serde_json::json!({})))
+            .oneshot(cancel_request(
+                &fx.sid,
+                &stranger_token,
+                serde_json::json!({}),
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);

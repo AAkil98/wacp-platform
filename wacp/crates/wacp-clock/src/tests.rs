@@ -404,7 +404,10 @@ fn clock_system_constructor() {
 fn clock_system_produces_nonzero() {
     let mut clock = Clock::system();
     let ts = clock.now();
-    assert!(ts > Timestamp::ZERO, "system clock should produce nonzero timestamp");
+    assert!(
+        ts > Timestamp::ZERO,
+        "system clock should produce nonzero timestamp"
+    );
 }
 
 #[test]
@@ -537,7 +540,11 @@ fn clock_now_after_physical_advance_resets_logical() {
     clock.time_source.set(2000);
     let ts = clock.now();
     assert_eq!(ts.physical_us(), 2000);
-    assert_eq!(ts.logical(), 0, "logical should reset when physical advances");
+    assert_eq!(
+        ts.logical(),
+        0,
+        "logical should reset when physical advances"
+    );
 }
 
 #[test]
@@ -546,7 +553,10 @@ fn clock_monotonicity_across_many_ticks() {
     let mut prev = clock.now();
     for _ in 0..1000 {
         let next = clock.now();
-        assert!(next > prev, "clock must be strictly monotonic: {prev} >= {next}");
+        assert!(
+            next > prev,
+            "clock must be strictly monotonic: {prev} >= {next}"
+        );
         prev = next;
     }
 }

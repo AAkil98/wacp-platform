@@ -283,13 +283,7 @@ async fn seed_launching_session(db: &console_db::DbPool, sid: &str, owner: &str)
         .expect("insert launching session");
 }
 
-async fn seed_profile(
-    db: &console_db::DbPool,
-    pid: &str,
-    owner: &str,
-    role_ref: &str,
-    name: &str,
-) {
+async fn seed_profile(db: &console_db::DbPool, pid: &str, owner: &str, role_ref: &str, name: &str) {
     sqlx::query(
         "INSERT INTO profiles (id, version, name, role_ref, llm_provider, llm_model,
             autonomy, owner_user_id, visibility, is_current, created_at)

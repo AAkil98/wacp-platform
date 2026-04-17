@@ -12,6 +12,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createElement, type ReactNode } from "react";
 
+import { ApiError } from "../client";
+
 import {
   useHealth,
   useRoles,
@@ -120,21 +122,21 @@ function describeQueryErrors(
       const { result } = hookFactory();
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(result.current.error).toBeDefined();
-      expect((result.current.error as any).status).toBe(401);
+      expect((result.current.error as ApiError).status).toBe(401);
     });
 
     it("returns error on 404 response", async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse({ error: "NOT_FOUND" }, 404));
       const { result } = hookFactory();
       await waitFor(() => expect(result.current.isError).toBe(true));
-      expect((result.current.error as any).status).toBe(404);
+      expect((result.current.error as ApiError).status).toBe(404);
     });
 
     it("returns error on 500 response", async () => {
       fetchMock.mockResolvedValueOnce(textResponse("Internal Server Error", 500));
       const { result } = hookFactory();
       await waitFor(() => expect(result.current.isError).toBe(true));
-      expect((result.current.error as any).status).toBe(500);
+      expect((result.current.error as ApiError).status).toBe(500);
     });
 
     it("returns error on network failure", async () => {
@@ -705,7 +707,7 @@ function describeMutationErrors(
       const { hook, trigger } = setup();
       await act(async () => { trigger(); });
       await waitFor(() => expect(hook.result.current.isError).toBe(true));
-      expect((hook.result.current.error as any).status).toBe(401);
+      expect((hook.result.current.error as ApiError).status).toBe(401);
     });
 
     it("returns error on 404 response", async () => {
@@ -713,7 +715,7 @@ function describeMutationErrors(
       const { hook, trigger } = setup();
       await act(async () => { trigger(); });
       await waitFor(() => expect(hook.result.current.isError).toBe(true));
-      expect((hook.result.current.error as any).status).toBe(404);
+      expect((hook.result.current.error as ApiError).status).toBe(404);
     });
 
     it("returns error on 500 response", async () => {
@@ -721,7 +723,7 @@ function describeMutationErrors(
       const { hook, trigger } = setup();
       await act(async () => { trigger(); });
       await waitFor(() => expect(hook.result.current.isError).toBe(true));
-      expect((hook.result.current.error as any).status).toBe(500);
+      expect((hook.result.current.error as ApiError).status).toBe(500);
     });
 
     it("returns error on network failure", async () => {
@@ -1058,6 +1060,6 @@ describe("mutation loading state transitions", () => {
 
     expect(result.current.isPending).toBe(false);
     expect(result.current.isSuccess).toBe(false);
-    expect((result.current.error as any).status).toBe(403);
+    expect((result.current.error as ApiError).status).toBe(403);
   });
 });

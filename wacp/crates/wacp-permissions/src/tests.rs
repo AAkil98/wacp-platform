@@ -969,18 +969,10 @@ fn permission_denied_clone_and_eq() {
 #[test]
 fn permission_denied_debug() {
     let variants = [
-        PermissionDenied::NotInPermissionMatrix {
-            rule: "a".into(),
-        },
-        PermissionDenied::NoPortRight {
-            rule: "b".into(),
-        },
-        PermissionDenied::CheckpointTypeNotPermitted {
-            rule: "c".into(),
-        },
-        PermissionDenied::SignalTypeNotPermitted {
-            rule: "d".into(),
-        },
+        PermissionDenied::NotInPermissionMatrix { rule: "a".into() },
+        PermissionDenied::NoPortRight { rule: "b".into() },
+        PermissionDenied::CheckpointTypeNotPermitted { rule: "c".into() },
+        PermissionDenied::SignalTypeNotPermitted { rule: "d".into() },
     ];
     for v in &variants {
         let dbg = format!("{v:?}");

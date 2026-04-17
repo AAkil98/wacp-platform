@@ -37,6 +37,10 @@ jobs:
         with:
           key: coverage-wacp
 
+      # Repo .cargo/config.toml sets `-C link-arg=-fuse-ld=mold`; install
+      # mold so rustc can link during coverage instrumentation.
+      - uses: rui314/setup-mold@v1
+
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -81,6 +85,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: coverage-console
+
+      - uses: rui314/setup-mold@v1
 
       - name: Install protoc
         uses: arduino/setup-protoc@v3

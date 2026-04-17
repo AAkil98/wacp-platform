@@ -24,9 +24,7 @@ use tracing::{info, warn};
 
 use crate::event_enricher::EventEnricher;
 use crate::refusal_synthesizer::RefusalSynthesizer;
-use crate::session_monitor::{
-    self, MonitorConfig, SessionMonitorHandle, WorkspaceSet,
-};
+use crate::session_monitor::{self, MonitorConfig, SessionMonitorHandle, WorkspaceSet};
 use crate::session_state;
 
 /// Map of session_id → live monitor handle. Owned by the API layer; recovery
@@ -102,9 +100,7 @@ pub async fn run(
                 report.synced_terminal.push((row.id.clone(), state))
             }
             RecoveryOutcome::Failed(reason) => report.failed.push((row.id.clone(), reason)),
-            RecoveryOutcome::SkippedUnavailable => {
-                report.skipped_unavailable.push(row.id.clone())
-            }
+            RecoveryOutcome::SkippedUnavailable => report.skipped_unavailable.push(row.id.clone()),
         }
     }
 
@@ -230,9 +226,14 @@ async fn mark_failed(db: &DbPool, session_id: &str, _reason_tag: &str) {
     // Reason is captured in the audit / log layer at the call site (recovery
     // returns the structured reason). The DB column itself is just `state`.
     let now = chrono::Utc::now().to_rfc3339();
-    if let Err(e) =
-        sessions::transition_state(db, session_id, session_state::ACTIVE, session_state::FAILED, &now)
-            .await
+    if let Err(e) = sessions::transition_state(
+        db,
+        session_id,
+        session_state::ACTIVE,
+        session_state::FAILED,
+        &now,
+    )
+    .await
     {
         warn!(session_id = %session_id, error = %e, "recovery: mark_failed transition failed");
     }
@@ -338,7 +339,9 @@ mod tests {
             created_at: "2026-04-15T00:00:00Z".into(),
             deleted_at: None,
         };
-        profiles::insert_profile(db, &row).await.expect("insert profile");
+        profiles::insert_profile(db, &row)
+            .await
+            .expect("insert profile");
     }
 
     fn empty_active() -> ActiveSessionsMap {
@@ -430,10 +433,7 @@ mod tests {
         .await;
         assert_eq!(report.skipped_unavailable.len(), 1);
         // Session stays ACTIVE — no transition.
-        let row = sessions::get_by_id(&db, "s-nopool")
-            .await
-            .unwrap()
-            .unwrap();
+        let row = sessions::get_by_id(&db, "s-nopool").await.unwrap().unwrap();
         assert_eq!(row.state, session_state::ACTIVE);
     }
 
@@ -553,9 +553,7 @@ mod tests {
                     Some(GetWorkspaceOutcome::Err(code, msg)) => {
                         Err(Status::new(*code, msg.clone()))
                     }
-                    None => Err(Status::not_found(format!(
-                        "workspace {ws_id} not found"
-                    ))),
+                    None => Err(Status::not_found(format!("workspace {ws_id} not found"))),
                 }
             }
 
@@ -625,7 +623,9 @@ mod tests {
                 _: Request<proto::StreamTrailRequest>,
             ) -> Result<Response<Self::StreamTrailStream>, Status> {
                 let (_tx, rx) = tokio::sync::mpsc::channel(1);
-                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                    rx,
+                )))
             }
 
             type StreamGatesStream =
@@ -636,7 +636,9 @@ mod tests {
                 _: Request<proto::StreamGatesRequest>,
             ) -> Result<Response<Self::StreamGatesStream>, Status> {
                 let (_tx, rx) = tokio::sync::mpsc::channel(1);
-                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                    rx,
+                )))
             }
 
             type StreamEscalationsStream =
@@ -647,20 +649,22 @@ mod tests {
                 _: Request<proto::StreamEscalationsRequest>,
             ) -> Result<Response<Self::StreamEscalationsStream>, Status> {
                 let (_tx, rx) = tokio::sync::mpsc::channel(1);
-                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                    rx,
+                )))
             }
 
             type StreamWorkspaceChangesStream =
-                tokio_stream::wrappers::ReceiverStream<
-                    Result<proto::WorkspaceStateChange, Status>,
-                >;
+                tokio_stream::wrappers::ReceiverStream<Result<proto::WorkspaceStateChange, Status>>;
 
             async fn stream_workspace_changes(
                 &self,
                 _: Request<proto::StreamWorkspaceChangesRequest>,
             ) -> Result<Response<Self::StreamWorkspaceChangesStream>, Status> {
                 let (_tx, rx) = tokio::sync::mpsc::channel(1);
-                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+                Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+                    rx,
+                )))
             }
         }
     }
@@ -668,13 +672,11 @@ mod tests {
     use programmable_highway::{GetWorkspaceOutcome, ProgrammableHighway};
 
     /// Helper: spin up a ProgrammableHighway and connect a GrpcPool to it.
-    async fn pool_with_highway(hw: ProgrammableHighway) -> (Arc<GrpcPool>, tokio::task::JoinHandle<()>) {
+    async fn pool_with_highway(
+        hw: ProgrammableHighway,
+    ) -> (Arc<GrpcPool>, tokio::task::JoinHandle<()>) {
         let (addr, handle) = hw.spawn().await;
-        let pool = GrpcPool::new(
-            &format!("{addr}"),
-            &format!("{addr}"),
-            &format!("{addr}"),
-        );
+        let pool = GrpcPool::new(&format!("{addr}"), &format!("{addr}"), &format!("{addr}"));
         pool.connect().await;
         // Give the pool a moment to establish the channel.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -695,10 +697,20 @@ mod tests {
     async fn run_respawns_monitor_for_live_workspace() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-live", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-live",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-coord", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active));
+        hw.set_workspace(
+            "ws-coord",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active),
+        );
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
         let active = empty_active();
@@ -720,7 +732,10 @@ mod tests {
 
         // The active_sessions map should contain the respawned monitor.
         let map = active.read().await;
-        assert!(map.contains_key("s-live"), "active_sessions must contain the resumed session");
+        assert!(
+            map.contains_key("s-live"),
+            "active_sessions must contain the resumed session"
+        );
         // Session stays ACTIVE in the DB.
         let row = sessions::get_by_id(&db, "s-live").await.unwrap().unwrap();
         assert_eq!(row.state, session_state::ACTIVE);
@@ -737,10 +752,20 @@ mod tests {
     async fn run_syncs_terminal_failed_workspace() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-term-f", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-term-f",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-coord", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Failed));
+        hw.set_workspace(
+            "ws-coord",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Failed),
+        );
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
         let report = run(
@@ -768,10 +793,20 @@ mod tests {
     async fn run_syncs_terminal_closed_workspace() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-term-c", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-term-c",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-coord", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Closed));
+        hw.set_workspace(
+            "ws-coord",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Closed),
+        );
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
         let report = run(
@@ -817,7 +852,10 @@ mod tests {
 
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].0, "s-nf");
-        assert!(matches!(report.failed[0].1, RecoveryFailureReason::WorkspaceMissing));
+        assert!(matches!(
+            report.failed[0].1,
+            RecoveryFailureReason::WorkspaceMissing
+        ));
 
         let row = sessions::get_by_id(&db, "s-nf").await.unwrap().unwrap();
         assert_eq!(row.state, session_state::FAILED);
@@ -828,7 +866,14 @@ mod tests {
     async fn run_skips_when_get_workspace_returns_unavailable() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-unavail", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-unavail",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
         hw.set_workspace(
@@ -852,7 +897,10 @@ mod tests {
         assert!(report.failed.is_empty());
 
         // Session stays ACTIVE.
-        let row = sessions::get_by_id(&db, "s-unavail").await.unwrap().unwrap();
+        let row = sessions::get_by_id(&db, "s-unavail")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(row.state, session_state::ACTIVE);
     }
 
@@ -862,7 +910,14 @@ mod tests {
     async fn run_skips_when_get_workspace_returns_deadline_exceeded() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-timeout", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-timeout",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
         hw.set_workspace(
@@ -882,7 +937,10 @@ mod tests {
         .await;
 
         assert_eq!(report.skipped_unavailable.len(), 1);
-        let row = sessions::get_by_id(&db, "s-timeout").await.unwrap().unwrap();
+        let row = sessions::get_by_id(&db, "s-timeout")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(row.state, session_state::ACTIVE);
     }
 
@@ -892,7 +950,14 @@ mod tests {
     async fn run_marks_failed_on_unexpected_grpc_error() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-rpc-err", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-rpc-err",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
         hw.set_workspace(
@@ -913,9 +978,15 @@ mod tests {
 
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].0, "s-rpc-err");
-        assert!(matches!(report.failed[0].1, RecoveryFailureReason::RuntimeError(_)));
+        assert!(matches!(
+            report.failed[0].1,
+            RecoveryFailureReason::RuntimeError(_)
+        ));
 
-        let row = sessions::get_by_id(&db, "s-rpc-err").await.unwrap().unwrap();
+        let row = sessions::get_by_id(&db, "s-rpc-err")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(row.state, session_state::FAILED);
     }
 
@@ -956,8 +1027,14 @@ mod tests {
         .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-closed", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Closed));
-        hw.set_workspace("ws-live", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active));
+        hw.set_workspace(
+            "ws-closed",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Closed),
+        );
+        hw.set_workspace(
+            "ws-live",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active),
+        );
         // ws-missing left unprogrammed → returns NotFound
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
@@ -973,27 +1050,45 @@ mod tests {
         .await;
 
         // Stuck session → failed
-        assert!(report.failed.iter().any(|(id, r)| id == "s-multi-stuck"
-            && matches!(r, RecoveryFailureReason::StuckInLaunching)));
+        assert!(
+            report.failed.iter().any(|(id, r)| id == "s-multi-stuck"
+                && matches!(r, RecoveryFailureReason::StuckInLaunching))
+        );
         // Not-found session → failed
-        assert!(report.failed.iter().any(|(id, r)| id == "s-multi-nf"
-            && matches!(r, RecoveryFailureReason::WorkspaceMissing)));
+        assert!(
+            report.failed.iter().any(|(id, r)| id == "s-multi-nf"
+                && matches!(r, RecoveryFailureReason::WorkspaceMissing))
+        );
         // Terminal session → synced
-        assert!(report
-            .synced_terminal
-            .iter()
-            .any(|(id, state)| id == "s-multi-closed" && state == session_state::COMPLETED));
+        assert!(
+            report
+                .synced_terminal
+                .iter()
+                .any(|(id, state)| id == "s-multi-closed" && state == session_state::COMPLETED)
+        );
         // Live session → resumed
         assert!(report.resumed.iter().any(|id| id == "s-multi-live"));
 
         // Verify DB states
-        let stuck = sessions::get_by_id(&db, "s-multi-stuck").await.unwrap().unwrap();
+        let stuck = sessions::get_by_id(&db, "s-multi-stuck")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(stuck.state, session_state::FAILED);
-        let closed = sessions::get_by_id(&db, "s-multi-closed").await.unwrap().unwrap();
+        let closed = sessions::get_by_id(&db, "s-multi-closed")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(closed.state, session_state::COMPLETED);
-        let live = sessions::get_by_id(&db, "s-multi-live").await.unwrap().unwrap();
+        let live = sessions::get_by_id(&db, "s-multi-live")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(live.state, session_state::ACTIVE);
-        let nf = sessions::get_by_id(&db, "s-multi-nf").await.unwrap().unwrap();
+        let nf = sessions::get_by_id(&db, "s-multi-nf")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(nf.state, session_state::FAILED);
 
         // Active map contains only the live session.
@@ -1016,35 +1111,17 @@ mod tests {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
         // Session A: recoverable (live workspace)
-        insert_session(
-            &db,
-            "s-ok",
-            "u-1",
-            Some("ws-ok"),
-            session_state::ACTIVE,
-        )
-        .await;
+        insert_session(&db, "s-ok", "u-1", Some("ws-ok"), session_state::ACTIVE).await;
         // Session B: fails (gRPC Internal error)
-        insert_session(
-            &db,
-            "s-fail",
-            "u-1",
-            Some("ws-fail"),
-            session_state::ACTIVE,
-        )
-        .await;
+        insert_session(&db, "s-fail", "u-1", Some("ws-fail"), session_state::ACTIVE).await;
         // Session C: skipped (Unavailable)
-        insert_session(
-            &db,
-            "s-skip",
-            "u-1",
-            Some("ws-skip"),
-            session_state::ACTIVE,
-        )
-        .await;
+        insert_session(&db, "s-skip", "u-1", Some("ws-skip"), session_state::ACTIVE).await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-ok", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Idle));
+        hw.set_workspace(
+            "ws-ok",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Idle),
+        );
         hw.set_workspace(
             "ws-fail",
             GetWorkspaceOutcome::Err(tonic::Code::Internal, "kaboom".into()),
@@ -1175,7 +1252,10 @@ mod tests {
 
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].0, "s-orphan");
-        assert!(matches!(report.failed[0].1, RecoveryFailureReason::StuckInLaunching));
+        assert!(matches!(
+            report.failed[0].1,
+            RecoveryFailureReason::StuckInLaunching
+        ));
         // Never reaches the highway at all.
         assert!(report.resumed.is_empty());
         assert!(report.skipped_unavailable.is_empty());
@@ -1192,7 +1272,14 @@ mod tests {
     async fn run_live_workspace_loads_assignments_into_workspace_set() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-assign", "u-1", Some("ws-root"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-assign",
+            "u-1",
+            Some("ws-root"),
+            session_state::ACTIVE,
+        )
+        .await;
         insert_profile(&db, "profile-w", "u-1").await;
         insert_profile(&db, "profile-r", "u-1").await;
 
@@ -1223,11 +1310,18 @@ mod tests {
             budget_max_tokens: None,
             budget_max_wall_time_ms: None,
         };
-        session_assignments::insert_assignment(&db, &a1).await.unwrap();
-        session_assignments::insert_assignment(&db, &a2).await.unwrap();
+        session_assignments::insert_assignment(&db, &a1)
+            .await
+            .unwrap();
+        session_assignments::insert_assignment(&db, &a2)
+            .await
+            .unwrap();
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-root", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active));
+        hw.set_workspace(
+            "ws-root",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Active),
+        );
         // The child workspaces will be looked up by seed_workspace_labels in the
         // monitor; those 404s are non-fatal.
         let (pool, _hw_handle) = pool_with_highway(hw).await;
@@ -1284,7 +1378,10 @@ mod tests {
 
         let row = sessions::get_by_id(&db, "s-mf").await.unwrap().unwrap();
         assert_eq!(row.state, session_state::FAILED);
-        assert!(row.closed_at.is_some(), "closed_at must be set after mark_failed");
+        assert!(
+            row.closed_at.is_some(),
+            "closed_at must be set after mark_failed"
+        );
     }
 
     /// mark_failed is idempotent — calling it on an already-FAILED session
@@ -1309,10 +1406,20 @@ mod tests {
     async fn run_respawns_for_blocked_workspace() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-blocked", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-blocked",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-coord", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Blocked));
+        hw.set_workspace(
+            "ws-coord",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Blocked),
+        );
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
         let active = empty_active();
@@ -1340,10 +1447,20 @@ mod tests {
     async fn run_respawns_for_idle_workspace() {
         let db = create_test_pool().await.unwrap();
         insert_user(&db, "u-1").await;
-        insert_session(&db, "s-idle", "u-1", Some("ws-coord"), session_state::ACTIVE).await;
+        insert_session(
+            &db,
+            "s-idle",
+            "u-1",
+            Some("ws-coord"),
+            session_state::ACTIVE,
+        )
+        .await;
 
         let hw = ProgrammableHighway::new();
-        hw.set_workspace("ws-coord", GetWorkspaceOutcome::Ok(proto::WorkspaceState::Idle));
+        hw.set_workspace(
+            "ws-coord",
+            GetWorkspaceOutcome::Ok(proto::WorkspaceState::Idle),
+        );
         let (pool, _hw_handle) = pool_with_highway(hw).await;
 
         let active = empty_active();

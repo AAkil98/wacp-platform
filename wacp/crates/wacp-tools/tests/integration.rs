@@ -561,35 +561,20 @@ async fn retry_success_on_nth_attempt_resets_breaker() {
     // 3 failures trip the breaker
     for _ in 0..3 {
         let _ = registry
-            .execute(
-                "recovering",
-                "run",
-                json!({}),
-                ExecutionOptions::default(),
-            )
+            .execute("recovering", "run", json!({}), ExecutionOptions::default())
             .await;
     }
 
     // Cooldown is 0 -> half-open -> probe call (4th) succeeds -> closes breaker
     let result = registry
-        .execute(
-            "recovering",
-            "run",
-            json!({}),
-            ExecutionOptions::default(),
-        )
+        .execute("recovering", "run", json!({}), ExecutionOptions::default())
         .await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap()["recovered"], true);
 
     // Breaker is closed again — 5th call also succeeds
     let result = registry
-        .execute(
-            "recovering",
-            "run",
-            json!({}),
-            ExecutionOptions::default(),
-        )
+        .execute("recovering", "run", json!({}), ExecutionOptions::default())
         .await;
     assert!(result.is_ok());
 }
@@ -736,12 +721,7 @@ async fn panic_through_registry_returns_internal_error() {
     registry.register(pkg).await.unwrap();
 
     let err = registry
-        .execute(
-            "panic_tool",
-            "run",
-            json!({}),
-            ExecutionOptions::default(),
-        )
+        .execute("panic_tool", "run", json!({}), ExecutionOptions::default())
         .await
         .unwrap_err();
 
@@ -786,13 +766,8 @@ async fn overloaded_does_not_count_for_circuit_breaker() {
     // Fill the single permit
     let reg2 = registry.clone();
     let _hold = tokio::spawn(async move {
-        reg2.execute(
-            "overload_cb",
-            "run",
-            json!({}),
-            ExecutionOptions::default(),
-        )
-        .await
+        reg2.execute("overload_cb", "run", json!({}), ExecutionOptions::default())
+            .await
     });
 
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -800,12 +775,7 @@ async fn overloaded_does_not_count_for_circuit_breaker() {
     // These will be Overloaded — should NOT trip the breaker
     for _ in 0..5 {
         let err = registry
-            .execute(
-                "overload_cb",
-                "run",
-                json!({}),
-                ExecutionOptions::default(),
-            )
+            .execute("overload_cb", "run", json!({}), ExecutionOptions::default())
             .await
             .unwrap_err();
         assert_eq!(err.code, wacp_tools::handler::ToolErrorCode::Overloaded);
@@ -816,12 +786,7 @@ async fn overloaded_does_not_count_for_circuit_breaker() {
 
     // Breaker should still be closed — next call succeeds
     let result = registry
-        .execute(
-            "overload_cb",
-            "run",
-            json!({}),
-            ExecutionOptions::default(),
-        )
+        .execute("overload_cb", "run", json!({}), ExecutionOptions::default())
         .await;
     assert!(result.is_ok());
 }

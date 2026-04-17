@@ -1305,7 +1305,10 @@ fn workspace_trigger_debug() {
     ];
     for t in triggers {
         let dbg = format!("{t:?}");
-        assert!(!dbg.is_empty(), "WorkspaceTrigger debug should be non-empty");
+        assert!(
+            !dbg.is_empty(),
+            "WorkspaceTrigger debug should be non-empty"
+        );
     }
 }
 
@@ -1379,7 +1382,11 @@ fn ws_active_to_failed_agent_failed() {
 #[test]
 fn ws_blocked_to_migrating() {
     assert_eq!(
-        ws(WorkspaceState::Blocked, WorkspaceTrigger::CoordinatorMigrate).unwrap(),
+        ws(
+            WorkspaceState::Blocked,
+            WorkspaceTrigger::CoordinatorMigrate
+        )
+        .unwrap(),
         WorkspaceState::Migrating
     );
 }
@@ -1387,7 +1394,11 @@ fn ws_blocked_to_migrating() {
 #[test]
 fn ws_blocked_to_suspended() {
     assert_eq!(
-        ws(WorkspaceState::Blocked, WorkspaceTrigger::CoordinatorSuspend).unwrap(),
+        ws(
+            WorkspaceState::Blocked,
+            WorkspaceTrigger::CoordinatorSuspend
+        )
+        .unwrap(),
         WorkspaceState::Suspended
     );
 }

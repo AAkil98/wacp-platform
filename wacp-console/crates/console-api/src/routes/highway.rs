@@ -135,7 +135,12 @@ async fn resolve_gate(
     .ok();
 
     if let Some(handle) = state.active_sessions.read().await.get(&sid) {
-        handle.pending.gates.write().await.retain(|g| g.gate_id != gid);
+        handle
+            .pending
+            .gates
+            .write()
+            .await
+            .retain(|g| g.gate_id != gid);
     }
 
     Ok(Json(serde_json::json!({
@@ -314,11 +319,10 @@ async fn respond_escalation(
         }
     };
 
-    let mut client = state
-        .grpc_pool
-        .highway()
-        .await
-        .ok_or_else(|| ApiError::runtime_unavailable("HighwayService", "RespondToEscalation"))?;
+    let mut client =
+        state.grpc_pool.highway().await.ok_or_else(|| {
+            ApiError::runtime_unavailable("HighwayService", "RespondToEscalation")
+        })?;
 
     let req = proto::EscalationResponse {
         escalation_id: eid.clone(),
@@ -1017,8 +1021,18 @@ pub(crate) mod pending {
 
             let h_mine = install_handle(&state, "s-mine").await;
             let h_other = install_handle(&state, "s-other").await;
-            h_mine.pending.gates.write().await.push(dummy_gate("mine-1"));
-            h_other.pending.gates.write().await.push(dummy_gate("other-1"));
+            h_mine
+                .pending
+                .gates
+                .write()
+                .await
+                .push(dummy_gate("mine-1"));
+            h_other
+                .pending
+                .gates
+                .write()
+                .await
+                .push(dummy_gate("other-1"));
 
             let v = aggregate_gates(
                 &state,
@@ -1439,7 +1453,12 @@ mod tests {
         }
     }
 
-    fn auth_request(method: &str, uri: &str, token: &str, body: serde_json::Value) -> Request<Body> {
+    fn auth_request(
+        method: &str,
+        uri: &str,
+        token: &str,
+        body: serde_json::Value,
+    ) -> Request<Body> {
         Request::builder()
             .method(method)
             .uri(uri)
@@ -1462,7 +1481,10 @@ mod tests {
             (tonic::Code::NotFound, StatusCode::NOT_FOUND),
             (tonic::Code::FailedPrecondition, StatusCode::CONFLICT),
             (tonic::Code::Unavailable, StatusCode::SERVICE_UNAVAILABLE),
-            (tonic::Code::DeadlineExceeded, StatusCode::SERVICE_UNAVAILABLE),
+            (
+                tonic::Code::DeadlineExceeded,
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
             (tonic::Code::PermissionDenied, StatusCode::FORBIDDEN),
             (tonic::Code::Internal, StatusCode::BAD_GATEWAY),
         ];

@@ -11,7 +11,7 @@
 //!   - `event_type = "coordinator_refused"` → coordinator-layer refusal
 //!     (integration rejected).
 
-use console_runtime::proto as proto;
+use console_runtime::proto;
 use serde::Serialize;
 
 #[derive(Clone, Default)]
@@ -132,7 +132,10 @@ mod tests {
     #[test]
     fn coordinator_layer_refusal() {
         let r = RefusalSynthesizer::new()
-            .detect(&entry("coordinator_refused", br#"{"code":"BUDGET_EXHAUSTED"}"#))
+            .detect(&entry(
+                "coordinator_refused",
+                br#"{"code":"BUDGET_EXHAUSTED"}"#,
+            ))
             .expect("refusal");
         assert_eq!(r.layer, RefusalLayer::CoordinatorLayer);
         assert_eq!(r.code.as_deref(), Some("BUDGET_EXHAUSTED"));

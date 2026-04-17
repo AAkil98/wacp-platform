@@ -228,7 +228,6 @@ describe("UsersPage", () => {
       });
 
       // Fill password but leave username empty
-      const inputs = screen.getAllByRole("textbox");
       const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement;
       fireEvent.change(passwordInput, { target: { value: "strongpass123" } });
 

@@ -34,6 +34,18 @@ pub struct MockRuntime {
     _handles: Vec<JoinHandle<()>>,
 }
 
+/// Bind addresses for each mock service. `None` → OS-assigned ephemeral port
+/// on `[::1]` (the default for in-process integration tests). `Some(addr)` →
+/// bind the exact address (used by the `wacp-mock-runtime` binary so Playwright
+/// can target known ports).
+#[derive(Default, Clone)]
+pub struct MockAddrs {
+    pub agent: Option<SocketAddr>,
+    pub highway: Option<SocketAddr>,
+    pub coordinator: Option<SocketAddr>,
+    pub rest: Option<SocketAddr>,
+}
+
 impl MockRuntime {
     /// Start all four servers on random OS-assigned ports.
     pub async fn start() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -46,10 +58,20 @@ impl MockRuntime {
     pub async fn start_with_highway_config(
         highway_config: Option<Arc<HighwayConfig>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::start_on_addrs(MockAddrs::default(), highway_config).await
+    }
+
+    /// Bind each service to a specific address (or OS-assigned if `None`). The
+    /// random-port default comes from `MockAddrs::default()`; overriding any
+    /// field pins that service to the chosen `SocketAddr`.
+    pub async fn start_on_addrs(
+        addrs: MockAddrs,
+        highway_config: Option<Arc<HighwayConfig>>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut handles = Vec::with_capacity(4);
 
         // --- Agent gRPC ---
-        let agent_listener = TcpListener::bind("[::1]:0").await?;
+        let agent_listener = bind_listener(addrs.agent).await?;
         let agent_addr = agent_listener.local_addr()?;
         let agent_stream = tokio_stream::wrappers::TcpListenerStream::new(agent_listener);
         handles.push(tokio::spawn(async move {
@@ -62,7 +84,7 @@ impl MockRuntime {
         info!(addr = %agent_addr, "mock AgentService started");
 
         // --- Highway gRPC ---
-        let highway_listener = TcpListener::bind("[::1]:0").await?;
+        let highway_listener = bind_listener(addrs.highway).await?;
         let highway_addr = highway_listener.local_addr()?;
         let highway_stream = tokio_stream::wrappers::TcpListenerStream::new(highway_listener);
         let highway_service = match highway_config.clone() {
@@ -79,7 +101,7 @@ impl MockRuntime {
         info!(addr = %highway_addr, "mock HighwayService started");
 
         // --- Coordinator gRPC ---
-        let coord_listener = TcpListener::bind("[::1]:0").await?;
+        let coord_listener = bind_listener(addrs.coordinator).await?;
         let coordinator_addr = coord_listener.local_addr()?;
         let coord_stream = tokio_stream::wrappers::TcpListenerStream::new(coord_listener);
         handles.push(tokio::spawn(async move {
@@ -92,7 +114,7 @@ impl MockRuntime {
         info!(addr = %coordinator_addr, "mock CoordinatorService started");
 
         // --- REST gateway ---
-        let rest_listener = TcpListener::bind("[::1]:0").await?;
+        let rest_listener = bind_listener(addrs.rest).await?;
         let rest_addr = rest_listener.local_addr()?;
         let mut verticals = HashMap::new();
         let simple = fixtures::fixture_simple();
@@ -116,5 +138,14 @@ impl MockRuntime {
             highway_config,
             _handles: handles,
         })
+    }
+}
+
+async fn bind_listener(
+    addr: Option<SocketAddr>,
+) -> Result<TcpListener, Box<dyn std::error::Error + Send + Sync>> {
+    match addr {
+        Some(a) => Ok(TcpListener::bind(a).await?),
+        None => Ok(TcpListener::bind("[::1]:0").await?),
     }
 }

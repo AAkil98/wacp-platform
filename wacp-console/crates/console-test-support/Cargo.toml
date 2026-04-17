@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "wacp-mock-runtime"
+path = "src/bin/wacp_mock_runtime.rs"
+
 [dependencies]
 wacp-proto = { workspace = true }
 console-runtime = { workspace = true }
@@ -15,4 +19,5 @@ tokio-stream = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 wacp-taxonomy = { workspace = true }

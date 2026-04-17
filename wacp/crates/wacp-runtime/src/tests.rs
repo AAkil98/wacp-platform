@@ -586,3 +586,191 @@ async fn runtime_shutdown_aborts_active_workspaces() {
         WorkspaceState::Failed
     );
 }
+
+// ── WA1 — Bind projects WorkspaceConfig ──
+//
+// Exercises the cache-and-project path added in `wacp/impl/wa1-bind-projection.md`.
+// The tests drive `handle_coordinator_request` / `handle_agent_request`
+// directly (rather than via gRPC) so the assertions don't depend on a
+// running Tonic server. The cache is populated only when SubmitGoal /
+// Dispatch flow through the request-handler path; tests that call
+// `rt.coordinator.dispatch()` directly bypass the cache by design and are
+// covered separately by the existing `worker_config` tests.
+
+async fn submit_goal_via_handler(
+    rt: &mut Runtime,
+    description: &str,
+) -> wacp_v1::SubmitGoalResponse {
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_coordinator_request(wacp_transport::CoordinatorRequest::SubmitGoal {
+        request: wacp_v1::SubmitGoalRequest {
+            description: description.into(),
+            context: b"ctx-bytes".to_vec(),
+            client_request_id: "req-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    reply_rx.await.expect("reply").expect("status")
+}
+
+async fn dispatch_via_handler(
+    rt: &mut Runtime,
+    task_id: &str,
+    role: &str,
+) -> wacp_v1::DispatchResponse {
+    // First create the task in the graph via Decompose so Dispatch validates.
+    let (dec_tx, dec_rx) = tokio::sync::oneshot::channel();
+    rt.handle_coordinator_request(wacp_transport::CoordinatorRequest::Decompose {
+        request: wacp_v1::DecomposeRequest {
+            tasks: vec![wacp_v1::TaskDefinition {
+                name: task_id.into(),
+                description: task_id.into(),
+                depends_on: vec![],
+                role: role.into(),
+                directive_payload: b"decomposed-dir".to_vec(),
+                tools: vec![],
+            }],
+            client_request_id: "dec-1".into(),
+        },
+        reply: dec_tx,
+    })
+    .await;
+    let dec = dec_rx.await.expect("dec reply").expect("dec status");
+    let assigned_task_id = dec.task_ids.first().cloned().expect("task id");
+
+    let (d_tx, d_rx) = tokio::sync::oneshot::channel();
+    rt.handle_coordinator_request(wacp_transport::CoordinatorRequest::Dispatch {
+        request: wacp_v1::DispatchRequest {
+            task_id: assigned_task_id,
+            role: role.into(),
+            directive_payload: b"dispatched-dir".to_vec(),
+            tools: vec![],
+            budget: None,
+            client_request_id: "d-1".into(),
+        },
+        reply: d_tx,
+    })
+    .await;
+    d_rx.await.expect("d reply").expect("d status")
+}
+
+async fn bind_via_handler(rt: &mut Runtime, ws_id: &str) -> Result<wacp_v1::BindResponse, String> {
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_agent_request(wacp_transport::AgentRequest::Bind {
+        request: wacp_v1::BindRequest {
+            workspace_id: ws_id.into(),
+            auth_token: "test-token-8chars".into(),
+            client_request_id: "b-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    reply_rx
+        .await
+        .expect("reply")
+        .map_err(|s| s.message().to_string())
+}
+
+#[tokio::test]
+async fn wa1_bind_returns_populated_fields_after_submit_goal() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "stub-e2e goal").await;
+    assert!(!submit.root_workspace_id.is_empty());
+
+    let bind = bind_via_handler(&mut rt, &submit.root_workspace_id)
+        .await
+        .expect("bind ok");
+
+    assert_eq!(bind.workspace_id, submit.root_workspace_id);
+    assert_eq!(bind.role, "worker");
+    let directive = bind.directive.expect("directive present");
+    assert_eq!(directive.to_workspace, submit.root_workspace_id);
+    assert_eq!(directive.r#type, "directive");
+    assert_eq!(directive.payload, b"ctx-bytes".to_vec());
+    // SubmitGoal reuses the request context as the directive payload; it
+    // does NOT populate the context field on WorkspaceConfig.
+    assert_eq!(bind.context, Vec::<u8>::new());
+    assert!(bind.visibility.is_empty());
+    assert!(bind.authority.is_empty());
+    assert!(bind.budget.is_none());
+}
+
+#[tokio::test]
+async fn wa1_bind_returns_populated_fields_after_dispatch() {
+    let mut rt = test_runtime();
+    let dispatched = dispatch_via_handler(&mut rt, "task-d1", "worker").await;
+
+    let bind = bind_via_handler(&mut rt, &dispatched.workspace_id)
+        .await
+        .expect("bind ok");
+
+    assert_eq!(bind.workspace_id, dispatched.workspace_id);
+    assert_eq!(bind.role, "worker");
+    let directive = bind.directive.expect("directive present");
+    assert_eq!(directive.r#type, "directive");
+    assert_eq!(directive.payload, b"dispatched-dir".to_vec());
+}
+
+#[tokio::test]
+async fn wa1_bind_after_terminate_falls_back_empty() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "goal-to-terminate").await;
+
+    // First bind succeeds with populated fields.
+    let bind_before = bind_via_handler(&mut rt, &submit.root_workspace_id)
+        .await
+        .expect("bind before ok");
+    assert_eq!(bind_before.role, "worker");
+
+    // Simulate the coordinator event loop processing a Terminated event:
+    // directly invoke the fan-out path the event loop would run. Use a
+    // minimal archived workspace payload matching the shape the real
+    // workspace actor emits.
+    let archived = wacp_workspace::state::ArchivedWorkspace {
+        id: WorkspaceId::from(submit.root_workspace_id.as_str()),
+        terminal_state: WorkspaceState::Closed,
+        role: "worker".into(),
+        parent: WorkspaceId::from("ws-root"),
+        owner: UserId::from("system"),
+        originator: Originator::System,
+        directive: Envelope {
+            id: EnvelopeId::from("dir-archived"),
+            from_workspace: WorkspaceId::from("ws-root"),
+            to_workspace: WorkspaceId::from(submit.root_workspace_id.as_str()),
+            envelope_type: "directive".into(),
+            payload: vec![],
+            in_reply_to: None,
+            timestamp: 0,
+            priority: EnvelopePriority::Normal,
+            origin: EnvelopeOrigin::Agent,
+            state: EnvelopeState::Created,
+        },
+        context: vec![],
+        checkpoints: vec![],
+        final_usage: Default::default(),
+        visibility: HashSet::new(),
+        authority: HashSet::new(),
+    };
+    rt.fan_out_event(&WorkspaceEvent::Terminated(Box::new(archived)));
+
+    // After Terminated, the cache should be empty — but the tree node is
+    // still present (tree cleanup is driven by `handle_event`, not
+    // `fan_out_event`), so Bind still returns Ok, just with empty fields.
+    let bind_after = bind_via_handler(&mut rt, &submit.root_workspace_id)
+        .await
+        .expect("bind after ok (tree still has node)");
+    assert_eq!(bind_after.role, "");
+    assert!(bind_after.directive.is_none());
+    assert!(bind_after.visibility.is_empty());
+    assert!(bind_after.authority.is_empty());
+}
+
+#[tokio::test]
+async fn wa1_bind_unknown_workspace_returns_not_found() {
+    let mut rt = test_runtime();
+    let err = bind_via_handler(&mut rt, "ws-does-not-exist")
+        .await
+        .expect_err("expected not_found");
+    assert!(err.contains("workspace not found"), "got: {err}");
+}

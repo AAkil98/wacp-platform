@@ -20,6 +20,7 @@ use wacp_transport::rest_gateway::RuntimeHealth;
 use wacp_transport::{GrpcServerConfig, RestGateway, start_grpc_server};
 use wacp_types::*;
 use wacp_workspace::WorkspaceEvent;
+use wacp_workspace::state::WorkspaceConfig;
 
 use crate::config::{PROTOCOL_VERSION, RuntimeConfig};
 
@@ -98,6 +99,13 @@ pub struct Runtime {
 
     // Workspace timestamps: (created_at_us, last_activity_us) in microseconds since epoch.
     workspace_timestamps: HashMap<String, (u64, u64)>,
+
+    // Workspace config cache — populated on SubmitGoal / Dispatch, read by
+    // AgentService::Bind, dropped on WorkspaceEvent::Terminated. Gives the
+    // Bind handler access to the role/directive/context/visibility/authority/
+    // budget set at creation time without having to round-trip through the
+    // workspace actor. See `wacp/impl/wa1-bind-projection.md`.
+    workspace_configs: HashMap<String, WorkspaceConfig>,
 
     // Monotonic counters for ID generation.
     next_goal_id: u64,
@@ -266,6 +274,7 @@ impl Runtime {
             gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
             escalation_index: HashMap::new(),
             workspace_timestamps: HashMap::new(),
+            workspace_configs: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -316,6 +325,7 @@ impl Runtime {
             gate_controller: GateController::new(30_000, GateFallback::AutoApprove),
             escalation_index: HashMap::new(),
             workspace_timestamps: HashMap::new(),
+            workspace_configs: HashMap::new(),
             next_goal_id: 0,
             next_workspace_id: 0,
             next_envelope_id: 0,
@@ -391,7 +401,7 @@ impl Runtime {
 
     /// Fan out a workspace event to all active stream subscribers.
     /// Dead subscribers (disconnected clients) are pruned automatically.
-    fn fan_out_event(&mut self, event: &WorkspaceEvent) {
+    pub(crate) fn fan_out_event(&mut self, event: &WorkspaceEvent) {
         use wacp_transport::wacp_v1;
 
         match event {
@@ -517,6 +527,10 @@ impl Runtime {
                     .to_string()
                     .into_bytes(),
                 );
+
+                // WA1: workspace is done — no more Bind calls should pull
+                // its config. Drop the cached copy so the map stays bounded.
+                self.workspace_configs.remove(archived.id.as_ref());
             }
             WorkspaceEvent::Error {
                 workspace_id,
@@ -656,24 +670,13 @@ impl Runtime {
     /// Push an envelope to any agents subscribed to the target workspace.
     fn notify_envelope_subs(&mut self, to_workspace: &str, envelope: &Envelope) {
         if let Some(subs) = self.envelope_subs.get_mut(to_workspace) {
-            let proto_env = Ok(wacp_transport::wacp_v1::Envelope {
-                id: envelope.id.to_string(),
-                from_workspace: envelope.from_workspace.to_string(),
-                to_workspace: envelope.to_workspace.to_string(),
-                r#type: envelope.envelope_type.clone(),
-                payload: envelope.payload.clone(),
-                in_reply_to: envelope
-                    .in_reply_to
-                    .as_ref()
-                    .map(|e| e.to_string())
-                    .unwrap_or_default(),
-                priority: envelope.priority as i32,
-                timestamp: None,
-                origin: envelope.origin as i32,
-            });
+            let proto_env = Ok(envelope_to_proto(envelope));
             subs.retain(|tx| tx.try_send(proto_env.clone()).is_ok());
         }
     }
+
+    // No per-instance state is needed — these two helpers are plain
+    // projections. Defined as free functions below the impl block.
 
     /// Push a command to any agents subscribed to the target workspace.
     fn notify_command_subs(&mut self, workspace_id: &str, command_type: &str, _payload: Vec<u8>) {
@@ -729,22 +732,32 @@ impl Runtime {
     }
 
     /// Handle an agent gRPC request by forwarding to the coordinator.
-    async fn handle_agent_request(&mut self, req: wacp_transport::AgentRequest) {
+    pub(crate) async fn handle_agent_request(&mut self, req: wacp_transport::AgentRequest) {
         use wacp_transport::AgentRequest;
 
         match req {
             AgentRequest::Bind { request, reply } => {
                 let ws_id = WorkspaceId::from(request.workspace_id.as_str());
                 if let Some(node) = self.coordinator.tree.get(&ws_id) {
+                    // WA1: project the cached WorkspaceConfig's bind-relevant
+                    // fields into the response. If the config isn't cached
+                    // (e.g., a workspace created via a future code path that
+                    // skipped the cache), fall back to empty — matches the
+                    // pre-WA1 behaviour rather than erroring.
+                    let cfg = self.workspace_configs.get(&ws_id.to_string());
                     let response = wacp_transport::wacp_v1::BindResponse {
                         workspace_id: ws_id.to_string(),
                         state: node.status as i32,
-                        role: String::new(),
-                        directive: None,
-                        context: vec![],
-                        visibility: vec![],
-                        authority: vec![],
-                        budget: None,
+                        role: cfg.map(|c| c.role.clone()).unwrap_or_default(),
+                        directive: cfg.map(|c| envelope_to_proto(&c.directive)),
+                        context: cfg.map(|c| c.context.clone()).unwrap_or_default(),
+                        visibility: cfg
+                            .map(|c| c.visibility.iter().cloned().collect())
+                            .unwrap_or_default(),
+                        authority: cfg
+                            .map(|c| c.authority.iter().cloned().collect())
+                            .unwrap_or_default(),
+                        budget: cfg.and_then(|c| c.budget.as_ref().map(budget_to_proto)),
                     };
                     let _ = reply.send(Ok(response));
                 } else {
@@ -1305,7 +1318,10 @@ impl Runtime {
     }
 
     /// Handle a coordinator gRPC/REST request.
-    async fn handle_coordinator_request(&mut self, req: wacp_transport::CoordinatorRequest) {
+    pub(crate) async fn handle_coordinator_request(
+        &mut self,
+        req: wacp_transport::CoordinatorRequest,
+    ) {
         use wacp_fsm::TaskTrigger;
         use wacp_transport::CoordinatorRequest;
         use wacp_workspace::actor::CoordinatorCommand;
@@ -1371,6 +1387,10 @@ impl Runtime {
                     delegate: false,
                     budget: None,
                 };
+                // Cache the config so AgentService::Bind can project its
+                // fields into the BindResponse (WA1).
+                self.workspace_configs
+                    .insert(ws_id.to_string(), ws_config.clone());
                 self.coordinator.dispatch(DispatchRequest {
                     task_id: task_id.clone(),
                     config: ws_config,
@@ -1456,6 +1476,10 @@ impl Runtime {
                     delegate: false,
                     budget: None,
                 };
+                // Cache the config so AgentService::Bind can project its
+                // fields into the BindResponse (WA1).
+                self.workspace_configs
+                    .insert(ws_id.to_string(), ws_config.clone());
                 self.coordinator.dispatch(DispatchRequest {
                     task_id: task_id.clone(),
                     config: ws_config,
@@ -1779,5 +1803,46 @@ impl Runtime {
         // Stable ordering for deterministic registry layout.
         manifests.sort_by(|a, b| a.id.cmp(&b.id));
         Arc::new(manifests)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Free helpers
+// ---------------------------------------------------------------------------
+
+/// Convert an internal `Envelope` to the proto form. Shared by
+/// `notify_envelope_subs` (W3 stream fan-out) and `AgentService::Bind`
+/// (WA1 projection).
+fn envelope_to_proto(envelope: &Envelope) -> wacp_transport::wacp_v1::Envelope {
+    wacp_transport::wacp_v1::Envelope {
+        id: envelope.id.to_string(),
+        from_workspace: envelope.from_workspace.to_string(),
+        to_workspace: envelope.to_workspace.to_string(),
+        r#type: envelope.envelope_type.clone(),
+        payload: envelope.payload.clone(),
+        in_reply_to: envelope
+            .in_reply_to
+            .as_ref()
+            .map(|e| e.to_string())
+            .unwrap_or_default(),
+        priority: envelope.priority as i32,
+        timestamp: None,
+        origin: envelope.origin as i32,
+    }
+}
+
+/// Convert an internal `ResourceBudget` to the proto form. Internal fields
+/// are `Option<u64>` (None = unlimited); proto fields are plain `u64` and
+/// treat 0 as "no limit" (matching how `GetAllocatable` reports
+/// `BudgetConfig` values at the config level). `warning_threshold` carries
+/// through from the internal budget.
+fn budget_to_proto(budget: &ResourceBudget) -> wacp_transport::wacp_v1::ResourceBudget {
+    wacp_transport::wacp_v1::ResourceBudget {
+        max_tokens: budget.max_tokens.unwrap_or(0),
+        max_wall_time_ms: budget.max_wall_time_ms.unwrap_or(0),
+        max_storage_bytes: budget.max_storage_bytes.unwrap_or(0),
+        max_network_bytes: budget.max_network_bytes.unwrap_or(0),
+        max_cost_micros: budget.max_cost_micros.unwrap_or(0),
+        warning_threshold: budget.warning_threshold,
     }
 }

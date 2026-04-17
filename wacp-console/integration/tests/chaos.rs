@@ -21,18 +21,20 @@ use console_integration::{ConsoleHarness, RuntimeHarness};
 
 #[tokio::test]
 async fn t7_4_runtime_kill_emits_control_frame_on_ws() {
-    let mut rt = RuntimeHarness::spawn_default()
-        .await
-        .expect("runtime");
+    let mut rt = RuntimeHarness::spawn_default().await.expect("runtime");
     let console = ConsoleHarness::spawn(&rt).await.expect("console");
 
     // Seed a user + session row + a manually-spawned monitor handle so
     // the WS endpoint accepts the connection. The monitor's stream
     // drivers are already polling the runtime; killing it triggers the
     // reconnect/lag pathway.
-    let client =
-        console_integration::TestClient::seed_user(&console.state, &console.base_url(), "u-1", "operator")
-            .await;
+    let client = console_integration::TestClient::seed_user(
+        &console.state,
+        &console.base_url(),
+        "u-1",
+        "operator",
+    )
+    .await;
     let sid = format!("s-{}", uuid::Uuid::new_v4());
     seed_session(&console.state.db, &sid, "u-1").await;
 
@@ -90,19 +92,16 @@ async fn t7_4_runtime_kill_emits_control_frame_on_ws() {
 }
 
 #[tokio::test]
-#[ignore = "needs LLM stub: T7.5 requires the runtime to start dispatching, fail at step 2, and surface the partial-launch rollback assertion."]
+#[ignore = "needs dispatch-failure injection on top of the stub provider: T7.5 must make the second CoordinatorService::Dispatch call return an error mid-launch so W2 rollback fires. Stub LLM provider (§13.7.6) is landed but the current RuntimeHarness has no mechanism to force a configurable failure. A follow-up harness-side flag or a thin wrapper around CoordinatorService would close this."]
 async fn t7_5_partial_launch_failure_rolls_back() {
-    // When a programmable provider can be told to reject the second
-    // dispatch, this test launches a session, asserts the W2 rollback
-    // sequence ran (no live workspaces remain on the runtime), and
-    // verifies the session row is FAILED.
+    // When dispatch-failure injection lands, this test launches a session,
+    // asserts the W2 rollback sequence ran (no live workspaces remain on
+    // the runtime), and verifies the session row is FAILED.
 }
 
 #[tokio::test]
 async fn t7_6_console_restart_recovery_respawns_monitor() {
-    let rt = RuntimeHarness::spawn_default()
-        .await
-        .expect("runtime");
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
     let db = console_db::create_test_pool().await.expect("db");
 
     // Seed an ACTIVE session with a coordinator workspace id so recovery
@@ -174,12 +173,7 @@ async fn seed_session(db: &console_db::DbPool, sid: &str, owner: &str) {
     seed_session_with_db(db, sid, owner, "ws-root").await;
 }
 
-async fn seed_session_with_db(
-    db: &console_db::DbPool,
-    sid: &str,
-    owner: &str,
-    coord_ws: &str,
-) {
+async fn seed_session_with_db(db: &console_db::DbPool, sid: &str, owner: &str, coord_ws: &str) {
     let row = sessions::SessionRow {
         id: sid.into(),
         name: Some(sid.into()),

@@ -12,18 +12,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use console_core::event_enricher::EnrichedGate;
-use console_core::session_monitor::{
-    Frame, MonitorCmd, PendingState, SessionMonitorHandle,
-};
+use console_core::session_monitor::{Frame, MonitorCmd, PendingState, SessionMonitorHandle};
 use console_db::queries::sessions;
 use console_integration::{ConsoleHarness, RuntimeHarness, TestClient};
 use tokio::sync::{broadcast, mpsc};
 
 #[tokio::test]
 async fn t7_9_pending_gates_filter_by_owner_and_admin_sees_all() {
-    let rt = RuntimeHarness::spawn_default()
-        .await
-        .expect("runtime");
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
     let console = ConsoleHarness::spawn(&rt).await.expect("console");
 
     seed_user(&console.state.db, "u-owner").await;
@@ -41,13 +37,8 @@ async fn t7_9_pending_gates_filter_by_owner_and_admin_sees_all() {
     let _ = (h_owner, h_other);
 
     // u-owner should see only their gate.
-    let owner_client = TestClient::seed_user(
-        &console.state,
-        &console.base_url(),
-        "u-owner",
-        "operator",
-    )
-    .await;
+    let owner_client =
+        TestClient::seed_user(&console.state, &console.base_url(), "u-owner", "operator").await;
     let resp = owner_client.get("/api/gates/pending").await;
     assert!(resp.status().is_success());
     let body: serde_json::Value = resp.json().await.expect("json");
@@ -56,13 +47,8 @@ async fn t7_9_pending_gates_filter_by_owner_and_admin_sees_all() {
     assert_eq!(items[0]["session_id"], sid_owner);
 
     // u-admin should see both.
-    let admin_client = TestClient::seed_user(
-        &console.state,
-        &console.base_url(),
-        "u-admin",
-        "admin",
-    )
-    .await;
+    let admin_client =
+        TestClient::seed_user(&console.state, &console.base_url(), "u-admin", "admin").await;
     let resp = admin_client.get("/api/gates/pending").await;
     let body: serde_json::Value = resp.json().await.expect("json");
     let items = body["items"].as_array().expect("items");
@@ -70,14 +56,14 @@ async fn t7_9_pending_gates_filter_by_owner_and_admin_sees_all() {
 }
 
 #[tokio::test]
-#[ignore = "needs LLM stub: T7.7 needs 10 real sessions running through coordinator dispatches in parallel."]
+#[ignore = "inherits T7.2 / T7.3 blocker (§13.7.6 next steps): needs AgentService::EmitSignal to advance workspace FSM so 10 stub-driven sessions can reach COMPLETED. Stub provider is landed and exercised by llm_stub_e2e.rs; this test un-ignores in the same change that closes T7.3."]
 async fn t7_7_ten_concurrent_sessions_complete() {
     // Future: launch 10 sessions, wait for all to reach COMPLETED, assert
     // no monitor task held >50 MB resident.
 }
 
 #[tokio::test]
-#[ignore = "needs LLM stub: T7.8 needs the runtime to push frames faster than a slow consumer can drain."]
+#[ignore = "inherits T7.2 blocker (§13.7.6 next steps): needs runtime-side gate emission so high-frequency frames can exist in the first place. Stub provider is landed; un-ignores alongside T7.2."]
 async fn t7_8_slow_ws_consumer_does_not_starve_others() {
     // Future: open two WS clients, sleep one for 2 s between reads,
     // assert the other receives all frames + the slow one gets a
@@ -85,7 +71,7 @@ async fn t7_8_slow_ws_consumer_does_not_starve_others() {
 }
 
 #[tokio::test]
-#[ignore = "needs LLM stub: T7.10 needs a live gate event emitted by the runtime so the W4→W6 latency can be measured."]
+#[ignore = "inherits T7.2 blocker (§13.7.6 next steps): needs a live gate event from the coordinator so W4→W6 latency can be measured. Un-ignores in the same change as T7.2."]
 async fn t7_10_w4_resolve_clears_w6_pending_within_500ms() {
     // Future: gate appears via runtime stream (T7.2 prerequisite),
     // POST /api/sessions/:id/gates/:gid → assert /api/gates/pending no

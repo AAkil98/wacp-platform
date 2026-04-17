@@ -28,7 +28,12 @@ impl TestClient {
     /// configured to use the bearer token. `state` is the in-process
     /// console's `AppState` so we can write to the same DB the API
     /// reads from.
-    pub async fn seed_user(state: &Arc<AppState>, base_url: &str, user_id: &str, role: &str) -> Self {
+    pub async fn seed_user(
+        state: &Arc<AppState>,
+        base_url: &str,
+        user_id: &str,
+        role: &str,
+    ) -> Self {
         sqlx::query(
             "INSERT OR IGNORE INTO users (id, username, username_lower, display_name, password_hash,
                 console_role, must_change_password, created_at, updated_at)
@@ -156,4 +161,3 @@ impl WsClient {
         let _ = self.stream.close(None).await;
     }
 }
-

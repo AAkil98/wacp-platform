@@ -31,3 +31,8 @@ futures = { workspace = true }
 
 [dev-dependencies]
 console-test-support = { workspace = true }
+wacp-llm = { workspace = true }
+wacp-sdk = { workspace = true }
+wacp-types = { workspace = true }
+wacp-transport = { workspace = true }
+tonic = { workspace = true }

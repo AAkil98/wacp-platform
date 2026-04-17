@@ -22,6 +22,7 @@ use console_db::queries::sessions;
 use console_integration::{ConsoleHarness, RuntimeHarness, TestClient};
 use wacp_transport::wacp_v1;
 use wacp_transport::wacp_v1::coordinator_service_client::CoordinatorServiceClient;
+use wacp_transport::wacp_v1::highway_service_client::HighwayServiceClient;
 
 #[tokio::test]
 async fn t7_1_runtime_boots_console_attaches_health_reports_ok() {
@@ -67,14 +68,172 @@ async fn t7_1_runtime_boots_console_attaches_health_reports_ok() {
 }
 
 #[tokio::test]
-#[ignore = "needs runtime-side agent→coordinator wiring: AgentService::CreateCheckpoint currently returns OK without emitting a highway gate event. Stub LLM provider is already landed (§13.7.6) and exercised by llm_stub_e2e.rs; this test un-ignores when the coordinator fans provisional checkpoints into gates."]
 async fn t7_2_open_ws_drive_gate_observe_resume() {
-    // When the runtime's AgentService is wired to the highway, this test
-    // launches a session, spawns a StubAgent per dispatched workspace,
-    // opens the WS, observes the gate frame, approves via W4's
-    // /api/sessions/:id/gates/:gid endpoint, then asserts the runtime
-    // emits a workspace-resume trail entry within 2 s on the WS.
-    let _ = (Duration::from_secs(2),);
+    // §13.7.6b WA3.5 un-ignore. Drives a workspace through:
+    //   Idle → Active → (provisional checkpoint blocks) → Blocked
+    //   → (RespondToGate Approve) → Active.
+    // Asserts:
+    // 1. The session monitor emits a `gates` channel frame for the
+    //    checkpoint approval gate within 2 s of CreateCheckpoint.
+    // 2. RespondToGate(Approve) → the monitor's WorkspaceChanges driver
+    //    sees the Blocked → Active resume within 2 s.
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
+    let console = ConsoleHarness::spawn(&rt).await.expect("console");
+
+    let mut coord = coord_client(&rt).await;
+    let submit = coord
+        .submit_goal(wacp_v1::SubmitGoalRequest {
+            description: "t7.2 goal".into(),
+            context: vec![],
+            client_request_id: String::new(),
+        })
+        .await
+        .expect("submit_goal")
+        .into_inner();
+    let ws_id = submit.root_workspace_id;
+
+    let client = TestClient::seed_user(
+        &console.state,
+        &console.base_url(),
+        "u-1",
+        "operator",
+    )
+    .await;
+    let sid = format!("s-{}", uuid::Uuid::new_v4());
+    seed_active_session(&console.state.db, &sid, "u-1", &ws_id).await;
+
+    let (handle, _join) = session_monitor::spawn(
+        sid.clone(),
+        WorkspaceSet::new(ws_id.clone(), Vec::<String>::new()),
+        console.state.grpc_pool.clone(),
+        console.state.db.clone(),
+        EventEnricher::new(console.state.taxonomy.clone()),
+        RefusalSynthesizer::new(),
+        MonitorConfig {
+            broadcast_capacity: 64,
+            reconnect_initial: Duration::from_millis(50),
+            reconnect_max: Duration::from_millis(200),
+            reconnect_failure_cap: 30,
+        },
+    );
+    let broadcast_tx = handle.broadcast_tx.clone();
+    console
+        .state
+        .active_sessions
+        .write()
+        .await
+        .insert(sid.clone(), handle);
+
+    let mut rx = broadcast_tx.subscribe();
+    tokio::time::sleep(Duration::from_millis(200)).await; // monitor connect
+
+    coord
+        .send_directive(wacp_v1::SendDirectiveRequest {
+            workspace_id: ws_id.clone(),
+            payload: b"activate".to_vec(),
+            client_request_id: String::new(),
+        })
+        .await
+        .expect("send_directive");
+
+    let agent = wacp_sdk::Agent::connect(wacp_sdk::AgentConfig {
+        runtime_url: format!("http://{}", rt.agent_addr()),
+        workspace_id: wacp_types::WorkspaceId::from(ws_id.as_str()),
+        auth_token: "t7-2-agent-token".into(),
+    })
+    .await
+    .expect("agent connect");
+
+    // Provisional checkpoint → WA3.5 opens a gate + actor blocks.
+    agent
+        .checkpoint()
+        .checkpoint_type("task_approval")
+        .payload(b"propose")
+        .status(wacp_types::CheckpointStatus::Provisional)
+        .create()
+        .await
+        .expect("create_checkpoint");
+
+    // Wait for the gate frame on the broadcast.
+    let gate_id = wait_for_gate_frame(&mut rx, Duration::from_secs(2))
+        .await
+        .expect("gate frame within 2 s");
+
+    // Approve via HighwayService::RespondToGate. WA3.5 routes the
+    // approval to the workspace actor → Blocked → Active.
+    let mut highway = HighwayServiceClient::connect(format!("http://{}", rt.highway_addr()))
+        .await
+        .expect("highway connect");
+    let ack = highway
+        .respond_to_gate(wacp_v1::GateResponse {
+            gate_id: gate_id.clone(),
+            decision: wacp_v1::GateDecision::Approve as i32,
+            modifications: Vec::new(),
+            client_request_id: String::new(),
+        })
+        .await
+        .expect("respond_to_gate")
+        .into_inner();
+    assert!(ack.applied, "gate response must be applied");
+
+    // Wait for the workspace_change frame showing the resume (current=active).
+    let saw_resume = wait_for_resume_frame(&mut rx, &ws_id, Duration::from_secs(2)).await;
+    assert!(
+        saw_resume,
+        "workspace must emit Blocked→Active workspace_change within 2 s"
+    );
+
+    agent.disconnect().await.ok();
+    drop(client);
+    drop(console);
+    drop(rt);
+}
+
+async fn wait_for_gate_frame(
+    rx: &mut tokio::sync::broadcast::Receiver<console_core::session_monitor::Frame>,
+    timeout: Duration,
+) -> Option<String> {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok(frame)) => {
+                let json = serde_json::to_value(&frame).unwrap_or_default();
+                if json.get("channel").and_then(|c| c.as_str()) == Some("gates")
+                    && let Some(id) = json["event"]["gate_id"].as_str()
+                {
+                    return Some(id.to_string());
+                }
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+async fn wait_for_resume_frame(
+    rx: &mut tokio::sync::broadcast::Receiver<console_core::session_monitor::Frame>,
+    ws_id: &str,
+    timeout: Duration,
+) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok(frame)) => {
+                let json = serde_json::to_value(&frame).unwrap_or_default();
+                if json.get("channel").and_then(|c| c.as_str()) == Some("workspaces")
+                    && json["event"]["workspace_id"].as_str() == Some(ws_id)
+                    && json["event"]["current"] == "active"
+                    && json["event"]["previous"] == "blocked"
+                {
+                    return true;
+                }
+            }
+            _ => return false,
+        }
+    }
+    false
 }
 
 #[tokio::test]

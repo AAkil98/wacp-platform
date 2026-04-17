@@ -19,7 +19,7 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 
 ## Current State (Post M0–M7 merge + W1–W7 wiring + post-audit workstream)
 
-**Branch:** `dev` @ `efaa6d3`, 9 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits), then §13.7.6b WA1/WA2/WA3 + strategy-doc + seed refresh + WA3.5/WA3.6 + WA5 + T7.3 (with WorkspaceState fix) + un-ignore sweep landed on dev. **§13.7.6b is fully closed.** Working tree dirty pending one final docs commit. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`) plus the new `coverage` workflow.
+**Branch:** `dev`, 11 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits); since then dev has accumulated §13.7.6b WA1/WA2/WA3 + strategy-doc + seed refresh + WA3.5/WA3.6 + WA5 + T7.3 (with WorkspaceState fix) + un-ignore sweep + closure docs + §13.7.9 mutation-testing pipeline. **§13.7.6b is fully closed; §13.7.9 wired pending first scheduled run.** Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`) plus the new `coverage` workflow.
 
 **Since the 2026-04-15 audit (from `a6773d6`)**, these have landed in order — all 25 through `743c9bd` now on `main`; the last 4 (WA1–WA3 + strategy update) still on `dev`:
 
@@ -65,6 +65,8 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 | `dec6385` | feat(console-integration): §13.7.6b WA5 — dispatch-failure proxy + T7.5 un-ignore | §13.7.6b / WA5 |
 | `8ce249a` | feat(console-integration+wacp-runtime): §13.7.6b T7.3 un-ignore + fix WorkspaceState enum-offset | §13.7.6b / T7.3 |
 | `efaa6d3` | test(console-integration): §13.7.6b un-ignore sweep — T7.2 + T7.7 + T7.8 + T7.10 | §13.7.6b / un-ignore |
+| `ebd9eff` | docs: close §13.7.6b — refresh AUDIT/SEED/wiring-strategy-b/perf-opt | §13.7.6b / docs |
+| (this commit) | ci(mutation): §13.7.9 — wire ci-mutation.yml + score/summary scripts + spec | §13.7.9 |
 
 What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy) is in CI; runtime auth is constant-time via SHA-256 digest rekey; the full coverage-tooling stack (cargo-llvm-cov, Vitest v8, coverage.py, Codecov with per-component flags) is wired; Rust branch-coverage tests landed for T1–T11 (~11,900 lines; T11 `console-db` brought that crate from 55.6 % → 98.3 % region coverage via a new `src/testing.rs` fault-injection harness and 83 tests); frontend RTL tests landed for F1–F10 save F9 which was already green (~5,200 + ~2,100 additional lines for F7/F8/F10); a per-file isolated vitest runner plus a 1536 MB V8 heap cap keeps the now-much-larger frontend suite from crashing WSL; and `wacp-console/performance-optimization.md` aggregates the frontend-side `useEffect`-dep + spec-vs-impl drifts (§2.5) and the backend-side schema-vs-struct drifts (§9) that each session surfaces.
 
@@ -82,7 +84,7 @@ What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy)
 
 **Working end-to-end against a live runtime:** discovery (roles, tools, verticals, types, search), profile CRUD with validation/versioning/export/import/clone, multi-user auth (Argon2id, CSRF double-submit, rate limiting, 256-bit bootstrap credential at 0o600), session launch + oversight (trail stream, gate queue, escalation inbox, refusal panel, workspace tree, injection bar across 7 WebSocket channels), startup recovery, cross-session pending aggregation.
 
-**Not yet present (tracked, not regressions):** Playwright E2E suite (Phase 7.6–7.10, audit §13.7.7), the five new Rust integration + chaos suites I1–I5 (§13.7.8; I6 landed via §13.7.6), mutation-testing workflow (§13.7.9), and Codecov monthly ratchet (§13.7.10, deferred until the new baseline settles). All broken out with deliverables in `AUDIT-2026-04-15.md` §13.7. Supply-chain scanning, the F-series frontend sweep, the Rust branch-coverage sweep (T1–T11), the deterministic LLM stub provider + I6 integration test, and §13.7.6b in its entirety (WA1/WA2/WA3/WA3.5/WA3.6/WA5 + T7.3 + un-ignore sweep + WorkspaceState enum-offset fix) are all landed.
+**Not yet present (tracked, not regressions):** Playwright E2E suite (Phase 7.6–7.10, audit §13.7.7), the five new Rust integration + chaos suites I1–I5 (§13.7.8; I6 landed via §13.7.6), and Codecov monthly ratchet (§13.7.10, deferred until the new baseline settles). All broken out with deliverables in `AUDIT-2026-04-15.md` §13.7. Supply-chain scanning, the F-series frontend sweep, the Rust branch-coverage sweep (T1–T11), the deterministic LLM stub provider + I6 integration test, §13.7.6b in its entirety (WA1/WA2/WA3/WA3.5/WA3.6/WA5 + T7.3 + un-ignore sweep + WorkspaceState enum-offset fix), and the §13.7.9 mutation-testing pipeline (workflow + scripts + spec; awaiting first scheduled run for the acceptance signal) are all landed.
 
 ### Milestone history
 
@@ -202,23 +204,23 @@ One outstanding known issue from that work — `ProfilesPage.actions.test.tsx` O
 
 ### Resumption Point
 
-**M0–M7 merger, W1–W7 wiring, runtime implementation audit, §11 pre-release punch list (1–5), §12.1 tooling, §12.2 T1–T11, §12.3 F1–F10, audit §13.7.1–§13.7.5, §13.7.6 (stub provider + I6), and §13.7.6b in full (WA1/WA2/WA3/WA3.5/WA3.6/WA5 + T7.3 with WorkspaceState fix + un-ignore sweep) all complete.** Test totals after this session: `wacp-coordinator` 387 (+9), `wacp-workspace` 65 (+5), `wacp-runtime` 109 (+6), `wacp-types` 45 (unchanged), `console-integration` 12 passing + **0 ignored** (was 6 + 6); `console-integration --test llm_stub_e2e`: 2/2 green; workspace clippy + fmt clean across modified crates.
+**M0–M7 merger, W1–W7 wiring, runtime implementation audit, §11 pre-release punch list (1–5), §12.1 tooling, §12.2 T1–T11, §12.3 F1–F10, audit §13.7.1–§13.7.5, §13.7.6 (stub provider + I6), §13.7.6b in full, and §13.7.9 (mutation-testing pipeline)** all complete. Test totals: `wacp-coordinator` 387, `wacp-workspace` 65, `wacp-runtime` 109, `wacp-types` 45, `console-integration` 12 passing + 0 ignored. Workspace clippy + fmt clean.
 
-**§13.7.6b — fully closed.** No remaining sub-phases.
+**§13.7.6b + §13.7.9 — fully closed/wired.** §13.7.9 acceptance signal lands when the first Monday-04:00-UTC scheduled mutation run produces per-module scores.
 
 When resuming:
-1. Read `AUDIT-2026-04-15.md` §13 (~10 min) — §13.8 tracking table + the "13.7.6b — Status snapshot (closed 2026-04-17)" sub-table are the fastest index.
-2. Read `impl/wiring-strategy-b.md` (~5 min) — §3.3.5/§3.3.6/§3.5 all marked LANDED with effort actuals. The doc has been mothballed; future work tracks under §13.7.7+.
-3. Read `wacp-console/performance-optimization.md` (~5 min) — §11 covers the WA3.5/WA3.6/WA5 backend drifts: enum-offset gotcha (§11.1 GateType + §11.4 WorkspaceState), cross-crate exhaustive-match propagation (§11.2), async cascade (§11.3), un-ignore-sweep patterns (§11.5: RSS-from-test is unreliable; loopback TCP buffer absorbs broadcast lag — push frames directly to `broadcast_tx`).
-4. `cd /home/aakil98/mada/wacp-platform`. Recommended next ordering (with §13.7.6b out of the way):
-   - **§13.7.9 (mutation testing)** — 2 h setup + ongoing triage. Highest-signal independent work; the new T1–T11 + WA3.5/WA3.6/WA5 + un-ignore-sweep tests give cargo-mutants substantial scope.
-   - **§13.7.7 (Playwright E2E tooling + first two scenarios)** — 4–6 h, `golden-path.spec.ts` + `multi-user.spec.ts`. Now fully unblocked (no §13.7.6b dependency).
+1. Read `AUDIT-2026-04-15.md` §13 (~10 min) — §13.8 tracking table is the fastest index. §13.7.6b status snapshot has all the post-WA1 history; §13.7.9 row notes the wiring + first-run-pending acceptance.
+2. Read `wacp-console/specs/coding/wcon-mutation-testing.md` (~5 min) — covers the workflow design, threshold semantics, triage loop, and the `// mutants:skip` annotation contract. Owners triaging the Monday run start here.
+3. Read `wacp-console/performance-optimization.md` (~5 min) — §11.4 P0 audit pass on remaining Rust-enum-as-i32 sites is still open and high-ROI (~30–60 min).
+4. `cd /home/aakil98/mada/wacp-platform`. Recommended next ordering:
+   - **§13.7.7 (Playwright E2E tooling + first two scenarios)** — 4–6 h, `golden-path.spec.ts` + `multi-user.spec.ts`. Fully unblocked.
    - **§13.7.8 (Rust integration I1–I5)** — 4–6 h. I6 already landed via §13.7.6. Adds launch-failure matrix, recovery matrix, auth matrix, ws_chaos expansion, taxonomy_reload.
-   - **§13.7.10 (Codecov monthly ratchet)** — deferred until 2–3 `main` merges land §13.7.6b so the new baseline settles.
-   - **In parallel** (cleanup, low-priority): the SignalType + EnvelopeState + other Rust-enum-as-i32 audit flagged in `wacp-console/performance-optimization.md` §11.4 — ~30–60 min for a comprehensive pass.
-5. The dev→main batched merge ran 2026-04-17 morning (21 commits fast-forwarded up through `743c9bd`). Current dev lead = 9 commits (WA1/WA2/WA3 + strategy + seed refresh + WA3.5/WA3.6 + WA5 + T7.3 + un-ignore sweep + this docs commit). Strong candidate for the next merge.
+   - **In parallel** (cleanup, low-priority): the SignalType + EnvelopeState + other Rust-enum-as-i32 audit flagged in `performance-optimization.md` §11.4.
+   - **§13.7.10 (Codecov monthly ratchet)** — still deferred until 2–3 `main` merges land §13.7.6b so the new baseline settles.
+   - **§13.7.9 first-run triage** — Monday after this lands. Surviving mutants → killer tests; equivalent mutants → `// mutants:skip` with justification.
+5. The dev→main batched merge ran 2026-04-17 morning (21 commits fast-forwarded up through `743c9bd`). Current dev lead = 11 commits. Strong candidate for the next merge.
 6. Each §13.7 package's "Acceptance criterion" is what closes it. Update the §13 status tables as items land.
-7. Tag `wacp-runtime-v0.1.0` and `wacp-console-v0.1.0` independently once the Rust branch-coverage floor clears 85 % and the Playwright golden-path + auth scenarios (§13.7.7 minimum) are green.
+7. Tag `wacp-runtime-v0.1.0` and `wacp-console-v0.1.0` independently once the Rust branch-coverage floor clears 85 %, the first §13.7.9 mutation run hits ≥85 % per module, and the Playwright golden-path + auth scenarios (§13.7.7 minimum) are green.
 
 ### Hollow Code Inventory — closed
 
@@ -336,4 +338,4 @@ wacp-platform/
 | 11 | `wcon-test` | Test Strategy |
 | 12 | `wcon-auth` | Authentication & Authorization |
 
-*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6. Refreshed 2026-04-16 with post-audit progress and §13.7 task packages; refreshed again same-day by Claude Opus 4.7 (1M context) after §13.7.1–§13.7.5 landed on `dev`; refreshed 2026-04-17 after §13.7.6 (stub provider + I6) landed and §13.7.6b (runtime wiring follow-up) was carved out; refreshed again same-day after dev→main fast-forward and §13.7.6b WA1/WA2/WA3 landed, with WA3.5 + WA3.6 carved out as the remaining gate-fan and auto-integration pieces; refreshed 2026-04-17 (third pass) after §13.7.6b WA3.5 (checkpoint-approval gates) + WA3.6 (auto-integration on Complete) landed in the working tree, WA5 deferred (~3–4 h harness-side proxy), and the un-ignore sweep deferred (~10–20 h Console-level integration tests on top of WA3.5/WA3.6 primitives); refreshed 2026-04-17 (fourth pass) after §13.7.6b was fully closed — WA5 landed, T7.3 landed alongside a WorkspaceState enum-offset fix surfaced by the integration sweep, and the un-ignore sweep landed for T7.2/T7.7/T7.8/T7.10. console-integration walks away with zero `#[ignore]`d tests.*
+*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6. Refreshed 2026-04-16 with post-audit progress and §13.7 task packages; refreshed again same-day by Claude Opus 4.7 (1M context) after §13.7.1–§13.7.5 landed on `dev`; refreshed 2026-04-17 after §13.7.6 (stub provider + I6) landed and §13.7.6b (runtime wiring follow-up) was carved out; refreshed again same-day after dev→main fast-forward and §13.7.6b WA1/WA2/WA3 landed, with WA3.5 + WA3.6 carved out as the remaining gate-fan and auto-integration pieces; refreshed 2026-04-17 (third pass) after §13.7.6b WA3.5 (checkpoint-approval gates) + WA3.6 (auto-integration on Complete) landed in the working tree, WA5 deferred (~3–4 h harness-side proxy), and the un-ignore sweep deferred (~10–20 h Console-level integration tests on top of WA3.5/WA3.6 primitives); refreshed 2026-04-17 (fourth pass) after §13.7.6b was fully closed — WA5 landed, T7.3 landed alongside a WorkspaceState enum-offset fix surfaced by the integration sweep, and the un-ignore sweep landed for T7.2/T7.7/T7.8/T7.10; refreshed 2026-04-17 (fifth pass) after §13.7.9 mutation-testing pipeline wired — `ci-mutation.yml` weekly Monday cron + workflow_dispatch, four jobs targeting wacp-transport auth / wacp-tools execution / console-core launcher + monitor, ≥85 % per-module threshold, aggregator job posts a Markdown summary. Awaiting first scheduled run for the acceptance signal.*

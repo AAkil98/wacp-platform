@@ -1,0 +1,177 @@
+name: CI — mutation testing
+
+# Weekly mutation testing across critical modules. Triggered Mondays at
+# 04:00 UTC + manual dispatch. Surfaces mutation scores per target +
+# the surviving-mutants list. ≥85 % per module is the pass bar; below
+# threshold the per-target job fails but the workflow continues so the
+# aggregator can publish a summary.
+#
+# Spec: wacp-console/specs/coding/wcon-mutation-testing.md
+# Audit: AUDIT-2026-04-15.md §12.6 + §13.7.9
+#
+# Does NOT block PRs — the pipeline runs on its own cadence and surfaces
+# regressions for triage.
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  mutate-wacp-transport-auth:
+    name: Mutants — wacp-transport (auth)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants-wacp-transport
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Run mutants
+        run: |
+          cargo mutants -p wacp-transport \
+            --file src/auth_api_key.rs \
+            --file src/auth_session.rs \
+            --file src/auth_oauth.rs \
+            --file src/auth.rs \
+            --no-shuffle
+        continue-on-error: true
+
+      - name: Compute score (≥85 % required)
+        run: python3 scripts/mutation-score.py --target wacp-transport-auth --threshold 85 mutants.out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-wacp-transport-auth
+          path: mutants.out/
+
+  mutate-wacp-tools:
+    name: Mutants — wacp-tools (execution)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants-wacp-tools
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Run mutants
+        run: |
+          cargo mutants -p wacp-tools \
+            --file src/execution.rs \
+            --no-shuffle
+        continue-on-error: true
+      - name: Compute score (≥85 % required)
+        run: python3 scripts/mutation-score.py --target wacp-tools-execution --threshold 85 mutants.out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-wacp-tools-execution
+          path: mutants.out/
+
+  mutate-console-launcher:
+    name: Mutants — console-core (session_launcher)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants-console-launcher
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Run mutants
+        run: |
+          cargo mutants -p console-core \
+            --file src/session_launcher.rs \
+            --no-shuffle
+        continue-on-error: true
+      - name: Compute score (≥85 % required)
+        run: python3 scripts/mutation-score.py --target console-core-session_launcher --threshold 85 mutants.out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-console-core-session_launcher
+          path: mutants.out/
+
+  mutate-console-monitor:
+    name: Mutants — console-core (session_monitor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants-console-monitor
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Run mutants
+        run: |
+          cargo mutants -p console-core \
+            --file src/session_monitor.rs \
+            --no-shuffle
+        continue-on-error: true
+      - name: Compute score (≥85 % required)
+        run: python3 scripts/mutation-score.py --target console-core-session_monitor --threshold 85 mutants.out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-console-core-session_monitor
+          path: mutants.out/
+
+  mutation-summary:
+    name: Mutation summary
+    runs-on: ubuntu-latest
+    needs:
+      - mutate-wacp-transport-auth
+      - mutate-wacp-tools
+      - mutate-console-launcher
+      - mutate-console-monitor
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: mutants/
+      - name: Build aggregated summary
+        run: python3 scripts/mutation-summary.py mutants/ >> "$GITHUB_STEP_SUMMARY"

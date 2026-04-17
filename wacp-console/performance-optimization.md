@@ -216,6 +216,40 @@ I'd lean toward (1) — the caller is currently doing `unwrap_or(0) + 1` anyway,
 - **sqlx migration cost.** Each `create_test_pool()` call re-runs all 9 migrations against a fresh in-memory DB (~3 ms per test). Not worth amortizing today at current test counts, but if the suite grows past ~500 tests, a `lazy_static!` migrated template + `ATTACH DATABASE` clone pattern would cut the setup cost. Note for future.
 - **`FaultyDb::hold_write_lock` — detach-before-begin.** First cut of the harness returned the `PoolConnection` from the companion pool holding a `BEGIN IMMEDIATE`; when dropped, the connection went back to the pool *with the transaction still open*, so the next test's writes against the main pool saw a phantom reserved lock. Fix was to `.detach()` the connection so Drop closes the underlying SQLite handle (which releases the lock at the OS level). Captured in `testing.rs` doc comment. This is the backend mirror of the §3.3 `useEffect`-with-unstable-deps trap: a cleanup that looks correct at the type level but leaks state because the runtime's cleanup contract is weaker than the type implies.
 
+## 10. wacp-llm stub provider — observations from §13.7.6
+
+Writing the deterministic `StubAdapter` (`wacp/crates/wacp-llm/src/providers/stub.rs`, audit §13.7.6) surfaced a cluster of small allocation + sharing decisions that are low-impact today but would bite if the stub became a hot-path consumer (e.g., if the runtime adopts it for a mock-mode by default, or if an integration suite drives hundreds of agents against it in a tight loop).
+
+### 10.1 Per-call full-input serialization
+
+`serialize_for_match(messages, tools)` is called **twice** per `complete()` invocation today — once inside `resolve_response()` to find a fixture match, and again inside `complete()` / `complete_stream()` to compute `input_tokens` (`serialized.len() / 4`). Each call walks every message, allocates a new `String`, and writes role / content / block-variant formatting into it. For a typical coordinator turn (1–5 messages, ~500 chars) this is cheap (~μs), but for long conversations with tool-result blocks the cost scales with message history.
+
+**Fix when it matters.** Lift serialization to the caller; pass the serialized form plus its length into `resolve_response()`. One allocation per call instead of two. The current two-call shape was chosen for readability; revisit if `complete()` latency shows up in the integration-suite `tokio-console` trace.
+
+### 10.2 Streaming events materialized eagerly
+
+`StubAdapter::complete_stream` builds the entire `Vec<StreamEvent>` (one per character + tool calls + Usage + Done) **before** returning the `StreamHandle`. For a fixture with 10-char content and 2 tool calls the vec has ~15 events; for a fixture simulating a 1000-token response it would be ~1000+ events allocated up-front. Memory cost is bounded by the fixture size (not user-driven input), so it's a compile-time decision rather than a runtime unknown, but the pattern diverges from the real Anthropic / OpenAI providers which stream from SSE as bytes arrive.
+
+**Fix when it matters.** Replace `futures::stream::iter(events).then(delay)` with an `async_stream::stream! { … }` that yields events lazily. Keeps the same public shape, but peak memory tracks the widest fixture entry's content instead of its full event list. Noted — not prioritized. The unit test `stream_emits_content_then_usage_then_done` would need a small adjustment (the test currently collects all events at once, which still works).
+
+### 10.3 `StubFixtures` sharing — Arc is the right call
+
+`StubAdapter` holds `Arc<StubFixtures>` and derives `Clone`. Multiple adapters (e.g., one per workspace in an integration test that spawns many agents) share the parsed fixture set at no memory cost beyond the original YAML-parse allocation. The factory `build_adapter()` constructs one `Arc` per call — if a future runtime consumer calls this per-request (instead of once at boot), the YAML would be re-parsed each time. Recommendation when wiring from `wacp-runtime`: construct once at runtime startup and reuse the returned `Arc<dyn LlmAdapter>` across workspaces.
+
+### 10.4 Hash matcher laziness
+
+`StubMatcher::matches()` computes the SHA-256 only inside the `Hash` arm; `Prefix` and `Contains` skip the digest entirely. First-match-wins ordering means a fixture file that lists a `Prefix` match first avoids the hash cost for requests that take the prefix branch. Authoring guidance for the baseline fixture (`stub_responses.yaml`): put cheap matchers first and reserve `Hash` for the scenarios that genuinely need message-exact dispatch.
+
+### 10.5 Integration-test stability signal
+
+The §13.7.6 I6 test `i6_stub_adapter_drives_agent_round_trip` spawns a real `wacp-runtime` child, connects `wacp-sdk::Agent` + `CoordinatorService` gRPC, runs two `complete()` turns, exercises `complete_stream()`, and tears down — finishing in **0.28 s** on the dev box with RSS staying under 50 MB for the test process (runtime child is separate). This is the low-water-mark to beat if the stub provider grows — any future change that pushes either walltime > 2 s or RSS > 100 MB is a signal to profile before shipping.
+
+### 10.6 Watch-list additions
+
+Append to §6:
+- **`cargo test -p wacp-llm` walltime > 2 s.** Current baseline: **0.07 s for 169 lib tests + 0.01 s for 83 branch-coverage tests**. Any jump into multi-second territory is a signal that a new provider or a heavy fixture has changed the parse/construction cost — almost always recoverable by moving work out of `#[test]` setup into module-scope `lazy_static` / `LazyLock`.
+- **`cargo test -p console-integration --test llm_stub_e2e` walltime > 2 s.** Current baseline: **0.28 s for 2 scenarios**. Beyond 2 s points at a slower runtime-harness spawn (runtime binary bloat, slow `/healthz` handshake) rather than the stub itself — bisect by timing `RuntimeHarness::spawn_default().await` separately.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

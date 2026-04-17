@@ -151,6 +151,8 @@ pub async fn assert_ws_frame_within<F>(ws: &mut WebSocket, timeout: Duration, pr
 - **T7.2** Open WS, receive welcome, then trail entries for each task. Drive a gate (approve via REST), observe workspace resume on trail within 2 s.
 - **T7.3** Session reaches COMPLETED (via scripted coordinator fixture) — WS emits final frame, session DB row shows `state='completed'`, monitor removed from `active_sessions`.
 
+> **Deviation — T7.2 / T7.3 currently `#[ignore]`-ed.** The deterministic `wacp-llm` stub provider landed in audit §13.7.6 (see `wcon-llm-stub`) and is exercised end-to-end by `integration/tests/llm_stub_e2e.rs`. The remaining gap is runtime-side: `AgentService::Bind` does not return a real directive, `EmitSignal` does not advance the workspace FSM, and `CreateCheckpoint` does not fan into highway gates. Until those handlers are wired, T7.2 / T7.3 assert outcomes the runtime cannot produce. Each test carries an `#[ignore]` reason pointing at the specific missing wiring.
+
 ### 5.2 Failure / chaos
 
 - **T7.4** Kill runtime mid-session → WS `MonitorError { transient: true }` → restart runtime → `Lag` frame → resumption.

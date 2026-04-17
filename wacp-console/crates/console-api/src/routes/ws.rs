@@ -94,6 +94,10 @@ async fn handle_ws(
             // Client frames: ping/pong, close, text (ignored).
             maybe = socket.recv() => match maybe {
                 Some(Ok(Message::Text(_))) => {},
+                // clippy's collapsible_match fix (match guard) doesn't
+                // apply — Bytes isn't Copy, so data can't be moved inside
+                // a pattern guard (E0507). Nested if is the clearest form.
+                #[allow(clippy::collapsible_match)]
                 Some(Ok(Message::Ping(data))) => {
                     if socket.send(Message::Pong(data)).await.is_err() {
                         break;

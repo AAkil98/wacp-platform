@@ -308,6 +308,42 @@ T7.7 (10 concurrent sessions) and T7.8 (slow WS consumer) surfaced two patterns 
 - `cargo test -p console-integration` (full suite, post un-ignore sweep): 12 active, 0 ignored; ≈ 2.2 s wallclock for the lifecycle + chaos + cross_session + llm_stub_e2e suites combined.
 - No new RSS or wall-time regressions. The auto-integration cache (`HashMap<String, Checkpoint>`) is one entry per active workspace at most — bounded by tree size, not by request rate.
 
+## 12. §13.7.7 D1 — Playwright E2E surfaces the first backend drifts
+
+Same forcing-function pattern as §9 (`console-db`), §10 (`wacp-llm` stub), and §11 (WA3.5 / WA3.6): writing the new test layer turns up latent production gaps. §13.7.7 D1 (`03d0411`) wired the Playwright harness — two `webServer` entries (the new `wacp-mock-runtime` bin + the console binary served with `--frontend-path dist`) plus a smoke spec — and in the course of that wiring two real drifts showed up, plus a chunk of CI-pipeline debt large enough to warrant its own doc. None are §13.7.7 deliverables; all are logged here and/or at `impl/ci-health-2026-04-17.md`, then folded into AUDIT §13.5 at the §13.7.7 D5 closure.
+
+### 12.1 Console binary skips the bootstrap flow
+
+`console-core::bootstrap` implements `bootstrap_if_needed` + `write_bootstrap_token` per `wcon-auth` §6, with passing unit tests. But `console/src/main.rs::Commands::Serve` never calls them — the serve path runs migrations → taxonomy → gRPC pool → startup recovery → AppState → HTTP, skipping the bootstrap check. A fresh console binary launched against an empty DB therefore has no admin user, no bootstrap-token file, and no way to log in. `wcon-vision` BC6 ("no default credentials — bootstrap generates a one-time credential") is silently violated at the binary boundary; only the library-level tests covered it.
+
+The integration console harness (`integration/src/console_harness.rs`) also skips the call, but that's defensible — integration tests seed users directly via `console-db::queries::users` fixtures. The fix is runtime-side: call `bootstrap_if_needed` after `run_migrations(&pool).await?` in `Commands::Serve` and on a `Bootstrapped { password, .. }` result, call `write_bootstrap_token` + log the resulting path at info level.
+
+Mirror of §2.5 and §9.1: feature is specified and implemented in the library, absent at the composition point. Will land as a prerequisite of §13.7.7 D2 (auth-flows needs a known admin credential). Not folded into D1 to keep D1's commit scoped to tooling.
+
+### 12.2 Mock runtime `/v1/verticals` response shape ≠ console's REST-client expectation
+
+Observed as a warn-level log during D1 smoke-test boot:
+
+```
+WARN wacp_console: failed to load taxonomy from runtime — starting with empty index
+  error=failed to parse vertical list: error decoding response body
+```
+
+The mock REST router (`console-test-support/src/mock_rest.rs::list_verticals`) serializes a `Vec<VerticalListItem>` with `{id, name, defining_constraint}` — a three-field summary. The console's `build_taxonomy` caller expects the full `VerticalManifest` per entry (context_schema, tool_policies, checkpoint_types, quality_criteria, task_types, workflows) so it can build an in-memory `TaxonomyIndex`. The console falls back to an empty index and keeps running, so D1's smoke test is unaffected, but D2's discovery / launch flows cannot exercise any vertical-aware behaviour against the mock without a fix.
+
+Two resolutions (same shape as §9.1 — pick one, don't leave both):
+
+1. **Extend the mock** to return full `VerticalManifest`s on the list endpoint. Five lines in `list_verticals`; probably the right call because the mock is allowed to lead on wire protocol for test purposes, and the manifest types already exist in `wacp-taxonomy`.
+2. **Change the console's REST client** to hydrate summaries by calling `GET /v1/verticals/{id}` per list entry. Matches what the real runtime probably does on tenant boundaries and amortizes better at scale — but it's a bigger refactor for D2 scope.
+
+Before D2 lands, confirm whether the real runtime's `GET /v1/verticals` returns full manifests or summaries; that decides whether option (1) is faithful to production behaviour or a convenience fib. The inconsistency between mock-list-summary and console-expects-manifest is the actual bug regardless of which side gets reshaped.
+
+### 12.3 Test-tooling / CI-pipeline debt — filed separately
+
+Not a perf-opt signal; doesn't belong here. D1 surfaced three orthogonal CI failures (mold linker missing on runner image, `pnpm lint` failing pre-typecheck, 55 pre-existing `tsc` errors in test files blocking `pnpm build`) plus pre-existing `cargo fmt` drift. All five CI workflows on `main` have been red since 2026-04-15 — contradicts SEED's "CI green" line. Details, evidence (workflow run IDs), root-cause analysis, and recommended fix order at `impl/ci-health-2026-04-17.md`.
+
+Short version for readers who stop here: **§13.7.7 D3 (Playwright CI stage) is blocked** on at least the linker fix + the `tsc`/test-file split before the stage can turn green. Those fixes are scope-outside §13.7.7 — they'll land in a dedicated cleanup commit before D3, not folded into D3.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

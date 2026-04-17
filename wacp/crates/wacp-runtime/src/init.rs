@@ -92,7 +92,7 @@ pub struct Runtime {
     trail_index: TrailIndex,
 
     // Gate controller for pending task approval gates.
-    gate_controller: GateController,
+    pub(crate) gate_controller: GateController,
 
     // Escalation ID -> workspace ID mapping for routing responses.
     escalation_index: HashMap<String, String>,
@@ -351,7 +351,7 @@ impl Runtime {
                         WorkspaceEvent::Terminated(archived) => self.touch_workspace(archived.id.as_ref()),
                         _ => {}
                     }
-                    self.coordinator.handle_event(&event);
+                    self.coordinator.handle_event(&event).await;
                     self.fan_out_event(&event);
                 }
 
@@ -722,7 +722,7 @@ impl Runtime {
             tokio::time::timeout(std::time::Duration::from_millis(500), self.event_rx.recv()).await
         {
             if let Some(e) = event {
-                self.coordinator.handle_event(&e);
+                self.coordinator.handle_event(&e).await;
             } else {
                 break;
             }
@@ -972,6 +972,43 @@ impl Runtime {
                     }
                 }
 
+                // WA3.5: provisional checkpoints open a highway gate so an
+                // operator can approve or reject before the workspace
+                // continues. The actor-side Active→Blocked transition
+                // already fires from within handle_create_checkpoint above;
+                // here we emit the GateEvent that the Console's
+                // StreamGates driver consumes, and enqueue a
+                // PendingCheckpointGate so RespondToGate can route the
+                // eventual decision back to the actor. See
+                // `wacp/impl/wa3-5-checkpoint-gates.md`.
+                if request.status == wacp_transport::wacp_v1::CheckpointStatus::Provisional as i32
+                    && self.coordinator.tree.get(&ws_id).is_some()
+                {
+                    let gate_event = self.gate_controller.open_checkpoint_gate(
+                        ws_id.clone(),
+                        CheckpointId::from(checkpoint_id.as_str()),
+                        request.r#type.clone(),
+                        None,
+                        None,
+                    );
+                    let proto_ev = Ok(wacp_transport::wacp_v1::GateEvent {
+                        gate_id: gate_event.gate_id.to_string(),
+                        r#type: gate_type_to_proto(gate_event.gate_type) as i32,
+                        subject: gate_event.subject.clone(),
+                        workspace_id: gate_event.workspace_id.to_string(),
+                        task_id: gate_event
+                            .task_id
+                            .as_ref()
+                            .map(|t| t.to_string())
+                            .unwrap_or_default(),
+                        timeout_ms: gate_event.timeout_ms,
+                        fallback_action: gate_event.fallback_action.clone(),
+                        created_at: None,
+                    });
+                    self.gate_subs
+                        .retain(|tx| tx.try_send(proto_ev.clone()).is_ok());
+                }
+
                 let response = wacp_transport::wacp_v1::CreateCheckpointResponse {
                     checkpoint_id,
                     content_hash: hash_hex,
@@ -1035,7 +1072,7 @@ impl Runtime {
     }
 
     /// Handle a highway gRPC request.
-    async fn handle_highway_request(&mut self, req: wacp_transport::HighwayRequest) {
+    pub(crate) async fn handle_highway_request(&mut self, req: wacp_transport::HighwayRequest) {
         use wacp_transport::HighwayRequest;
 
         match req {
@@ -1180,6 +1217,8 @@ impl Runtime {
                 }
             }
             HighwayRequest::RespondToGate { request, reply } => {
+                use wacp_workspace::actor::CoordinatorCommand;
+
                 let gate_id = GateId::from(request.gate_id.as_str());
                 let decision = match request.decision {
                     1 => GateDecision::Approve,
@@ -1187,6 +1226,37 @@ impl Runtime {
                     3 => GateDecision::Modify,
                     _ => GateDecision::Approve,
                 };
+
+                // WA3.5: checkpoint gates first. If the gate_id matches a
+                // pending checkpoint gate, detach it and route the decision
+                // to the bound workspace actor via CheckpointApproved /
+                // CheckpointRejected commands. The actor's FSM drives
+                // Blocked→Active on approve and Blocked→Failed on reject.
+                if let Some(cp_gate) = self.gate_controller.resolve_checkpoint(&gate_id) {
+                    let cmd = match decision {
+                        GateDecision::Approve | GateDecision::Modify => {
+                            CoordinatorCommand::CheckpointApproved {
+                                checkpoint_id: cp_gate.checkpoint_id.to_string(),
+                            }
+                        }
+                        GateDecision::Reject => CoordinatorCommand::CheckpointRejected {
+                            checkpoint_id: cp_gate.checkpoint_id.to_string(),
+                        },
+                    };
+                    let applied =
+                        if let Some(handle) = self.coordinator.handle(&cp_gate.workspace_id) {
+                            handle.coordinator_tx.send(cmd).await.is_ok()
+                        } else {
+                            false
+                        };
+                    let response = wacp_transport::wacp_v1::GateResponseAck {
+                        gate_id: request.gate_id,
+                        applied,
+                        client_request_id: request.client_request_id,
+                    };
+                    let _ = reply.send(Ok(response));
+                    return;
+                }
 
                 let applied = self.gate_controller.resolve(&gate_id, decision).is_some();
 
@@ -1971,6 +2041,24 @@ fn proto_to_signal_type(t: wacp_transport::wacp_v1::SignalType) -> SignalType {
         P::Escalation => SignalType::Escalation,
         P::Suspend => SignalType::Suspend,
         P::Migrate => SignalType::Migrate,
+    }
+}
+
+/// Map the internal `GateType` enum onto its proto counterpart. Internal
+/// variants start at 0 (TaskApproval), proto variants at 1 (after the
+/// Unspecified marker), so `enum as i32` is off by one and produces wrong
+/// wire values. WA3.5 is the first production path to emit gate events
+/// downstream, so this helper lands alongside the new variant.
+fn gate_type_to_proto(gt: GateType) -> wacp_transport::wacp_v1::GateType {
+    use wacp_transport::wacp_v1::GateType as P;
+    match gt {
+        GateType::TaskApproval => P::TaskApproval,
+        GateType::WorkspaceCreate => P::WorkspaceCreate,
+        GateType::EnvelopeDelivery => P::EnvelopeDelivery,
+        GateType::Integration => P::Integration,
+        GateType::ConflictResolution => P::ConflictResolution,
+        GateType::WorkspaceAbort => P::WorkspaceAbort,
+        GateType::CheckpointApproval => P::CheckpointApproval,
     }
 }
 

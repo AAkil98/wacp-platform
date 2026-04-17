@@ -139,6 +139,7 @@ fn gate_type_string(t: proto::GateType) -> String {
         proto::GateType::Integration => "integration",
         proto::GateType::ConflictResolution => "conflict_resolution",
         proto::GateType::WorkspaceAbort => "workspace_abort",
+        proto::GateType::CheckpointApproval => "checkpoint_approval",
     }
     .to_string()
 }

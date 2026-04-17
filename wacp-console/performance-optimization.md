@@ -250,6 +250,42 @@ Append to §6:
 - **`cargo test -p wacp-llm` walltime > 2 s.** Current baseline: **0.07 s for 169 lib tests + 0.01 s for 83 branch-coverage tests**. Any jump into multi-second territory is a signal that a new provider or a heavy fixture has changed the parse/construction cost — almost always recoverable by moving work out of `#[test]` setup into module-scope `lazy_static` / `LazyLock`.
 - **`cargo test -p console-integration --test llm_stub_e2e` walltime > 2 s.** Current baseline: **0.28 s for 2 scenarios**. Beyond 2 s points at a slower runtime-harness spawn (runtime binary bloat, slow `/healthz` handshake) rather than the stub itself — bisect by timing `RuntimeHarness::spawn_default().await` separately.
 
+## 11. WA3.5 / WA3.6 wiring — backend drifts surfaced
+
+The §13.7.6b WA3.5 (checkpoint-approval gates) + WA3.6 (auto-integration) work surfaced two backend-side drifts that share a structural shape with the frontend `useEffect`-deps trap (§3.3) and the spec-vs-impl drift (§2.5): both are *latent* — the production code compiles and runs, but the first time a new code path actually exercises the surface, it fails. Tests that drove the new path (rather than re-using existing patterns) caught both.
+
+### 11.1 Rust ↔ proto enum offset
+
+`GateType` in `wacp-types/src/enums.rs` has 7 variants starting at discriminant 0 (`TaskApproval = 0` … `CheckpointApproval = 6`). The proto-generated `wacp_v1::GateType` has 8 variants starting at 1 (`Unspecified = 0`, `TaskApproval = 1` … `CheckpointApproval = 7`). Casting `internal_gate_type as i32` and assigning it to a proto `r#type: i32` field produces a *one-off* wire value: a `TaskApproval` from Rust serializes as `Unspecified` over the wire.
+
+This was masked for the entire project lifetime because no production code path actually emitted a `GateEvent` to the highway stream — `GateController::open_gate` was only used in tests. WA3.5's first-ever production emission tripped it on the very first integration test (`wa3_5_provisional_checkpoint_emits_gate` failed with `left: 6, right: 7`).
+
+**Fix landed.** New `gate_type_to_proto(GateType) -> wacp_v1::GateType` helper in `wacp/crates/wacp-runtime/src/init.rs`. The same shape exists for **every** internal-Rust ↔ proto enum pair where Rust starts at 0 and proto starts at 1 (most of them — see `primitives.proto` `*_UNSPECIFIED = 0` for the pattern). Future emit paths should use a similar helper rather than `as i32`.
+
+**Recommendation (P1).** Audit the other internal-enum-to-proto-int casts in the runtime. Candidates: `SignalType` (already has `proto_to_signal_type` for the reverse direction; the forward direction `signal_type as i32` is used in `fan_out_event` at `init.rs:411` and works only because both enums happen to align after `Unspecified` was prepended on the proto side — `SignalType::Ready = 0` Rust + `SIGNAL_TYPE_UNSPECIFIED = 0` proto means Ready → Unspecified on the wire, which is *also wrong* but currently undetected because no consumer asserts on the discriminant). `WorkspaceState` (similar shape — `init.rs:474` casts `*to as i32`). `TaskStatus` (`init.rs:1086+` already uses an explicit match table — the right pattern). One-pass audit + a tiny clippy-style helper would prevent the next instance.
+
+### 11.2 Cross-crate exhaustive matches on shared enums
+
+Adding `GateType::CheckpointApproval` broke the build of `console-core::event_enricher::gate_type_string` because that function pattern-matches exhaustively on `proto::GateType`. The Rust compiler caught it at compile time — good — but only when console-core was built (cargo built wacp-types first, succeeded, then propagated the new enum down to console-core).
+
+**The structural shape:** the proto types are shared between runtime and console via `wacp-transport::wacp_v1`. Any exhaustive match on a proto enum in the consumer code becomes a forced update site whenever the producer adds a variant. The `_ =>` wildcard avoids the build-break but at the cost of silently-wrong stringification (the new variant would render as e.g. `"unspecified"`).
+
+**Recommendation.** Keep the exhaustive matches — they're the correct pattern. The build-break is the *desired* signal. But document the propagation expectation: "`event_enricher::gate_type_string` is intentionally exhaustive; if a new `GateType` variant lands in `wacp-types`, this match must extend in the same PR." A short comment above the match achieves this. Considered: a workspace-wide check that all `proto::*` enum matches are exhaustive — too invasive for the gain. The compiler does the right thing already.
+
+### 11.3 Async cascade from `Coordinator::handle_event`
+
+WA3.6 made `Coordinator::handle_event` async because the auto-integration path needs to `.await` an mpsc send to the workspace handle's coordinator_tx. This rippled to 6 call sites (2 in init.rs, 4 in tests). Each was a one-line `.await` addition — but the cascade is the kind of thing that's easy to miss when the change is described as "coordinator-only, no runtime changes" (the runtime *does* change, just minimally — every caller needs the `.await`).
+
+**No fix needed**, but worth noting for future spec authoring: **"async means async cascading"**. Any spec that says "make method X async" should explicitly enumerate all call sites or include a grep command in the spec itself. The wiring-strategy-b §3.3.6 should be updated to mention this; WA3.6's coding spec at `wacp/impl/wa3-6-auto-integration.md` lists all six call sites in its §3 to make this concrete for any future similar change.
+
+### 11.4 Performance signals (none new)
+
+- `cargo test -p wacp-coordinator`: 0.82 s for 387 tests (was 0.82 s for 378 — the 9 WA3.5/WA3.6 tests added ~zero runtime cost).
+- `cargo test -p wacp-workspace`: 0.30 s for 65 tests (was 0.30 s for 60).
+- `cargo test -p wacp-runtime`: 0.83 s for 109 tests (was 0.83 s for 103).
+- `cargo test -p console-integration --test llm_stub_e2e`: 0.21 s for 2 scenarios (unchanged from baseline).
+- No new RSS or wall-time regressions. The auto-integration cache (`HashMap<String, Checkpoint>`) is one entry per active workspace at most — bounded by tree size, not by request rate.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

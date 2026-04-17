@@ -1695,6 +1695,346 @@ fn default_timeout_applied() {
 }
 
 // ══════════════════════════════════════════
+// WA3.6 — Auto-integration on Complete
+// ══════════════════════════════════════════
+
+fn make_test_checkpoint(ws_id: &str, cp_id: &str) -> Checkpoint {
+    Checkpoint {
+        id: CheckpointId::from(cp_id),
+        workspace_id: WorkspaceId::from(ws_id),
+        checkpoint_type: "artifact".into(),
+        payload: vec![],
+        content_hash: "hash".into(),
+        intent: "intent".into(),
+        parent_checkpoint: None,
+        status: CheckpointStatus::Final,
+        confidence: Confidence::High,
+        timestamp: 0,
+        resource_usage: None,
+    }
+}
+
+fn make_dispatch_request(ws_id: &str, task_id: &str) -> crate::orchestrator::DispatchRequest {
+    use std::collections::HashSet;
+    use wacp_workspace::WorkspaceConfig;
+    crate::orchestrator::DispatchRequest {
+        task_id: TaskId::from(task_id),
+        config: WorkspaceConfig {
+            id: WorkspaceId::from(ws_id),
+            role: "worker".into(),
+            base_role: BaseRole::Worker,
+            parent: WorkspaceId::from("root"),
+            owner: UserId::from("user-1"),
+            originator: Originator::System,
+            directive: Envelope {
+                id: EnvelopeId::from("dir"),
+                from_workspace: WorkspaceId::from("root"),
+                to_workspace: WorkspaceId::from(ws_id),
+                envelope_type: "directive".into(),
+                payload: vec![],
+                in_reply_to: None,
+                timestamp: 0,
+                priority: EnvelopePriority::Normal,
+                origin: EnvelopeOrigin::Agent,
+                state: EnvelopeState::Created,
+            },
+            context: vec![],
+            visibility: HashSet::new(),
+            authority: HashSet::new(),
+            delegate: false,
+            budget: None,
+        },
+    }
+}
+
+#[tokio::test]
+async fn wa3_6_caches_checkpoint_from_event() {
+    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(64);
+    let mut coord =
+        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let cp = make_test_checkpoint("ws-a", "cp-1");
+    coord
+        .handle_event(&wacp_workspace::WorkspaceEvent::CheckpointCreated(cp.clone()))
+        .await;
+    let cached = coord.last_checkpoint.get("ws-a").expect("cached");
+    assert_eq!(cached.id, CheckpointId::from("cp-1"));
+}
+
+#[tokio::test]
+async fn wa3_6_terminate_clears_checkpoint_cache() {
+    let (event_tx, _event_rx) = tokio::sync::mpsc::channel(64);
+    let mut coord =
+        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    let cp = make_test_checkpoint("ws-a", "cp-1");
+    coord
+        .handle_event(&wacp_workspace::WorkspaceEvent::CheckpointCreated(cp))
+        .await;
+    assert!(coord.last_checkpoint.contains_key("ws-a"));
+
+    let archived = wacp_workspace::state::ArchivedWorkspace {
+        id: WorkspaceId::from("ws-a"),
+        terminal_state: wacp_types::WorkspaceState::Closed,
+        role: "worker".into(),
+        parent: WorkspaceId::from("root"),
+        owner: UserId::from("u"),
+        originator: Originator::System,
+        directive: Envelope {
+            id: EnvelopeId::from("dir"),
+            from_workspace: WorkspaceId::from("root"),
+            to_workspace: WorkspaceId::from("ws-a"),
+            envelope_type: "directive".into(),
+            payload: vec![],
+            in_reply_to: None,
+            timestamp: 0,
+            priority: EnvelopePriority::Normal,
+            origin: EnvelopeOrigin::Agent,
+            state: EnvelopeState::Created,
+        },
+        context: vec![],
+        checkpoints: vec![],
+        final_usage: Default::default(),
+        visibility: Default::default(),
+        authority: Default::default(),
+    };
+    coord
+        .handle_event(&wacp_workspace::WorkspaceEvent::Terminated(Box::new(
+            archived,
+        )))
+        .await;
+    assert!(!coord.last_checkpoint.contains_key("ws-a"));
+}
+
+#[tokio::test]
+async fn wa3_6_complete_signal_drives_workspace_to_closed_no_checkpoint() {
+    use wacp_workspace::AgentMessage;
+    use wacp_workspace::actor::CoordinatorCommand;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
+    let mut coord =
+        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    coord.dispatch(make_dispatch_request("ws-a", "t-1"));
+
+    // Activate via first envelope, drain the Idle→Active StateChanged.
+    {
+        let handle = coord.handle(&WorkspaceId::from("ws-a")).expect("handle");
+        handle
+            .coordinator_tx
+            .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+                "env-1", "root", "ws-a",
+            )))
+            .await
+            .expect("deliver");
+    }
+    let _ = drain_events(&mut coord, &mut event_rx, 2).await;
+
+    // Agent emits Complete → Active→Integrating. The drain loop runs each
+    // event through handle_event, which (for the Integrating event) calls
+    // auto_integrate → IntegrationSucceeded → actor transitions to Closed.
+    {
+        let handle = coord.handle(&WorkspaceId::from("ws-a")).expect("handle");
+        handle
+            .agent_tx
+            .send(AgentMessage::EmitSignal {
+                signal_type: SignalType::Complete,
+                reason: None,
+                context: None,
+            })
+            .await
+            .expect("complete signal");
+    }
+    let events = drain_events(&mut coord, &mut event_rx, 8).await;
+
+    let saw_integrating = events.iter().any(|e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == wacp_types::WorkspaceState::Integrating
+        )
+    });
+    let saw_closed = events.iter().any(|e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == wacp_types::WorkspaceState::Closed
+        )
+    });
+    assert!(saw_integrating, "must reach Integrating");
+    assert!(
+        saw_closed,
+        "auto-integration must drive Integrating→Closed even without a cached checkpoint"
+    );
+}
+
+#[tokio::test]
+async fn wa3_6_complete_signal_with_checkpoint_drives_to_closed() {
+    use wacp_workspace::AgentMessage;
+    use wacp_workspace::actor::CoordinatorCommand;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(64);
+    let mut coord =
+        crate::orchestrator::Coordinator::new(WorkspaceId::from("root"), UserId::from("u"), event_tx);
+    coord.dispatch(make_dispatch_request("ws-a", "t-1"));
+
+    {
+        let handle = coord.handle(&WorkspaceId::from("ws-a")).expect("handle");
+        handle
+            .coordinator_tx
+            .send(CoordinatorCommand::DeliverEnvelope(e2e_envelope(
+                "env-1", "root", "ws-a",
+            )))
+            .await
+            .expect("deliver");
+    }
+    let _ = drain_events(&mut coord, &mut event_rx, 2).await;
+
+    // Agent creates a final checkpoint, then completes. drain_events caches
+    // the checkpoint via the CheckpointCreated event then drives auto-
+    // integration on the Integrating event.
+    {
+        let handle = coord.handle(&WorkspaceId::from("ws-a")).expect("handle");
+        handle
+            .agent_tx
+            .send(AgentMessage::CreateCheckpoint {
+                checkpoint_type: "artifact".into(),
+                payload: b"final".to_vec(),
+                content_hash: "hash".into(),
+                intent: "done".into(),
+                status: CheckpointStatus::Final,
+                confidence: Confidence::High,
+                resource_usage: None,
+            })
+            .await
+            .expect("checkpoint");
+    }
+    let _ = drain_events(&mut coord, &mut event_rx, 3).await;
+    assert!(
+        coord.last_checkpoint.contains_key("ws-a"),
+        "checkpoint must be cached"
+    );
+
+    {
+        let handle = coord.handle(&WorkspaceId::from("ws-a")).expect("handle");
+        handle
+            .agent_tx
+            .send(AgentMessage::EmitSignal {
+                signal_type: SignalType::Complete,
+                reason: None,
+                context: None,
+            })
+            .await
+            .expect("complete");
+    }
+    let events = drain_events(&mut coord, &mut event_rx, 8).await;
+
+    let saw_closed = events.iter().any(|e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == wacp_types::WorkspaceState::Closed
+        )
+    });
+    assert!(saw_closed, "Integrating→Closed must fire");
+}
+
+// ══════════════════════════════════════════
+// WA3.5 — Checkpoint-approval gates
+// ══════════════════════════════════════════
+
+#[test]
+fn wa3_5_open_checkpoint_gate_creates_pending() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_checkpoint_gate(
+        ws("ws-a"),
+        CheckpointId::from("cp-42"),
+        "task_approval".into(),
+        None,
+        None,
+    );
+    assert!(ctrl.is_checkpoint_pending(&event.gate_id));
+    assert_eq!(ctrl.pending_checkpoint_count(), 1);
+    // Task map is untouched.
+    assert_eq!(ctrl.pending_count(), 0);
+}
+
+#[test]
+fn wa3_5_open_checkpoint_gate_returns_event() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_checkpoint_gate(
+        ws("ws-a"),
+        CheckpointId::from("cp-42"),
+        "task_approval".into(),
+        None,
+        None,
+    );
+    assert_eq!(event.gate_type, GateType::CheckpointApproval);
+    assert_eq!(event.task_id, None);
+    assert_eq!(event.workspace_id, ws("ws-a"));
+    // subject carries the checkpoint_id bytes for stable dedup keying.
+    assert_eq!(event.subject, b"cp-42".to_vec());
+}
+
+#[test]
+fn wa3_5_resolve_checkpoint_removes_pending() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_checkpoint_gate(
+        ws("ws-a"),
+        CheckpointId::from("cp-42"),
+        "task_approval".into(),
+        None,
+        None,
+    );
+    let cp_gate = ctrl
+        .resolve_checkpoint(&event.gate_id)
+        .expect("resolve returns context");
+    assert_eq!(cp_gate.workspace_id, ws("ws-a"));
+    assert_eq!(cp_gate.checkpoint_id, CheckpointId::from("cp-42"));
+    assert_eq!(cp_gate.checkpoint_type, "task_approval");
+    assert_eq!(ctrl.pending_checkpoint_count(), 0);
+    assert!(!ctrl.is_checkpoint_pending(&event.gate_id));
+}
+
+#[test]
+fn wa3_5_resolve_checkpoint_already_resolved_returns_none() {
+    let mut ctrl = make_gate_ctrl();
+    let event = ctrl.open_checkpoint_gate(
+        ws("ws-a"),
+        CheckpointId::from("cp-42"),
+        "task_approval".into(),
+        None,
+        None,
+    );
+    ctrl.resolve_checkpoint(&event.gate_id);
+    assert!(ctrl.resolve_checkpoint(&event.gate_id).is_none());
+}
+
+#[test]
+fn wa3_5_resolve_task_and_checkpoint_maps_are_isolated() {
+    let mut ctrl = make_gate_ctrl();
+    let task_ev = ctrl.open_gate(tid("t1"), "task1".into(), "desc", None, None);
+    let cp_ev = ctrl.open_checkpoint_gate(
+        ws("ws-a"),
+        CheckpointId::from("cp-1"),
+        "task_approval".into(),
+        None,
+        None,
+    );
+    // resolve_checkpoint only matches checkpoint gates.
+    assert!(ctrl.resolve_checkpoint(&task_ev.gate_id).is_none());
+    // resolve only matches task gates.
+    assert_eq!(ctrl.resolve(&cp_ev.gate_id, GateDecision::Approve), None);
+    // Both are still pending.
+    assert!(ctrl.is_pending(&task_ev.gate_id));
+    assert!(ctrl.is_checkpoint_pending(&cp_ev.gate_id));
+    // Task-gate path still works end-to-end.
+    assert_eq!(
+        ctrl.resolve(&task_ev.gate_id, GateDecision::Approve),
+        Some(GateResolution::Approved {
+            source: "human".into()
+        })
+    );
+    // Checkpoint-gate path still works end-to-end.
+    assert!(ctrl.resolve_checkpoint(&cp_ev.gate_id).is_some());
+}
+
+// ══════════════════════════════════════════
 // Task 10.3 — Dispatch + Resource Allocation
 // ══════════════════════════════════════════
 
@@ -3900,7 +4240,7 @@ async fn drain_events(
     for _ in 0..max {
         match tokio::time::timeout(Duration::from_millis(200), event_rx.recv()).await {
             Ok(Some(event)) => {
-                coordinator.handle_event(&event);
+                coordinator.handle_event(&event).await;
                 events.push(event);
             }
             _ => break,
@@ -5385,11 +5725,16 @@ fn ws_fsm_idle_to_active_via_tree() {
     .unwrap();
 
     // Simulate FSM transition through coordinator's tree.
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::ReceiveFirstEnvelope)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Idle,
+        &WorkspaceTrigger::ReceiveFirstEnvelope,
+    )
+    .unwrap();
     tree.update_status(&ws("child"), new_state);
-    assert_eq!(tree.get(&ws("child")).unwrap().status, WorkspaceState::Active);
+    assert_eq!(
+        tree.get(&ws("child")).unwrap().status,
+        WorkspaceState::Active
+    );
 }
 
 #[test]
@@ -5404,8 +5749,7 @@ fn ws_fsm_idle_to_failed_creation_error() {
 fn ws_fsm_idle_to_failed_timeout() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::TimeoutExceeded)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::TimeoutExceeded).unwrap();
     assert_eq!(new_state, WorkspaceState::Failed);
 }
 
@@ -5422,8 +5766,7 @@ fn ws_fsm_idle_to_failed_abort() {
 fn ws_fsm_idle_to_failed_budget() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::BudgetExceeded)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::BudgetExceeded).unwrap();
     assert_eq!(new_state, WorkspaceState::Failed);
 }
 
@@ -5431,26 +5774,29 @@ fn ws_fsm_idle_to_failed_budget() {
 fn ws_fsm_active_to_blocked() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked).unwrap();
     assert_eq!(new_state, WorkspaceState::Blocked);
 }
 
 #[test]
 fn ws_fsm_active_to_migrating() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorMigrate)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Active,
+        &WorkspaceTrigger::CoordinatorMigrate,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Migrating);
 }
 
 #[test]
 fn ws_fsm_active_to_suspended() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorSuspend)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Active,
+        &WorkspaceTrigger::CoordinatorSuspend,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Suspended);
 }
 
@@ -5458,8 +5804,7 @@ fn ws_fsm_active_to_suspended() {
 fn ws_fsm_active_to_integrating() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentComplete)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentComplete).unwrap();
     assert_eq!(new_state, WorkspaceState::Integrating);
 }
 
@@ -5502,26 +5847,29 @@ fn ws_fsm_active_to_failed_budget() {
 fn ws_fsm_blocked_to_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::AgentStarted)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::AgentStarted).unwrap();
     assert_eq!(new_state, WorkspaceState::Active);
 }
 
 #[test]
 fn ws_fsm_blocked_to_migrating() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::CoordinatorMigrate)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Blocked,
+        &WorkspaceTrigger::CoordinatorMigrate,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Migrating);
 }
 
 #[test]
 fn ws_fsm_blocked_to_suspended() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Blocked, &WorkspaceTrigger::CoordinatorSuspend)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Blocked,
+        &WorkspaceTrigger::CoordinatorSuspend,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Suspended);
 }
 
@@ -5555,9 +5903,11 @@ fn ws_fsm_blocked_to_failed_budget() {
 #[test]
 fn ws_fsm_migrating_to_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::MigrationSucceeded)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Migrating,
+        &WorkspaceTrigger::MigrationSucceeded,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Active);
 }
 
@@ -5575,36 +5925,44 @@ fn ws_fsm_migrating_to_blocked() {
 #[test]
 fn ws_fsm_migrating_to_failed_migration() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::MigrationFailed)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Migrating,
+        &WorkspaceTrigger::MigrationFailed,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Failed);
 }
 
 #[test]
 fn ws_fsm_migrating_to_failed_abort() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Migrating, &WorkspaceTrigger::CoordinatorAbort)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Migrating,
+        &WorkspaceTrigger::CoordinatorAbort,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Failed);
 }
 
 #[test]
 fn ws_fsm_suspended_to_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Suspended, &WorkspaceTrigger::CoordinatorResume)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Suspended,
+        &WorkspaceTrigger::CoordinatorResume,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Active);
 }
 
 #[test]
 fn ws_fsm_suspended_to_failed() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let new_state =
-        WorkspaceFsm::transition(WorkspaceState::Suspended, &WorkspaceTrigger::CoordinatorAbort)
-            .unwrap();
+    let new_state = WorkspaceFsm::transition(
+        WorkspaceState::Suspended,
+        &WorkspaceTrigger::CoordinatorAbort,
+    )
+    .unwrap();
     assert_eq!(new_state, WorkspaceState::Failed);
 }
 
@@ -5976,9 +6334,11 @@ fn ws_fsm_failed_rejects_all_triggers() {
 fn ws_fsm_double_transition_idle_to_active_then_active_again_rejected() {
     use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
     // Idle → Active is valid.
-    let state =
-        WorkspaceFsm::transition(WorkspaceState::Idle, &WorkspaceTrigger::ReceiveFirstEnvelope)
-            .unwrap();
+    let state = WorkspaceFsm::transition(
+        WorkspaceState::Idle,
+        &WorkspaceTrigger::ReceiveFirstEnvelope,
+    )
+    .unwrap();
     assert_eq!(state, WorkspaceState::Active);
 
     // Active → Active via ReceiveFirstEnvelope is illegal (not a valid trigger from Active).
@@ -5992,8 +6352,7 @@ fn ws_fsm_double_transition_idle_to_active_then_active_again_rejected() {
 fn ws_fsm_double_transition_active_to_blocked_then_blocked_again_rejected() {
     use wacp_fsm::{StateMachine, TransitionError, WorkspaceFsm, WorkspaceTrigger};
     let state =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked).unwrap();
     assert_eq!(state, WorkspaceState::Blocked);
 
     // Blocked + AgentBlocked is illegal.
@@ -6007,34 +6366,35 @@ fn ws_fsm_double_transition_active_to_blocked_then_blocked_again_rejected() {
 fn ws_fsm_round_trip_active_blocked_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let blocked =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked)
-            .unwrap();
+        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::AgentBlocked).unwrap();
     assert_eq!(blocked, WorkspaceState::Blocked);
 
-    let active =
-        WorkspaceFsm::transition(blocked, &WorkspaceTrigger::AgentStarted).unwrap();
+    let active = WorkspaceFsm::transition(blocked, &WorkspaceTrigger::AgentStarted).unwrap();
     assert_eq!(active, WorkspaceState::Active);
 }
 
 #[test]
 fn ws_fsm_round_trip_active_suspended_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let suspended =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorSuspend)
-            .unwrap();
+    let suspended = WorkspaceFsm::transition(
+        WorkspaceState::Active,
+        &WorkspaceTrigger::CoordinatorSuspend,
+    )
+    .unwrap();
     assert_eq!(suspended, WorkspaceState::Suspended);
 
-    let active =
-        WorkspaceFsm::transition(suspended, &WorkspaceTrigger::CoordinatorResume).unwrap();
+    let active = WorkspaceFsm::transition(suspended, &WorkspaceTrigger::CoordinatorResume).unwrap();
     assert_eq!(active, WorkspaceState::Active);
 }
 
 #[test]
 fn ws_fsm_round_trip_active_migrating_active() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
-    let migrating =
-        WorkspaceFsm::transition(WorkspaceState::Active, &WorkspaceTrigger::CoordinatorMigrate)
-            .unwrap();
+    let migrating = WorkspaceFsm::transition(
+        WorkspaceState::Active,
+        &WorkspaceTrigger::CoordinatorMigrate,
+    )
+    .unwrap();
     assert_eq!(migrating, WorkspaceState::Migrating);
 
     let active =
@@ -6048,15 +6408,13 @@ fn ws_fsm_round_trip_active_migrating_active() {
 fn ws_fsm_full_happy_path_idle_to_closed() {
     use wacp_fsm::{StateMachine, WorkspaceFsm, WorkspaceTrigger};
     let mut state = WorkspaceState::Idle;
-    state =
-        WorkspaceFsm::transition(state, &WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::ReceiveFirstEnvelope).unwrap();
     assert_eq!(state, WorkspaceState::Active);
 
     state = WorkspaceFsm::transition(state, &WorkspaceTrigger::AgentComplete).unwrap();
     assert_eq!(state, WorkspaceState::Integrating);
 
-    state =
-        WorkspaceFsm::transition(state, &WorkspaceTrigger::IntegrationSucceeded).unwrap();
+    state = WorkspaceFsm::transition(state, &WorkspaceTrigger::IntegrationSucceeded).unwrap();
     assert_eq!(state, WorkspaceState::Closed);
     assert!(state.is_terminal());
 }
@@ -6090,10 +6448,26 @@ fn ws_fsm_tree_update_reflects_fsm_transition() {
 
     // Walk through the full lifecycle via FSM, updating tree at each step.
     let transitions: Vec<(WorkspaceState, WorkspaceTrigger, WorkspaceState)> = vec![
-        (WorkspaceState::Idle, WorkspaceTrigger::ReceiveFirstEnvelope, WorkspaceState::Active),
-        (WorkspaceState::Active, WorkspaceTrigger::AgentBlocked, WorkspaceState::Blocked),
-        (WorkspaceState::Blocked, WorkspaceTrigger::AgentStarted, WorkspaceState::Active),
-        (WorkspaceState::Active, WorkspaceTrigger::AgentComplete, WorkspaceState::Integrating),
+        (
+            WorkspaceState::Idle,
+            WorkspaceTrigger::ReceiveFirstEnvelope,
+            WorkspaceState::Active,
+        ),
+        (
+            WorkspaceState::Active,
+            WorkspaceTrigger::AgentBlocked,
+            WorkspaceState::Blocked,
+        ),
+        (
+            WorkspaceState::Blocked,
+            WorkspaceTrigger::AgentStarted,
+            WorkspaceState::Active,
+        ),
+        (
+            WorkspaceState::Active,
+            WorkspaceTrigger::AgentComplete,
+            WorkspaceState::Integrating,
+        ),
         (
             WorkspaceState::Integrating,
             WorkspaceTrigger::IntegrationSucceeded,
@@ -6329,7 +6703,7 @@ fn budget_each_dimension_independently_exceeded() {
 fn budget_exceeded_takes_precedence_over_warning() {
     // One dimension exceeded, another at warning level.
     let usage = ResourceUsage {
-        tokens: 200, // exceeded
+        tokens: 200,      // exceeded
         wall_time_ms: 85, // at warning threshold
         ..Default::default()
     };
@@ -6648,7 +7022,11 @@ fn task_graph_self_loop_prevented() {
     // A task cannot depend on itself because it must exist first.
     let mut graph = TaskGraph::new();
     // "self-loop" depends on "self-loop", which doesn't exist yet.
-    let result = graph.add_task(make_task("self-loop", vec!["self-loop"], TaskStatus::Pending));
+    let result = graph.add_task(make_task(
+        "self-loop",
+        vec!["self-loop"],
+        TaskStatus::Pending,
+    ));
     assert!(
         matches!(result, Err(GraphError::DependencyNotFound(_))),
         "self-loop should fail with DependencyNotFound"
@@ -6903,7 +7281,11 @@ fn task_graph_mixed_terminal_and_non_terminal_deps() {
         .add_task(make_task("running", vec![], TaskStatus::InProgress))
         .unwrap();
     graph
-        .add_task(make_task("child", vec!["done", "running"], TaskStatus::Pending))
+        .add_task(make_task(
+            "child",
+            vec!["done", "running"],
+            TaskStatus::Pending,
+        ))
         .unwrap();
 
     // One dep terminal, one not — remaining = 1.

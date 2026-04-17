@@ -360,6 +360,273 @@ async fn auto_signal_emitted_on_checkpoint() {
     assert!(got_signal);
 }
 
+// ── WA3.5: Checkpoint-approval gates (actor-side) ──
+
+async fn drive_to_active(handle: &WorkspaceHandle, event_rx: &mut mpsc::Receiver<WorkspaceEvent>) {
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(test_envelope(
+            "env-1",
+            "directive",
+            EnvelopePriority::Normal,
+        )))
+        .await
+        .unwrap();
+    // Drain the Idle→Active StateChanged.
+    let _ = tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await;
+}
+
+#[tokio::test]
+async fn wa3_5_provisional_checkpoint_transitions_active_to_blocked() {
+    let (handle, mut event_rx) = spawn_test().await;
+    drive_to_active(&handle, &mut event_rx).await;
+
+    handle
+        .agent_tx
+        .send(AgentMessage::CreateCheckpoint {
+            checkpoint_type: "task_approval".into(),
+            payload: b"payload".to_vec(),
+            content_hash: "hash".into(),
+            intent: "intent".into(),
+            status: CheckpointStatus::Provisional,
+            confidence: Confidence::High,
+            resource_usage: None,
+        })
+        .await
+        .unwrap();
+
+    // Expect: CheckpointCreated → Signal(Checkpoint) → StateChanged(Active→Blocked).
+    let mut got_checkpoint = false;
+    let mut got_signal = false;
+    let mut got_blocked = false;
+    for _ in 0..6 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+        {
+            match evt {
+                WorkspaceEvent::CheckpointCreated(_) => got_checkpoint = true,
+                WorkspaceEvent::Signal(sig) if sig.signal_type == SignalType::Checkpoint => {
+                    got_signal = true;
+                }
+                WorkspaceEvent::StateChanged { from, to, .. }
+                    if from == wacp_types::WorkspaceState::Active
+                        && to == wacp_types::WorkspaceState::Blocked =>
+                {
+                    got_blocked = true;
+                }
+                _ => {}
+            }
+        }
+        if got_checkpoint && got_signal && got_blocked {
+            break;
+        }
+    }
+    assert!(got_checkpoint);
+    assert!(got_signal);
+    assert!(got_blocked);
+}
+
+#[tokio::test]
+async fn wa3_5_final_checkpoint_does_not_block() {
+    let (handle, mut event_rx) = spawn_test().await;
+    drive_to_active(&handle, &mut event_rx).await;
+
+    handle
+        .agent_tx
+        .send(AgentMessage::CreateCheckpoint {
+            checkpoint_type: "artifact".into(),
+            payload: b"payload".to_vec(),
+            content_hash: "hash".into(),
+            intent: "intent".into(),
+            status: CheckpointStatus::Final,
+            confidence: Confidence::High,
+            resource_usage: None,
+        })
+        .await
+        .unwrap();
+
+    let mut got_checkpoint = false;
+    let mut saw_block = false;
+    for _ in 0..5 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(80), event_rx.recv()).await
+        {
+            match evt {
+                WorkspaceEvent::CheckpointCreated(_) => got_checkpoint = true,
+                WorkspaceEvent::StateChanged { to, .. }
+                    if to == wacp_types::WorkspaceState::Blocked =>
+                {
+                    saw_block = true;
+                }
+                _ => {}
+            }
+        }
+    }
+    assert!(got_checkpoint);
+    assert!(!saw_block, "Final checkpoint must not trigger block");
+}
+
+#[tokio::test]
+async fn wa3_5_checkpoint_approved_resumes_blocked_workspace() {
+    let (handle, mut event_rx) = spawn_test().await;
+    drive_to_active(&handle, &mut event_rx).await;
+
+    // Block via provisional checkpoint.
+    handle
+        .agent_tx
+        .send(AgentMessage::CreateCheckpoint {
+            checkpoint_type: "task_approval".into(),
+            payload: b"payload".to_vec(),
+            content_hash: "hash".into(),
+            intent: "intent".into(),
+            status: CheckpointStatus::Provisional,
+            confidence: Confidence::High,
+            resource_usage: None,
+        })
+        .await
+        .unwrap();
+
+    // Drain until the workspace is Blocked.
+    let mut blocked = false;
+    for _ in 0..6 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+        {
+            if let WorkspaceEvent::StateChanged { to, .. } = evt
+                && to == wacp_types::WorkspaceState::Blocked
+            {
+                blocked = true;
+                break;
+            }
+        }
+    }
+    assert!(blocked, "precondition: workspace must reach Blocked");
+
+    // Operator approval arrives as a coordinator command.
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::CheckpointApproved {
+            checkpoint_id: "cp-1".into(),
+        })
+        .await
+        .unwrap();
+
+    let mut resumed = false;
+    for _ in 0..5 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+        {
+            if let WorkspaceEvent::StateChanged { from, to, .. } = evt
+                && from == wacp_types::WorkspaceState::Blocked
+                && to == wacp_types::WorkspaceState::Active
+            {
+                resumed = true;
+                break;
+            }
+        }
+    }
+    assert!(resumed);
+}
+
+#[tokio::test]
+async fn wa3_5_checkpoint_rejected_fails_blocked_workspace() {
+    let (handle, mut event_rx) = spawn_test().await;
+    drive_to_active(&handle, &mut event_rx).await;
+
+    // Block via provisional checkpoint.
+    handle
+        .agent_tx
+        .send(AgentMessage::CreateCheckpoint {
+            checkpoint_type: "task_approval".into(),
+            payload: b"payload".to_vec(),
+            content_hash: "hash".into(),
+            intent: "intent".into(),
+            status: CheckpointStatus::Provisional,
+            confidence: Confidence::High,
+            resource_usage: None,
+        })
+        .await
+        .unwrap();
+
+    // Wait until Blocked.
+    let mut blocked = false;
+    for _ in 0..6 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+        {
+            if let WorkspaceEvent::StateChanged { to, .. } = evt
+                && to == wacp_types::WorkspaceState::Blocked
+            {
+                blocked = true;
+                break;
+            }
+        }
+    }
+    assert!(blocked);
+
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::CheckpointRejected {
+            checkpoint_id: "cp-1".into(),
+        })
+        .await
+        .unwrap();
+
+    let mut failed = false;
+    let mut terminated = false;
+    for _ in 0..6 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+        {
+            match evt {
+                WorkspaceEvent::StateChanged { from, to, .. }
+                    if from == wacp_types::WorkspaceState::Blocked
+                        && to == wacp_types::WorkspaceState::Failed =>
+                {
+                    failed = true;
+                }
+                WorkspaceEvent::Terminated(archived)
+                    if archived.terminal_state == wacp_types::WorkspaceState::Failed =>
+                {
+                    terminated = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    }
+    assert!(failed);
+    assert!(terminated);
+}
+
+#[tokio::test]
+async fn wa3_5_checkpoint_approved_on_active_workspace_emits_error() {
+    let (handle, mut event_rx) = spawn_test().await;
+    drive_to_active(&handle, &mut event_rx).await;
+
+    // Active state — AgentStarted is illegal here (FSM only allows it from Blocked).
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::CheckpointApproved {
+            checkpoint_id: "cp-1".into(),
+        })
+        .await
+        .unwrap();
+
+    let mut got_error = false;
+    for _ in 0..4 {
+        if let Ok(Some(evt)) =
+            tokio::time::timeout(std::time::Duration::from_millis(80), event_rx.recv()).await
+        {
+            if let WorkspaceEvent::Error { .. } = evt {
+                got_error = true;
+                break;
+            }
+        }
+    }
+    assert!(got_error);
+}
+
 // ── Phase 16: Migration Snapshot + Restore + Actor ──
 
 #[test]

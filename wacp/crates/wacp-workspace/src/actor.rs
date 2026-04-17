@@ -11,7 +11,9 @@ pub enum CoordinatorCommand {
     Suspend,
     Resume,
     MigrateBegin,
-    MigrationComplete { restore_blocked: bool },
+    MigrationComplete {
+        restore_blocked: bool,
+    },
     MigrationFailed,
     IntegrationSucceeded,
     IntegrationFailed,
@@ -21,7 +23,20 @@ pub enum CoordinatorCommand {
     GrantVisibility(Vec<String>),
     UpdateBudget(ResourceBudget),
     DeliverEnvelope(Envelope),
-    GracefulTermination { grace_period_ms: u64 },
+    GracefulTermination {
+        grace_period_ms: u64,
+    },
+    /// WA3.5: operator approved a pending provisional checkpoint.
+    /// Drives `AgentStarted` trigger to resume a Blocked workspace.
+    /// `checkpoint_id` is correlation-only (the actor does not look it up).
+    CheckpointApproved {
+        checkpoint_id: String,
+    },
+    /// WA3.5: operator rejected a pending provisional checkpoint.
+    /// Drives `CoordinatorAbort` trigger to fail the Blocked workspace.
+    CheckpointRejected {
+        checkpoint_id: String,
+    },
 }
 
 /// Messages from the agent (normal channel).
@@ -227,6 +242,20 @@ impl WorkspaceActor {
             CoordinatorCommand::GracefulTermination { .. } => {
                 // Placeholder — the grace period timer is a coordinator concern.
             }
+            CoordinatorCommand::CheckpointApproved { .. } => {
+                // WA3.5: gate approval resumes the blocked workspace.
+                // FSM's only Blocked→Active edge is AgentStarted; from any
+                // other state this emits WorkspaceEvent::Error, which
+                // correctly surfaces "approve arrived for a non-blocked
+                // workspace" without corrupting state.
+                self.transition(WorkspaceTrigger::AgentStarted).await;
+            }
+            CoordinatorCommand::CheckpointRejected { .. } => {
+                // WA3.5: rejection fails the workspace via the FSM's
+                // Blocked→Failed edge (CoordinatorAbort). Same illegal-
+                // transition semantics as above for non-Blocked states.
+                self.transition(WorkspaceTrigger::CoordinatorAbort).await;
+            }
         }
     }
 
@@ -334,6 +363,16 @@ impl WorkspaceActor {
             context: None,
         };
         let _ = self.event_tx.send(WorkspaceEvent::Signal(signal)).await;
+
+        // WA3.5: provisional checkpoints of gate-requiring types block the
+        // workspace until a human resolves the gate. The runtime-side
+        // CreateCheckpoint handler opens the gate and fans it onto the
+        // highway stream in parallel. The block is emitted after the
+        // CheckpointCreated/Signal events so the trail reads in the natural
+        // order (created → blocked).
+        if status == CheckpointStatus::Provisional {
+            self.transition(WorkspaceTrigger::AgentBlocked).await;
+        }
     }
 
     async fn transition(&mut self, trigger: WorkspaceTrigger) {

@@ -596,6 +596,7 @@ fn serde_roundtrip_all_gate_types() {
         GateType::Integration,
         GateType::ConflictResolution,
         GateType::WorkspaceAbort,
+        GateType::CheckpointApproval,
     ];
     for gt in types {
         let event = GateEvent {

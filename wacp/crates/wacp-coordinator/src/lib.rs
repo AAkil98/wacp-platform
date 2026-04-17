@@ -21,7 +21,7 @@ pub mod visibility;
 
 pub use dispatch::{DispatchAction, DispatchConfig, Dispatcher};
 pub use events::{CoordinatorEvent, EventBus};
-pub use gate::{GateController, GateFallback, GateResolution, PendingGate};
+pub use gate::{GateController, GateFallback, GateResolution, PendingCheckpointGate, PendingGate};
 pub use handler::{
     BindResult, CreateCheckpointResult, EmitSignalResult, HandlerError, RequestHandler,
     SendEnvelopeResult, TaskGraphSnapshot, TaskView, WorkspaceView,

@@ -148,7 +148,7 @@ async fn e2e_workspace_lifecycle() {
                     got_failed = true;
                 }
             }
-            rt.coordinator.handle_event(&event);
+            rt.coordinator.handle_event(&event).await;
         }
         if got_failed {
             break;
@@ -236,7 +236,7 @@ async fn e2e_failure_cascade() {
         if let Ok(Some(event)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
-            rt.coordinator.handle_event(&event);
+            rt.coordinator.handle_event(&event).await;
         }
     }
 
@@ -440,7 +440,7 @@ async fn coordinator_abort_sets_failed() {
         if let Ok(Some(e)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
-            rt.coordinator.handle_event(&e);
+            rt.coordinator.handle_event(&e).await;
         }
     }
 
@@ -1098,4 +1098,370 @@ async fn wa2_emit_started_from_idle_emits_fsm_error_event() {
             "unexpected message: {message}"
         );
     }
+}
+
+// ── WA3.5 — Checkpoint-approval gates ──
+
+async fn subscribe_gates(
+    rt: &mut Runtime,
+) -> tokio::sync::mpsc::Receiver<Result<wacp_v1::GateEvent, tonic::Status>> {
+    let (tx, rx) = tokio::sync::mpsc::channel(16);
+    rt.handle_highway_request(wacp_transport::HighwayRequest::SubscribeGates { tx })
+        .await;
+    rx
+}
+
+/// Activate a workspace by delivering a synthetic envelope via the actor's
+/// coordinator channel. Required before the WA3.5 provisional-checkpoint
+/// path can drive Active→Blocked — otherwise the FSM is still in Idle and
+/// the AgentBlocked trigger surfaces as an Error event instead of a
+/// StateChanged. Pairs with the existing drain_until helper for assertions.
+async fn activate_workspace(rt: &Runtime, ws_id: &str) {
+    use wacp_workspace::actor::CoordinatorCommand;
+    let envelope = Envelope {
+        id: EnvelopeId::from("env-activate"),
+        from_workspace: WorkspaceId::from("ws-root"),
+        to_workspace: WorkspaceId::from(ws_id),
+        envelope_type: "directive".into(),
+        payload: b"activate".to_vec(),
+        in_reply_to: None,
+        timestamp: 0,
+        priority: EnvelopePriority::Normal,
+        origin: EnvelopeOrigin::Agent,
+        state: EnvelopeState::Created,
+    };
+    let handle = rt
+        .coordinator
+        .handle(&WorkspaceId::from(ws_id))
+        .expect("workspace handle present");
+    handle
+        .coordinator_tx
+        .send(CoordinatorCommand::DeliverEnvelope(envelope))
+        .await
+        .expect("send DeliverEnvelope");
+}
+
+async fn respond_to_gate_via_handler(
+    rt: &mut Runtime,
+    gate_id: &str,
+    decision: wacp_v1::GateDecision,
+) -> wacp_v1::GateResponseAck {
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_highway_request(wacp_transport::HighwayRequest::RespondToGate {
+        request: wacp_v1::GateResponse {
+            gate_id: gate_id.into(),
+            decision: decision as i32,
+            modifications: Vec::new(),
+            client_request_id: "rtg-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    reply_rx.await.expect("reply").expect("status")
+}
+
+#[tokio::test]
+async fn wa3_5_provisional_checkpoint_emits_gate() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-5-emit").await;
+    let mut gates = subscribe_gates(&mut rt).await;
+
+    let resp = create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "task_approval",
+        b"payload-bytes",
+        wacp_v1::CheckpointStatus::Provisional,
+        wacp_v1::Confidence::High,
+    )
+    .await;
+    assert!(!resp.checkpoint_id.is_empty());
+
+    let gate = tokio::time::timeout(std::time::Duration::from_secs(2), gates.recv())
+        .await
+        .expect("gate event timed out")
+        .expect("channel closed")
+        .expect("status ok");
+    assert_eq!(
+        gate.r#type,
+        wacp_v1::GateType::CheckpointApproval as i32,
+        "gate type must be CheckpointApproval"
+    );
+    assert_eq!(gate.workspace_id, submit.root_workspace_id);
+    assert!(gate.task_id.is_empty(), "checkpoint gates carry no task_id");
+    // subject bytes decode to the checkpoint_id string.
+    assert_eq!(gate.subject, resp.checkpoint_id.as_bytes().to_vec());
+}
+
+#[tokio::test]
+async fn wa3_5_final_checkpoint_does_not_emit_gate() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-5-final").await;
+    let mut gates = subscribe_gates(&mut rt).await;
+
+    create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "artifact",
+        b"p",
+        wacp_v1::CheckpointStatus::Final,
+        wacp_v1::Confidence::High,
+    )
+    .await;
+
+    // No gate event should arrive within a short window.
+    let got = tokio::time::timeout(std::time::Duration::from_millis(300), gates.recv()).await;
+    assert!(
+        got.is_err(),
+        "final checkpoint must not emit a gate, got: {got:?}"
+    );
+}
+
+#[tokio::test]
+async fn wa3_5_respond_to_checkpoint_gate_approves_routes_to_actor() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-5-approve").await;
+    activate_workspace(&rt, &submit.root_workspace_id).await;
+    // Drain the Idle→Active StateChanged so later assertions target the
+    // Active→Blocked transition cleanly.
+    let _ = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == WorkspaceState::Active
+        )
+    })
+    .await
+    .expect("activation state change");
+    let mut gates = subscribe_gates(&mut rt).await;
+
+    create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "task_approval",
+        b"payload",
+        wacp_v1::CheckpointStatus::Provisional,
+        wacp_v1::Confidence::High,
+    )
+    .await;
+
+    let gate = tokio::time::timeout(std::time::Duration::from_secs(2), gates.recv())
+        .await
+        .expect("gate timeout")
+        .expect("channel closed")
+        .expect("status ok");
+
+    // Wait for the actor to reach Blocked before approving — otherwise the
+    // resume trigger hits Active and the FSM emits an Error event instead.
+    let blocked = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == WorkspaceState::Blocked
+        )
+    })
+    .await;
+    assert!(
+        blocked.is_some(),
+        "workspace must reach Blocked before approve"
+    );
+
+    let ack =
+        respond_to_gate_via_handler(&mut rt, &gate.gate_id, wacp_v1::GateDecision::Approve).await;
+    assert!(ack.applied, "approve ack must be applied");
+
+    let resumed = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { from, to, .. }
+                if *from == WorkspaceState::Blocked && *to == WorkspaceState::Active
+        )
+    })
+    .await;
+    assert!(resumed.is_some(), "approve must drive Blocked→Active");
+}
+
+#[tokio::test]
+async fn wa3_5_respond_to_checkpoint_gate_rejects_fails_workspace() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-5-reject").await;
+    activate_workspace(&rt, &submit.root_workspace_id).await;
+    let _ = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == WorkspaceState::Active
+        )
+    })
+    .await
+    .expect("activation state change");
+    let mut gates = subscribe_gates(&mut rt).await;
+
+    create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "task_approval",
+        b"payload",
+        wacp_v1::CheckpointStatus::Provisional,
+        wacp_v1::Confidence::High,
+    )
+    .await;
+
+    let gate = tokio::time::timeout(std::time::Duration::from_secs(2), gates.recv())
+        .await
+        .expect("gate timeout")
+        .expect("channel closed")
+        .expect("status ok");
+
+    let blocked = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == WorkspaceState::Blocked
+        )
+    })
+    .await;
+    assert!(blocked.is_some());
+
+    let ack =
+        respond_to_gate_via_handler(&mut rt, &gate.gate_id, wacp_v1::GateDecision::Reject).await;
+    assert!(ack.applied);
+
+    let failed = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { from, to, .. }
+                if *from == WorkspaceState::Blocked && *to == WorkspaceState::Failed
+        )
+    })
+    .await;
+    assert!(failed.is_some(), "reject must drive Blocked→Failed");
+}
+
+// ── WA3.6 — Auto-integration on Complete ──
+
+#[tokio::test]
+async fn wa3_6_complete_signal_drives_workspace_to_closed() {
+    // End-to-end at the runtime/handler boundary: a Complete signal from
+    // an agent should advance the workspace through Active → Integrating →
+    // Closed without anyone calling TriggerIntegration.
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-6-end-to-end").await;
+    activate_workspace(&rt, &submit.root_workspace_id).await;
+    // Drain the Idle→Active state change and let the coordinator tree update.
+    let _ = drain_until_with_handle(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::StateChanged { to, .. }
+                if *to == WorkspaceState::Active
+        )
+    })
+    .await
+    .expect("activation");
+
+    emit_signal_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        wacp_v1::SignalType::Complete,
+        "",
+        b"",
+    )
+    .await
+    .expect("complete signal");
+
+    // Drain via the helper that runs handle_event so auto-integration fires.
+    let mut saw_integrating = false;
+    let mut saw_closed = false;
+    let mut saw_terminated = false;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::time::Instant::now() < deadline && !(saw_closed && saw_terminated) {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        match tokio::time::timeout(remaining, rt.event_rx.recv()).await {
+            Ok(Some(event)) => {
+                rt.coordinator.handle_event(&event).await;
+                match &event {
+                    WorkspaceEvent::StateChanged { to, .. }
+                        if *to == WorkspaceState::Integrating =>
+                    {
+                        saw_integrating = true;
+                    }
+                    WorkspaceEvent::StateChanged { to, .. } if *to == WorkspaceState::Closed => {
+                        saw_closed = true;
+                    }
+                    WorkspaceEvent::Terminated(archived)
+                        if archived.terminal_state == WorkspaceState::Closed =>
+                    {
+                        saw_terminated = true;
+                    }
+                    _ => {}
+                }
+            }
+            _ => break,
+        }
+    }
+    assert!(saw_integrating, "must reach Integrating");
+    assert!(saw_closed, "auto-integration must drive Integrating→Closed");
+    assert!(saw_terminated, "Closed workspace must terminate");
+}
+
+/// Variant of `drain_until` that also runs `coordinator.handle_event` on
+/// each consumed event so the coordinator's auto-integration trigger has a
+/// chance to fire. Use this in WA3.6 tests where the test asserts on the
+/// chain of events the coordinator emits in response to its own observation.
+async fn drain_until_with_handle<F>(
+    rt: &mut Runtime,
+    max_wait: std::time::Duration,
+    predicate: F,
+) -> Option<WorkspaceEvent>
+where
+    F: Fn(&WorkspaceEvent) -> bool,
+{
+    let deadline = std::time::Instant::now() + max_wait;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        match tokio::time::timeout(remaining, rt.event_rx.recv()).await {
+            Ok(Some(ev)) => {
+                rt.coordinator.handle_event(&ev).await;
+                if predicate(&ev) {
+                    return Some(ev);
+                }
+            }
+            _ => return None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn wa3_5_respond_to_gate_falls_through_for_task_gates() {
+    // Open a task gate directly on the controller (bypassing the unused
+    // production open-gate path for task approvals) and assert RespondToGate
+    // resolves it via the original resolve() path when no checkpoint gate
+    // matches the id. Proves the WA3.5 precedence check does not break
+    // backcompat with task-gate resolution.
+    let mut rt = test_runtime();
+    let task_gate = rt.gate_controller.open_gate(
+        TaskId::from("t-direct"),
+        "task-direct".into(),
+        "desc",
+        None,
+        None,
+    );
+    let ack = respond_to_gate_via_handler(
+        &mut rt,
+        task_gate.gate_id.as_ref(),
+        wacp_v1::GateDecision::Approve,
+    )
+    .await;
+    assert!(ack.applied, "task gate must resolve via the fallback path");
+    // Second response returns applied:false because the controller removed it.
+    let ack2 = respond_to_gate_via_handler(
+        &mut rt,
+        task_gate.gate_id.as_ref(),
+        wacp_v1::GateDecision::Approve,
+    )
+    .await;
+    assert!(!ack2.applied);
 }

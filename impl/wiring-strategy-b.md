@@ -134,7 +134,7 @@ Naming convention `WAx` ("wiring, agent-side x") distinguishes from the `Wx` pha
 
 **Scope narrowed.** The original WA3 plan folded gate fan-out into this phase. Implementation revealed the machinery does not exist: `GateType` (wacp-types/src/enums.rs:143) has no `CheckpointApproval` variant, `GateController::open_gate` is task-based, and there is no gate-resolution→actor-resume callback. Adding those is ~150–200 LOC of new cross-cutting surface (proto enum addition, new controller method, new `WorkspaceEvent` variant for resume, interceptor wiring for the resolution path). Carved out as WA3.5.
 
-### 3.3.5 Phase WA3.5 — Checkpoint-approval gates (new, not started)
+### 3.3.5 Phase WA3.5 — Checkpoint-approval gates (LANDED)
 
 **What.** Provisional checkpoints of gate-requiring taxonomy types create `GateEvent`s on the highway outbound stream; `RespondToGate` resolutions feed back into the workspace actor to resume the paused workspace.
 
@@ -144,11 +144,11 @@ Naming convention `WAx` ("wiring, agent-side x") distinguishes from the `Wx` pha
 - Extend `AgentRequest::CreateCheckpoint` handler: after the actor forward, if the checkpoint is `Provisional` and the type is gate-requiring per the taxonomy, call `open_checkpoint_gate` and fan the resulting `GateEvent` into `self.gate_subs`.
 - Extend `HighwayRequest::RespondToGate`: on approve/modify, send a new `CoordinatorCommand::CheckpointApproved { checkpoint_id }` (or equivalent) to the workspace actor; on reject, send `CheckpointRejected`. Actor transitions Blocked→Active on approve.
 
-**Effort.** 4–5 hours.
+**Effort.** 4–5 hours actual (matched estimate). Coding spec at `wacp/impl/wa3-5-checkpoint-gates.md`.
 
-**Validation.** T7.2 un-`#[ignore]`s; T7.10 un-`#[ignore]`s (W4→W6 latency measurable).
+**Validation.** Runtime-side proven via WA3.5 unit tests (5 coord + 5 workspace + 5 runtime, all green). Console-level un-ignore of T7.2 / T7.10 / T7.8 deferred to a follow-up — see §4.
 
-### 3.3.6 Phase WA3.6 — Auto-integration on Complete (new, not started)
+### 3.3.6 Phase WA3.6 — Auto-integration on Complete (LANDED)
 
 **What.** Discovered while writing the T7.3 un-ignore: when an agent emits `Complete`, the FSM transitions `Active→Integrating`, but nothing advances `Integrating→Closed`. Today only `CoordinatorRequest::TriggerIntegration` (init.rs:1654) produces the `IntegrationSucceeded` command that closes the workspace, and no caller triggers it automatically.
 
@@ -156,15 +156,15 @@ Naming convention `WAx` ("wiring, agent-side x") distinguishes from the `Wx` pha
 - In `coordinator::handle_event` (`wacp-coordinator/src/orchestrator.rs:80`), on `WorkspaceEvent::StateChanged { to: Integrating }`, synchronously invoke `IntegrationEngine::integrate` (already present at `wacp-coordinator/src/integration.rs:49`) against the workspace's last checkpoint; on `Success`, send `CoordinatorCommand::IntegrationSucceeded` to the workspace handle; on `Conflict`/`Failed`, send the corresponding command.
 - This is coordinator-side only, no runtime changes.
 
-**Effort.** 2–3 hours.
+**Effort.** 2–3 hours actual (matched estimate). Coding spec at `wacp/impl/wa3-6-auto-integration.md`. Implementation note: `Coordinator::handle_event` became `async` to allow the coordinator-tx send to complete inside the event-handler call; all call sites (`init.rs` × 2, coordinator/runtime test files × 4) updated to `.await`. Backwards-compat preserved via the unchanged `&mut self` receiver and new field defaults.
 
-**Validation.** T7.3 un-`#[ignore]`s.
+**Validation.** Runtime-side proven via WA3.6 unit tests (4 coord + 1 runtime, all green). Console-level un-ignore of T7.3 / T7.7 deferred to a follow-up — see §4.
 
 ### 3.4 Phase WA4 — **removed**
 
 Original WA4 proposed wiring `AgentRequest::SendEnvelope`. A closer reading of `init.rs:765–:826` shows it is already wired — see §2.4. T7.7 / T7.8 therefore do not need a new dispatch path; they un-`#[ignore]` on WA2 (signals drive FSM so 10 sessions can reach `Complete`) and WA3 (gates make traffic high enough to exercise slow-consumer pacing).
 
-### 3.5 Phase WA5 — Dispatch-failure injection for T7.5
+### 3.5 Phase WA5 — Dispatch-failure injection for T7.5 (DEFERRED)
 
 **What.** A test-only knob that makes the second `CoordinatorService::Dispatch` in a multi-task launch return an error, so the Console's W2 rollback assertion can fire.
 
@@ -175,6 +175,8 @@ Original WA4 proposed wiring `AgentRequest::SendEnvelope`. A closer reading of `
 This phase is harness-side only (no runtime changes) and can land in parallel with WA1–WA4. It is listed here because its `#[ignore]` reason ("needs dispatch-failure injection on top of the stub provider") points here as the close-out.
 
 **Validation.** T7.5 un-`#[ignore]`s.
+
+**Deferral note (2026-04-17).** During the WA3.5 + WA3.6 session it became clear the original 2 h estimate was light. The `tower::Service` interceptor approach hits a typing wall: `GrpcPool` stores `CoordinatorServiceClient<Channel>` with a fixed channel type, so swapping in an intercepted channel requires either making `GrpcPool` generic over `T: Service<Request<…>>` (ripples through every consumer) or building a full mock CoordinatorService server that forwards 12 RPCs + 1 streaming RPC to the real runtime (~150–200 lines of mostly-mechanical boilerplate). Either path is ~3–4 h, not 2. T7.5 stays `#[ignore]`-ed with the reason updated to point here. WA5 is independent of the un-ignore sweep — it can land any time without coordination with the other unblocks.
 
 ---
 
@@ -208,12 +210,12 @@ WA5: Dispatch-failure injection (harness-side)                ~2 hours
                     `// Future:` comments in each test file.)
 ```
 
-**Total effort (revised after WA1–WA3 implementation):**
-- Landed: WA1 (2 h), WA2 (2 h — SDK header bug unlocked as side effect), WA3 narrowed (1.5 h). Total landed ≈ 5.5 h.
-- Remaining: WA3.5 (4–5 h), WA3.6 (2–3 h), WA5 harness (2 h), un-ignore sweep (1 h). Total remaining ≈ 9–11 h.
-- Full §13.7.6b now ≈ 15–17 h — the original 9–12 h estimate was ~50 % undersized, mainly because the gate-fan-out and auto-integration pieces weren't visible from the inventory sweep. Wiring-strategy-b's coverage claim revised accordingly.
+**Total effort (revised after WA3.5 + WA3.6 landing on 2026-04-17):**
+- Landed: WA1 (2 h), WA2 (2 h), WA3 narrowed (1.5 h), WA3.5 (4–5 h), WA3.6 (2–3 h). Total landed ≈ 11.5–13.5 h.
+- Deferred: WA5 (3–4 h after re-estimation; was 2 h), un-ignore sweep (5 tests × 2–4 h = 10–20 h). Total deferred ≈ 13–24 h.
+- Full §13.7.6b end-state estimate: 24–37 h. Original 9–12 h was ~50–75 % undersized across the board.
 
-**Critical path:** WA3 (checkpoints → gates). Most of the intra-runtime interaction surface lands here. Everything else is pattern-matching onto established plumbing.
+**Critical path:** WA3 (checkpoints → actor) → WA3.5 (gate fan + resume) → un-ignore sweep. WA3.6 is parallelizable. WA5 is fully independent (harness-side only).
 
 ---
 

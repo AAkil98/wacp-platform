@@ -92,11 +92,13 @@ async fn t7_4_runtime_kill_emits_control_frame_on_ws() {
 }
 
 #[tokio::test]
-#[ignore = "needs dispatch-failure injection on top of the stub provider: T7.5 must make the second CoordinatorService::Dispatch call return an error mid-launch so W2 rollback fires. Stub LLM provider (§13.7.6) is landed but the current RuntimeHarness has no mechanism to force a configurable failure. A follow-up harness-side flag or a thin wrapper around CoordinatorService would close this."]
+#[ignore = "needs WA5 (deferred): a coordinator-side mock proxy that forwards all 13 CoordinatorService RPCs to the real runtime but injects a failure on the Nth Dispatch. WA3.5 + WA3.6 land §13.7.6b's other five T7 unblockers; WA5 is harness-side only and can land independently. Sketch in impl/wiring-strategy-b.md §3.5 — the implementation cost (mock-server boilerplate for 12 forward methods + 1 stream method) exceeds the 2 h estimate enough that a focused follow-up is warranted."]
 async fn t7_5_partial_launch_failure_rolls_back() {
-    // When dispatch-failure injection lands, this test launches a session,
-    // asserts the W2 rollback sequence ran (no live workspaces remain on
-    // the runtime), and verifies the session row is FAILED.
+    // When WA5 lands, this test launches a session with two role-slot
+    // assignments through a CoordinatorService proxy that fails the second
+    // Dispatch. Asserts the session row transitions to FAILED, the W3
+    // monitor is not registered for it, and the proxy reports the
+    // expected dispatch attempt count.
 }
 
 #[tokio::test]

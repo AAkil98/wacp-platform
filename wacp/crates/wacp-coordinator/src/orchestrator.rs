@@ -7,6 +7,7 @@ use wacp_workspace::{
     CoordinatorCommand, WorkspaceActor, WorkspaceConfig, WorkspaceEvent, WorkspaceHandle,
 };
 
+use crate::integration::{IntegrationEngine, IntegrationRequest, IntegrationResult};
 use crate::migration::{MigrationCoordinator, MigrationRequest};
 use crate::task_graph::TaskGraph;
 use crate::tree::{WorkspaceNode, WorkspaceTree};
@@ -33,6 +34,10 @@ pub struct Coordinator {
     pub migration: MigrationCoordinator,
     workspace_handles: HashMap<String, WorkspaceHandle>,
     event_tx: mpsc::Sender<WorkspaceEvent>,
+    /// WA3.6: per-workspace last-checkpoint cache, populated by
+    /// `WorkspaceEvent::CheckpointCreated` and consumed by the
+    /// auto-integration trigger when a workspace transitions to Integrating.
+    pub(crate) last_checkpoint: HashMap<String, Checkpoint>,
 }
 
 impl Coordinator {
@@ -48,6 +53,7 @@ impl Coordinator {
             migration: MigrationCoordinator::new(60_000),
             workspace_handles: HashMap::new(),
             event_tx,
+            last_checkpoint: HashMap::new(),
         }
     }
 
@@ -77,7 +83,15 @@ impl Coordinator {
     }
 
     /// Process a workspace event.
-    pub fn handle_event(&mut self, event: &WorkspaceEvent) {
+    ///
+    /// WA3.6: when a workspace transitions to `Integrating`, this method
+    /// also drives `IntegrationEngine::integrate` against the workspace's
+    /// last cached checkpoint and forwards the result back to the workspace
+    /// actor via `CoordinatorCommand::IntegrationSucceeded` /
+    /// `IntegrationFailed` / `ConflictDetected`. Required to be `async` so
+    /// the coordinator-tx send can complete before the next event is
+    /// processed.
+    pub async fn handle_event(&mut self, event: &WorkspaceEvent) {
         match event {
             WorkspaceEvent::StateChanged {
                 workspace_id, to, ..
@@ -86,11 +100,19 @@ impl Coordinator {
                 if *to == WorkspaceState::Failed {
                     let _reparented = self.tree.cascade_failure(workspace_id);
                 }
+                if *to == WorkspaceState::Integrating {
+                    self.auto_integrate(workspace_id).await;
+                }
+            }
+            WorkspaceEvent::CheckpointCreated(cp) => {
+                self.last_checkpoint
+                    .insert(cp.workspace_id.to_string(), cp.clone());
             }
             WorkspaceEvent::Terminated(archived) => {
                 self.tree
                     .update_status(&archived.id, archived.terminal_state);
                 self.workspace_handles.remove(archived.id.as_ref());
+                self.last_checkpoint.remove(archived.id.as_ref());
             }
             WorkspaceEvent::MigrationSnapshot {
                 workspace_id,
@@ -102,6 +124,40 @@ impl Coordinator {
             }
             _ => {}
         }
+    }
+
+    /// WA3.6: drive integration once a workspace has reached Integrating.
+    ///
+    /// If the workspace has a cached checkpoint, build an IntegrationRequest
+    /// (default Normal mode + Direct strategy — the engine is currently
+    /// trivially-Success but the call lets the future implementation thread
+    /// real conflict detection here without further changes). When no
+    /// checkpoint was ever created, fall back to `IntegrationSucceeded` —
+    /// matches the blind behaviour of the existing `TriggerIntegration`
+    /// gRPC handler so an agent that emits Complete without checkpoints
+    /// still terminates cleanly.
+    async fn auto_integrate(&mut self, workspace_id: &WorkspaceId) {
+        let handle = match self.workspace_handles.get(workspace_id.as_ref()) {
+            Some(h) => h,
+            None => return,
+        };
+        let cmd = match self.last_checkpoint.get(workspace_id.as_ref()) {
+            Some(checkpoint) => {
+                let request = IntegrationRequest {
+                    workspace_id: workspace_id.clone(),
+                    strategy: MergeStrategy::Direct,
+                    mode: IntegrationMode::Normal,
+                    checkpoint: checkpoint.clone(),
+                };
+                match IntegrationEngine.integrate(&request) {
+                    IntegrationResult::Success => CoordinatorCommand::IntegrationSucceeded,
+                    IntegrationResult::Conflict(_) => CoordinatorCommand::ConflictDetected,
+                    IntegrationResult::Failed(_) => CoordinatorCommand::IntegrationFailed,
+                }
+            }
+            None => CoordinatorCommand::IntegrationSucceeded,
+        };
+        let _ = handle.coordinator_tx.send(cmd).await;
     }
 
     /// Route an envelope to a target workspace.

@@ -138,7 +138,7 @@ pub enum PortRightType {
     SendOnce,
 }
 
-/// Gate type — closed set of 6 (PROTOCOL.md §8.1).
+/// Gate type — closed set of 7 (PROTOCOL.md §8.1 + WA3.5 checkpoint approval).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GateType {
     TaskApproval,
@@ -147,6 +147,7 @@ pub enum GateType {
     Integration,
     ConflictResolution,
     WorkspaceAbort,
+    CheckpointApproval,
 }
 
 /// Gate decision — closed set of 3 (PROTOCOL.md §8.1).

@@ -81,7 +81,7 @@ pub async fn drain_events(
 ) {
     for _ in 0..max {
         match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), rx.recv()).await {
-            Ok(Some(event)) => coord.handle_event(&event),
+            Ok(Some(event)) => coord.handle_event(&event).await,
             _ => break,
         }
     }

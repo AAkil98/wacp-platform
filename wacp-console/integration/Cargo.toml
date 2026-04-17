@@ -36,3 +36,4 @@ wacp-sdk = { workspace = true }
 wacp-types = { workspace = true }
 wacp-transport = { workspace = true }
 tonic = { workspace = true }
+tokio-stream = { workspace = true }

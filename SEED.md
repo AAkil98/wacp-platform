@@ -19,9 +19,9 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 
 ## Current State (Post M0–M7 merge + W1–W7 wiring + post-audit workstream)
 
-**Branch:** `dev`, 15 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits); since then dev has accumulated §13.7.6b WA1/WA2/WA3 + strategy-doc + seed refresh + WA3.5/WA3.6 + WA5 + T7.3 (with WorkspaceState fix) + un-ignore sweep + closure docs + §13.7.9 mutation-testing pipeline + §13.7.7 D1 (Playwright tooling) + inter-deliverable drift-filing + §13.7.7 D2 (five E2E spec files + three backend-drift fixes). **§13.7.6b is fully closed; §13.7.9 wired pending first scheduled run; §13.7.7 D1 + D2 landed, D3/D4/D5 remain.** Working tree clean locally.
+**Branch:** `dev`, 21 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits); since then dev has accumulated §13.7.6b WA1/WA2/WA3 + strategy-doc + seed refresh + WA3.5/WA3.6 + WA5 + T7.3 (with WorkspaceState fix) + un-ignore sweep + closure docs + §13.7.9 mutation-testing pipeline + §13.7.7 D1 (Playwright tooling) + inter-deliverable drift-filing + §13.7.7 D2 (five E2E spec files + three backend-drift fixes) + **§2.1–§2.6 CI-pipeline cleanup** (setup-mold, tsconfig.build split, lint fixes, cargo fmt, deny.toml tune-up, clippy ws.rs fix) + **§2.7 full-fix plan** at `impl/ci-cleanup-2.7-plan.md`. **§13.7.6b + §13.7.9 fully closed; §13.7.7 D1+D2 landed, D3/D4/D5 remain; §2.1–§2.6 CI cleanup landed, §2.7 + D.1 + D.2 tracked in plan.** Working tree clean locally.
 
-**CI is currently RED on `main`** across all five workflows — has been since 2026-04-15 per `gh run list`. Three orthogonal failures (mold linker missing on runner image, `pnpm lint` failing pre-typecheck, 55 pre-existing `tsc` errors in `.test.ts(x)` files from the F-series) plus pre-existing `cargo fmt` drift. **Details + fix order at `impl/ci-health-2026-04-17.md`.** §13.7.7 D3 (Playwright CI stage) is blocked on that cleanup landing in a dedicated commit before D3.
+**CI state on `dev`** (not yet merged to main): §2.1–§2.6 landed 2026-04-17 evening (commits `efd23e9..0845acd`; doc refresh `e380f04`). Rust surface is now **green** across all four triggered workflows — Build / Clippy / Test / Integration / Coverage-Rust + fmt + deny + Frontend-Lint + Protobuf. Nine pre-existing drift items (§2.7.1–§2.7.9) still block Frontend Typecheck, TS ecosystem × 9, Python × 3, OpenAPI drift × 2, and Vitest-picks-up-e2e — these plus two carried-forward debt items (D.1 restore `wildcards = "deny"`, D.2 reinstall `eslint-plugin-react-hooks`) are scoped in `impl/ci-cleanup-2.7-plan.md` with a 5.5–7.5 h estimate across five phases. **§13.7.7 D3 (Playwright CI stage) can now branch off a green Rust+Integration base** without waiting for §2.7 (D3's job scope doesn't intersect the broken TS/Python legs); the original "cleanup prerequisite" blocker is lifted.
 
 **Since the 2026-04-15 audit (from `a6773d6`)**, these have landed in order — all 25 through `743c9bd` now on `main`; the last 4 (WA1–WA3 + strategy update) still on `dev`:
 
@@ -72,8 +72,13 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 | `03d0411` | test(frontend): §13.7.7 D1 — Playwright tooling + `wacp-mock-runtime` bin | §13.7.7 / D1 |
 | `1f1e25a` | docs: §13.7.7 D1 inter-deliverable — file findings to perf-opt §12 + new `impl/ci-health-2026-04-17.md` | §13.7.7 / drift-filing |
 | `385ba71` | test(frontend): §13.7.7 D2 — five E2E spec files + prereq backend fixes | §13.7.7 / D2 |
+| `efd23e9` | ci: restore green — setup-mold, tsconfig.build split, lint drifts, cargo fmt | §2.1–§2.4 |
+| `eeda70e` | ci(deny): allow MIT-0 + workspace-path deps | §2.5 step 1 |
+| `9056b8a` | fix(console-api): clippy collapsible_match in ws.rs — allow-attr | §2.6 |
+| `0845acd` | ci(deny): allow CDLA-Permissive-2.0 + relax wildcards to warn | §2.5 step 2 |
+| `e380f04` | docs(impl): §2.7 full-fix plan + ci-health doc refresh post-merge | §2.7 plan |
 
-What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy) is in CI; runtime auth is constant-time via SHA-256 digest rekey; the full coverage-tooling stack (cargo-llvm-cov, Vitest v8, coverage.py, Codecov with per-component flags) is wired; Rust branch-coverage tests landed for T1–T11 (~11,900 lines; T11 `console-db` brought that crate from 55.6 % → 98.3 % region coverage via a new `src/testing.rs` fault-injection harness and 83 tests); frontend RTL tests landed for F1–F10 save F9 which was already green (~5,200 + ~2,100 additional lines for F7/F8/F10); a per-file isolated vitest runner plus a 1536 MB V8 heap cap keeps the now-much-larger frontend suite from crashing WSL; and `wacp-console/performance-optimization.md` aggregates the frontend-side `useEffect`-dep + spec-vs-impl drifts (§2.5) and the backend-side schema-vs-struct drifts (§9) that each session surfaces.
+What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy) is in CI; runtime auth is constant-time via SHA-256 digest rekey; the full coverage-tooling stack (cargo-llvm-cov, Vitest v8, coverage.py, Codecov with per-component flags) is wired; Rust branch-coverage tests landed for T1–T11 (~11,900 lines; T11 `console-db` brought that crate from 55.6 % → 98.3 % region coverage via a new `src/testing.rs` fault-injection harness and 83 tests); frontend RTL tests landed for F1–F10 save F9 which was already green (~5,200 + ~2,100 additional lines for F7/F8/F10); a per-file isolated vitest runner plus a 1536 MB V8 heap cap keeps the now-much-larger frontend suite from crashing WSL; `wacp-console/performance-optimization.md` aggregates the frontend-side `useEffect`-dep + spec-vs-impl drifts (§2.5) and the backend-side schema-vs-struct drifts (§9) that each session surfaces; and the §2.1–§2.6 CI cleanup restored the Rust + fmt + deny + Frontend-Lint + Integration surface by installing `rui314/setup-mold@v1` in every Rust-compiling job (10 jobs across 4 workflows), splitting `tsconfig.build.json` for `pnpm build`, fixing 9 lint drifts across 3 frontend files, allowing `MIT-0` + `CDLA-Permissive-2.0` in `deny.toml`, reshaping the wildcards check, and working around a new-in-rust-1.95.0 `clippy::collapsible_match` lint with an explicit `#[allow]` + comment (the match-guard fix fails because `axum::body::Bytes` isn't `Copy`).
 
 **Runtime (`wacp/`).** 15 Rust crates, ~1,280 Rust tests + TS matrix (10 packages + 7 verticals, ~1,000 tests) + Python SDK (104 tests across 3.11–3.13). All 35 gRPC RPCs fully wired across `AgentService`, `HighwayService`, `CoordinatorService`. REST gateway exposes 16 `/v1/*` endpoints + `/v1/ws`. OpenAPI drift-checked in CI. Stream A (A1–A9) closed all 8 Console-facing integration gaps; the 17 runtime-side stub/placeholder gaps identified in the subsequent implementation audit are all resolved. Port map canonicalized to `9090/9091/9092/9093/9094/9095`.
 
@@ -89,9 +94,11 @@ What this delivered, in English: supply-chain scanning (cargo-deny, SBOM, Trivy)
 
 **Working end-to-end against a live runtime:** discovery (roles, tools, verticals, types, search), profile CRUD with validation/versioning/export/import/clone, multi-user auth (Argon2id, CSRF double-submit, rate limiting, 256-bit bootstrap credential at 0o600), session launch + oversight (trail stream, gate queue, escalation inbox, refusal panel, workspace tree, injection bar across 7 WebSocket channels), startup recovery, cross-session pending aggregation.
 
-**Partially landed:** Playwright E2E (§13.7.7) — D1 (tooling) and D2 (five spec files: 7 unskipped passing, 9 `test.skip` with substantive unskip notes) landed on `dev`. D3 (Playwright CI stage), D4 (e2e/README.md), and D5 (audit closure + SEED refresh) remain. D3 is blocked on `impl/ci-health-2026-04-17.md` cleanup landing first.
+**Partially landed:** Playwright E2E (§13.7.7) — D1 (tooling) and D2 (five spec files: 7 unskipped passing, 9 `test.skip` with substantive unskip notes) landed on `dev`. D3 (Playwright CI stage), D4 (e2e/README.md), and D5 (audit closure + SEED refresh) remain. **D3's former blocker (CI cleanup commit) is lifted** — §2.1–§2.6 landed. D3 can now add its Playwright stage against the green Rust/Integration base; the Frontend Typecheck and TS/Python legs staying red on §2.7 drift don't intersect D3's job scope.
 
-**Not yet present (tracked, not regressions):** §13.7.7 D3/D4/D5, the five new Rust integration + chaos suites I1–I5 (§13.7.8; I6 landed via §13.7.6), and Codecov monthly ratchet (§13.7.10, deferred until the new baseline settles). All broken out with deliverables in `AUDIT-2026-04-15.md` §13.7. Supply-chain scanning, the F-series frontend sweep, the Rust branch-coverage sweep (T1–T11), the deterministic LLM stub provider + I6 integration test, §13.7.6b in its entirety, the §13.7.9 mutation-testing pipeline (awaiting first scheduled run), and §13.7.7 D1+D2 are all landed.
+CI pipeline cleanup (§2.1–§2.6 landed; §2.7 + D.1 + D.2 planned) — see `impl/ci-health-2026-04-17.md` + `impl/ci-cleanup-2.7-plan.md`. §2.7 plan is phased across five clusters (A cheap wins ~35 min, B types ~90–135 min, C python codegen ~60–90 min, D mechanical strict-mode ~90–120 min, E debt ~50 min). Full-fix principle: no `#[allow]` bandaids, no tsconfig exclusions as deferrals, no config relaxations.
+
+**Not yet present (tracked, not regressions):** §13.7.7 D3/D4/D5, §2.7 + D.1 + D.2 per plan, the five new Rust integration + chaos suites I1–I5 (§13.7.8; I6 landed via §13.7.6), and Codecov monthly ratchet (§13.7.10, deferred until the new baseline settles). All broken out with deliverables in `AUDIT-2026-04-15.md` §13.7. Supply-chain scanning, the F-series frontend sweep, the Rust branch-coverage sweep (T1–T11), the deterministic LLM stub provider + I6 integration test, §13.7.6b in its entirety, the §13.7.9 mutation-testing pipeline (awaiting first scheduled run), §13.7.7 D1+D2, and §2.1–§2.6 CI cleanup are all landed.
 
 ### Milestone history
 
@@ -211,38 +218,40 @@ One outstanding known issue from that work — `ProfilesPage.actions.test.tsx` O
 
 ### Resumption Point
 
-**M0–M7 merger, W1–W7 wiring, runtime implementation audit, §11 pre-release punch list (1–5), §12.1 tooling, §12.2 T1–T11, §12.3 F1–F10, audit §13.7.1–§13.7.5, §13.7.6, §13.7.6b in full, §13.7.9 (mutation-testing pipeline), and §13.7.7 D1+D2 (Playwright tooling + 5 E2E spec files)** all complete. Test totals: `wacp-coordinator` 387, `wacp-workspace` 65, `wacp-runtime` 109, `wacp-types` 45, `console-integration` 12 passing + 0 ignored, `pnpm test:e2e` 7 pass / 9 skip / 0 fail. Workspace clippy + fmt clean on the D2 edits.
+**M0–M7 merger, W1–W7 wiring, runtime implementation audit, §11 pre-release punch list (1–5), §12.1 tooling, §12.2 T1–T11, §12.3 F1–F10, audit §13.7.1–§13.7.5, §13.7.6, §13.7.6b in full, §13.7.9 (mutation-testing pipeline), §13.7.7 D1+D2 (Playwright tooling + 5 E2E spec files), and §2.1–§2.6 CI-pipeline cleanup** all complete. Test totals: `wacp-coordinator` 387, `wacp-workspace` 65, `wacp-runtime` 109, `wacp-types` 45, `console-integration` 12 passing + 0 ignored, `pnpm test:e2e` 7 pass / 9 skip / 0 fail. Workspace clippy + fmt clean.
 
-**§13.7.6b + §13.7.9 — fully closed/wired. §13.7.7 — D1+D2 landed; D3/D4/D5 remain.**
+**§13.7.6b + §13.7.9 + §2.1–§2.6 CI cleanup — fully closed/wired. §13.7.7 — D1+D2 landed; D3/D4/D5 remain. §2.7 + D.1 + D.2 — plan drafted, execution pending.**
 
 **Key new docs since last resumption:**
-- `impl/ci-health-2026-04-17.md` — CI red on `main` since 2026-04-15 across all five workflows. Three orthogonal causes + fix order. **Must resolve before §13.7.7 D3 can land green.**
-- `wacp-console/performance-optimization.md` §12 — four new drifts surfaced during §13.7.7 D1+D2, two still open:
-  - §12.1 console skips `bootstrap_if_needed` → **fixed** in `385ba71`.
-  - §12.2 mock-REST vertical-list shape mismatch → **fixed** in `385ba71`.
-  - §12.3 CI/tooling debt → pointer to `impl/ci-health-2026-04-17.md`.
-  - §12.4 forced-change deadlock (`authenticate_cookie` rejects the only route that can clear the flag) → **fixed** in `385ba71` via new `AuthAllowPendingChange` extractor.
-  - §12.5 `ProfilesPage` Create-New click unmounts React → **not fixed;** 30–60 min bisect recommended.
+- `impl/ci-health-2026-04-17.md` — now at `status: partial`. Header note records the §2.1–§2.6 merge to dev (`efd23e9..0845acd`) and points at the sequel plan. §2.7 subsection enumerates 9 pre-existing drift items surfaced during push verification; §2.1–§2.6 subsections all marked "Applied" with per-item SHAs.
+- **`impl/ci-cleanup-2.7-plan.md` (new)** — sequel plan covering §2.7 + two debt items (D.1 restore `wildcards = "deny"` via path+version pattern; D.2 reinstall `eslint-plugin-react-hooks`). Phased A/B/C/D/E, 5.5–7.5 h total. Every item has a local verification command and explicit root-fix (no bandaids).
+- `wacp-console/performance-optimization.md` §12 — four drifts surfaced during §13.7.7 D1+D2; the three CI-tooling items (§12.3) now fully addressed by §2.1–§2.6 + §2.7 plan. §12.5 `ProfilesPage` Create-New click unmounts React remains open (30–60 min bisect recommended).
 - §11.4 P0 audit pass on remaining Rust-enum-as-i32 sites is still open and high-ROI (~30–60 min).
 
 **Ephemeral tracker:** `/tmp/13-7-7-progress.md` holds the live D1–D5 deliverables checklist with SHAs. Rebuilt each session (not committed).
 
-**When resuming §13.7.7:**
-1. Read `AUDIT-2026-04-15.md` §13.7.7 + `impl/ci-health-2026-04-17.md` (~10 min).
-2. **CI-pipeline cleanup commit (prerequisite for D3)** — 1–2 h:
-   - Add `rui314/setup-mold@v1` to `ci-wacp.yml`, `ci-console.yml`, `coverage.yml`.
-   - Add `tsconfig.build.json` excluding `**/*.test.ts`, `**/*.test.tsx`, `**/test-helpers.tsx`, `**/test-setup.ts`; point `pnpm build` at it.
-   - Run `pnpm lint` locally, address remaining drifts (probably small once strict-mode drift is out of test files).
-   - `cargo fmt --all` once, commit.
-   - Push to scratch, verify all 5 workflows go green, then continue to D3.
-3. **§13.7.7 D3** — 1–2 h: add `e2e` job to `ci-console.yml` (build runtime + mock bin + console; `pnpm build`; `pnpm exec playwright test`; upload HTML report + Codecov with `playwright` flag).
-4. **§13.7.7 D4** — 30–60 min: `frontend/e2e/README.md` with local-run recipe, debug (`--ui`/`--debug`), snapshot updates, port map.
-5. **§13.7.7 D5** — 30 min: update `AUDIT-2026-04-15.md` §13.2/§13.5/§13.8 + SEED (mark §13.7.7 landed); fold the ephemeral tracker's remaining notes if any survive.
-6. **§13.7.8 (Rust integration I1–I5)** — 4–6 h. Fully independent of §13.7.7; can run in parallel.
-7. **§13.7.10 (Codecov monthly ratchet)** — still deferred until 2–3 `main` merges land §13.7.6b + §13.7.7 so baseline settles.
-8. **§13.7.9 first-run triage** — Monday after this lands (surviving mutants → killer tests; equivalent → `// mutants:skip`).
+**When resuming:**
 
-**Merge strategy:** current dev lead = 15 commits. Don't merge to main until CI-cleanup lands + CI goes green — otherwise main stays red and the §13.7.9 mutation cron surfaces against a broken workspace. Tag `wacp-runtime-v0.1.0` / `wacp-console-v0.1.0` once Rust branch-coverage floor clears 85%, first mutation run hits ≥85% per module, and §13.7.7 at least D3 is landed + green.
+**Primary track — §2.7 full-fix execution (per `impl/ci-cleanup-2.7-plan.md`):**
+1. Read `impl/ci-cleanup-2.7-plan.md` end-to-end (~15 min).
+2. **Phase A cheap wins** (~35 min, 3 commits): regenerate both `openapi.yaml` files (§2.7.2+§2.7.3); Vitest exclude `e2e/**` (§2.7.9); highway-ui `pnpm-workspace.yaml` → `package.json.pnpm.onlyBuiltDependencies` (§2.7.4).
+3. **Phase B types** (~90–135 min, 2 commits): build `@wacp/local` to `dist/` + wire ecosystem pre-build step (§2.7.6); wacp-cli `OperationType` / `Workflow` narrowings (§2.7.5).
+4. **Phase C python codegen** (~60–90 min, 1 commit): add `wacp/sdk-python/buf.gen.yaml` + betterproto plugin; `buf generate`; commit generated stubs to `src/wacp/proto/v1/`.
+5. **Phase D strict-mode sweep** (~90–120 min, 1 commit): fix all 54 test-file errors at source; do not reintroduce tsconfig exclude bypass.
+6. **Phase E debt cleanup** (~50 min, 2 commits): D.1 add `version = "0.1.0"` to 20 internal deps in root Cargo.toml + restore `wildcards = "deny"`; D.2 install `eslint-plugin-react-hooks` and configure.
+7. Verify per `impl/ci-cleanup-2.7-plan.md` §5 matrix. Target: 20 CI-triggered jobs, 20 green. Commit branch: `ci/cleanup-2.7` (new); fresh draft PR to `main` for `pull_request: branches: [main]` CI trigger; ff to `dev` when green.
+
+**Parallel track — §13.7.7 D3/D4/D5:**
+8. **§13.7.7 D3** — 1–2 h: add `e2e` job to `ci-console.yml` (build runtime + mock bin + console; `pnpm build`; `pnpm exec playwright test`; upload HTML report + Codecov with `playwright` flag). Former CI-cleanup prerequisite is lifted; D3 can start on current dev as-is (Rust base is green).
+9. **§13.7.7 D4** — 30–60 min: `frontend/e2e/README.md` with local-run recipe, debug (`--ui`/`--debug`), snapshot updates, port map.
+10. **§13.7.7 D5** — 30 min: update `AUDIT-2026-04-15.md` §13.2/§13.5/§13.8 + SEED (mark §13.7.7 landed); fold the ephemeral tracker's remaining notes.
+
+**Independent tracks:**
+11. **§13.7.8 (Rust integration I1–I5)** — 4–6 h. Fully independent of §13.7.7; can run in parallel.
+12. **§13.7.10 (Codecov monthly ratchet)** — still deferred until 2–3 `main` merges land §13.7.6b + §13.7.7 so baseline settles.
+13. **§13.7.9 first-run triage** — next Monday cron (surviving mutants → killer tests; equivalent → `// mutants:skip`).
+
+**Merge strategy:** current dev lead = 21 commits. Dev→main ff can happen **after** §2.7 + D.1 + D.2 land (20 CI jobs green) AND §13.7.7 at least D3 lands. Doing it now would push partial-green to main, which is fine *if* the §2.7 plan is on the near horizon — otherwise main stays partial-red. Recommend: complete §2.7 first (5.5–7.5 h), then ff to main in one shot. Tag `wacp-runtime-v0.1.0` / `wacp-console-v0.1.0` once Rust branch-coverage floor clears 85%, first mutation run hits ≥85% per module, and §13.7.7 at least D3 is landed + green.
 
 ### Hollow Code Inventory — closed
 
@@ -360,4 +369,4 @@ wacp-platform/
 | 11 | `wcon-test` | Test Strategy |
 | 12 | `wcon-auth` | Authentication & Authorization |
 
-*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6. Refreshed 2026-04-16 with post-audit progress and §13.7 task packages; refreshed again same-day by Claude Opus 4.7 (1M context) after §13.7.1–§13.7.5 landed on `dev`; refreshed 2026-04-17 after §13.7.6 (stub provider + I6) landed and §13.7.6b (runtime wiring follow-up) was carved out; refreshed again same-day after dev→main fast-forward and §13.7.6b WA1/WA2/WA3 landed, with WA3.5 + WA3.6 carved out as the remaining gate-fan and auto-integration pieces; refreshed 2026-04-17 (third pass) after §13.7.6b WA3.5 + WA3.6 landed in the working tree; refreshed 2026-04-17 (fourth pass) after §13.7.6b was fully closed via WA5 + T7.3 + WorkspaceState fix + un-ignore sweep; refreshed 2026-04-17 (fifth pass) after §13.7.9 mutation-testing pipeline wired (weekly Monday cron, 4 targets, ≥85% threshold); refreshed 2026-04-17 (sixth pass) after §13.7.7 D1 (`03d0411`: Playwright tooling + new `wacp-mock-runtime` bin in `console-test-support`) + inter-deliverable drift-filing (`1f1e25a`: perf-opt §12 + new `impl/ci-health-2026-04-17.md`) + §13.7.7 D2 (`385ba71`: five E2E spec files — 7 unskipped green / 9 substantively-skipped — plus three backend-drift fixes: console bootstrap wiring, mock REST shape, forced-change authenticator deadlock). `pnpm test:e2e` 7 pass / 9 skip / 0 fail in ~11 s. CI on main has been RED since 2026-04-15 across all five workflows — §13.7.7 D3 blocked on CI-pipeline cleanup; see `impl/ci-health-2026-04-17.md` for fix order.*
+*WACP Platform — authored by Akil Abderrahim and Claude Opus 4.6. Refreshed 2026-04-16 with post-audit progress and §13.7 task packages; refreshed again same-day by Claude Opus 4.7 (1M context) after §13.7.1–§13.7.5 landed on `dev`; refreshed 2026-04-17 after §13.7.6 (stub provider + I6) landed and §13.7.6b (runtime wiring follow-up) was carved out; refreshed again same-day after dev→main fast-forward and §13.7.6b WA1/WA2/WA3 landed, with WA3.5 + WA3.6 carved out as the remaining gate-fan and auto-integration pieces; refreshed 2026-04-17 (third pass) after §13.7.6b WA3.5 + WA3.6 landed in the working tree; refreshed 2026-04-17 (fourth pass) after §13.7.6b was fully closed via WA5 + T7.3 + WorkspaceState fix + un-ignore sweep; refreshed 2026-04-17 (fifth pass) after §13.7.9 mutation-testing pipeline wired (weekly Monday cron, 4 targets, ≥85% threshold); refreshed 2026-04-17 (sixth pass) after §13.7.7 D1 + D2 landed; refreshed 2026-04-17 (seventh pass, this session) after §2.1–§2.6 CI-pipeline cleanup landed on `dev` (`efd23e9..0845acd` plus doc refresh `e380f04` — five commits restoring Rust/fmt/deny/Frontend-Lint/Integration/Coverage-Rust to green) and the §2.7 full-fix plan was drafted at `impl/ci-cleanup-2.7-plan.md` (nine drift items + two carried-forward debt items, 5.5–7.5 h estimate, no-technical-debt principle). Dev is now 21 commits ahead of main; awaiting §2.7 execution + §13.7.7 D3 before the next dev→main ff.*

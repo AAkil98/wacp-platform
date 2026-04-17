@@ -126,17 +126,39 @@ Naming convention `WAx` ("wiring, agent-side x") distinguishes from the `Wx` pha
 
 **Validation.** T7.3 un-`#[ignore]`s; `cargo test -p console-integration --test lifecycle -- t7_3_session_completes_emits_final_frame` green.
 
-### 3.3 Phase WA3 — Checkpoints fan into gates
+### 3.3 Phase WA3 — CreateCheckpoint forwards to workspace actor (LANDED, narrowed)
 
-**What.** Provisional checkpoints for gate-requiring taxonomy types create `GateEvent`s on the highway.
+**What.** Agent checkpoints now flow to the bound workspace actor. The actor pushes onto `state.checkpoint_register`, updates `resource_meter`, emits `WorkspaceEvent::CheckpointCreated`, and auto-signals per protocol §7.2.
 
-**Files.**
-- Modified: `wacp-runtime/src/init.rs` — `AgentRequest::CreateCheckpoint` branch. Two-step: persist via the workspace actor, then consult `GateController`.
-- Possibly modified: `wacp-coordinator/src/gate_controller` — expose the policy check if it is currently crate-private.
-- Modified: the highway outbound path — emit the `GateEvent` so `StreamGates` subscribers see it.
-- New: unit tests covering (a) `provisional + gated type` → gate emitted, (b) `final + gated type` → no gate, (c) `provisional + non-gated type` → no gate, (d) concurrent checkpoints on the same workspace don't produce duplicate gates for the same content hash.
+**Status.** Landed in `<WA3 sha>`. Coding spec at `wacp/impl/wa3-checkpoint-forward.md`.
 
-**Validation.** T7.2 un-`#[ignore]`s; T7.10 un-`#[ignore]`s (the W4→W6 latency scenario becomes observable). Both green.
+**Scope narrowed.** The original WA3 plan folded gate fan-out into this phase. Implementation revealed the machinery does not exist: `GateType` (wacp-types/src/enums.rs:143) has no `CheckpointApproval` variant, `GateController::open_gate` is task-based, and there is no gate-resolution→actor-resume callback. Adding those is ~150–200 LOC of new cross-cutting surface (proto enum addition, new controller method, new `WorkspaceEvent` variant for resume, interceptor wiring for the resolution path). Carved out as WA3.5.
+
+### 3.3.5 Phase WA3.5 — Checkpoint-approval gates (new, not started)
+
+**What.** Provisional checkpoints of gate-requiring taxonomy types create `GateEvent`s on the highway outbound stream; `RespondToGate` resolutions feed back into the workspace actor to resume the paused workspace.
+
+**Scope.**
+- Add `GateType::CheckpointApproval` to `wacp-types/src/enums.rs` (+ proto companion in `primitives.proto`).
+- New method `GateController::open_checkpoint_gate(workspace_id, checkpoint_id, checkpoint_type, timeout_ms, fallback)`.
+- Extend `AgentRequest::CreateCheckpoint` handler: after the actor forward, if the checkpoint is `Provisional` and the type is gate-requiring per the taxonomy, call `open_checkpoint_gate` and fan the resulting `GateEvent` into `self.gate_subs`.
+- Extend `HighwayRequest::RespondToGate`: on approve/modify, send a new `CoordinatorCommand::CheckpointApproved { checkpoint_id }` (or equivalent) to the workspace actor; on reject, send `CheckpointRejected`. Actor transitions Blocked→Active on approve.
+
+**Effort.** 4–5 hours.
+
+**Validation.** T7.2 un-`#[ignore]`s; T7.10 un-`#[ignore]`s (W4→W6 latency measurable).
+
+### 3.3.6 Phase WA3.6 — Auto-integration on Complete (new, not started)
+
+**What.** Discovered while writing the T7.3 un-ignore: when an agent emits `Complete`, the FSM transitions `Active→Integrating`, but nothing advances `Integrating→Closed`. Today only `CoordinatorRequest::TriggerIntegration` (init.rs:1654) produces the `IntegrationSucceeded` command that closes the workspace, and no caller triggers it automatically.
+
+**Scope.**
+- In `coordinator::handle_event` (`wacp-coordinator/src/orchestrator.rs:80`), on `WorkspaceEvent::StateChanged { to: Integrating }`, synchronously invoke `IntegrationEngine::integrate` (already present at `wacp-coordinator/src/integration.rs:49`) against the workspace's last checkpoint; on `Success`, send `CoordinatorCommand::IntegrationSucceeded` to the workspace handle; on `Conflict`/`Failed`, send the corresponding command.
+- This is coordinator-side only, no runtime changes.
+
+**Effort.** 2–3 hours.
+
+**Validation.** T7.3 un-`#[ignore]`s.
 
 ### 3.4 Phase WA4 — **removed**
 
@@ -186,7 +208,10 @@ WA5: Dispatch-failure injection (harness-side)                ~2 hours
                     `// Future:` comments in each test file.)
 ```
 
-**Total effort:** 9–12 working hours (~1.5 focused days) after removing the now-unneeded WA4.
+**Total effort (revised after WA1–WA3 implementation):**
+- Landed: WA1 (2 h), WA2 (2 h — SDK header bug unlocked as side effect), WA3 narrowed (1.5 h). Total landed ≈ 5.5 h.
+- Remaining: WA3.5 (4–5 h), WA3.6 (2–3 h), WA5 harness (2 h), un-ignore sweep (1 h). Total remaining ≈ 9–11 h.
+- Full §13.7.6b now ≈ 15–17 h — the original 9–12 h estimate was ~50 % undersized, mainly because the gate-fan-out and auto-integration pieces weren't visible from the inventory sweep. Wiring-strategy-b's coverage claim revised accordingly.
 
 **Critical path:** WA3 (checkpoints → gates). Most of the intra-runtime interaction surface lands here. Everything else is pattern-matching onto established plumbing.
 

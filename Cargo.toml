@@ -97,6 +97,7 @@ wacp-clock = { path = "wacp/crates/wacp-clock" }
 wacp-coordinator = { path = "wacp/crates/wacp-coordinator" }
 wacp-coordinator-sdk = { path = "wacp/crates/wacp-coordinator-sdk" }
 wacp-fsm = { path = "wacp/crates/wacp-fsm" }
+wacp-llm = { path = "wacp/crates/wacp-llm" }
 wacp-permissions = { path = "wacp/crates/wacp-permissions" }
 wacp-proto = { path = "wacp/crates/wacp-proto" }
 wacp-recovery = { path = "wacp/crates/wacp-recovery" }

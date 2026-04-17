@@ -523,8 +523,13 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite 0.27.0",
+ "tonic",
  "tracing",
  "uuid",
+ "wacp-llm",
+ "wacp-sdk",
+ "wacp-transport",
+ "wacp-types",
 ]
 
 [[package]]
@@ -3849,11 +3854,15 @@ dependencies = [
 name = "wacp-llm"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "futures",
  "rand 0.9.4",
  "reqwest",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
+ "sha2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",

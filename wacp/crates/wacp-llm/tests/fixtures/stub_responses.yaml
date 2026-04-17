@@ -1,0 +1,95 @@
+# Baseline fixture consumed by wacp-llm unit tests and console-integration's
+# llm_stub_e2e / lifecycle integration tests. See wcon-llm-stub §4 for the
+# format. When adding a new integration scenario, prefer extending this file
+# over authoring a one-off — a single source of truth keeps drift in check.
+
+version: 1
+
+# Fallback used whenever no entry matches the request. Intentionally bland so
+# accidental fall-throughs in tests don't pretend to be a real response.
+default:
+  content: "stub default response"
+  output_tokens: 4
+  tool_calls: []
+
+entries:
+  # --- Coordinator-facing prompts --------------------------------------------
+  # Matches any prompt whose first system message starts with "You are a
+  # coordinator". Used by llm_stub_e2e to drive the decompose turn: the stub
+  # returns a tool call describing a 1-task decomposition.
+  - match:
+      kind: prefix
+      value: "system:\nYou are a coordinator"
+    response:
+      content: ""
+      output_tokens: 8
+      tool_calls:
+        - id: "call_decompose"
+          name: "decompose_goal"
+          arguments:
+            tasks:
+              - id: "task-1"
+                description: "stub-scripted task 1"
+
+  # --- Worker-facing prompts -------------------------------------------------
+  # Matches any prompt whose first system message starts with "You are a
+  # worker". The worker response emits a provisional checkpoint to trigger a
+  # gate (task_approval), which the test then resolves via the console REST
+  # API.
+  - match:
+      kind: prefix
+      value: "system:\nYou are a worker"
+    response:
+      content: "proposing checkpoint"
+      output_tokens: 3
+      tool_calls:
+        - id: "call_ckpt"
+          name: "create_checkpoint"
+          arguments:
+            type: "task_approval"
+            status: "provisional"
+            payload: "eyJzdW1tYXJ5IjoiYXBwcm92ZSBtZSJ9"   # {"summary":"approve me"}
+
+  # After the gate is approved, the next worker turn (which includes the prior
+  # exchange) contains "gate resolved" — the worker then emits Complete.
+  - match:
+      kind: contains
+      value: "gate resolved"
+    response:
+      content: "all done"
+      output_tokens: 2
+      tool_calls:
+        - id: "call_done"
+          name: "emit_signal"
+          arguments:
+            type: "complete"
+
+  # --- Terminal paths --------------------------------------------------------
+  # Convenience — any prompt that contains the literal phrase "emit complete"
+  # returns a complete signal. Used by tests that want a single-turn completion
+  # without going through a gate.
+  - match:
+      kind: contains
+      value: "emit complete"
+    response:
+      content: "done"
+      output_tokens: 1
+      tool_calls:
+        - id: "call_complete"
+          name: "emit_signal"
+          arguments:
+            type: "complete"
+
+  # Escalation path — used by tests that exercise the escalation channel.
+  - match:
+      kind: contains
+      value: "need human input"
+    response:
+      content: ""
+      output_tokens: 1
+      tool_calls:
+        - id: "call_escalate"
+          name: "emit_signal"
+          arguments:
+            type: "escalation"
+            context: "eyJyZWFzb24iOiJzdHViLWVzY2FsYXRpb24ifQ=="  # {"reason":"stub-escalation"}

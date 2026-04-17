@@ -8,19 +8,19 @@
 use std::pin::Pin;
 use std::time::Duration;
 
-use futures::stream;
 use futures::StreamExt;
+use futures::stream;
 use serde_json::json;
 
 use wacp_llm::error::{ErrorOrigin, ErrorPersistence, LlmError};
+use wacp_llm::result::TokenUsage;
 use wacp_llm::retry::{
-    apply_retry_after, compute_delay, should_retry, BackoffStrategy, RetryConfig,
+    BackoffStrategy, RetryConfig, apply_retry_after, compute_delay, should_retry,
 };
 use wacp_llm::stream::{
-    parse_anthropic_event, parse_ndjson_event, parse_openai_event, parse_sse_line, SseLine,
-    StreamEvent, StreamHandle,
+    SseLine, StreamEvent, StreamHandle, parse_anthropic_event, parse_ndjson_event,
+    parse_openai_event, parse_sse_line,
 };
-use wacp_llm::result::TokenUsage;
 
 // ===================================================================
 // 1. Provider error mapping
@@ -294,10 +294,7 @@ mod retry_classifier {
     fn arm_5xx_retryable() {
         for status in [500u16, 502, 503] {
             let err = LlmError::from_status(status, "server error");
-            assert!(
-                should_retry(&err),
-                "5xx status {status} must be retryable"
-            );
+            assert!(should_retry(&err), "5xx status {status} must be retryable");
         }
     }
 
@@ -586,7 +583,11 @@ mod streaming_parser {
             }
         }
 
-        assert_eq!(events.len(), 4, "Expected 4 events: 2 content + 1 usage + 1 done");
+        assert_eq!(
+            events.len(),
+            4,
+            "Expected 4 events: 2 content + 1 usage + 1 done"
+        );
         assert_eq!(
             events[0],
             StreamEvent::ContentDelta {
@@ -606,10 +607,22 @@ mod streaming_parser {
     #[test]
     fn complete_valid_sse_stream_anthropic() {
         let lines = vec![
-            ("message_start", r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":50,"output_tokens":0}}}"#),
-            ("content_block_delta", r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#),
-            ("content_block_delta", r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" there"}}"#),
-            ("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}"#),
+            (
+                "message_start",
+                r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":50,"output_tokens":0}}}"#,
+            ),
+            (
+                "content_block_delta",
+                r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#,
+            ),
+            (
+                "content_block_delta",
+                r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" there"}}"#,
+            ),
+            (
+                "message_delta",
+                r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}"#,
+            ),
             ("message_stop", r#"{"type":"message_stop"}"#),
         ];
 
@@ -622,12 +635,7 @@ mod streaming_parser {
 
         assert_eq!(events.len(), 5);
         assert!(matches!(events[0], StreamEvent::Usage { .. }));
-        assert_eq!(
-            events[1],
-            StreamEvent::ContentDelta {
-                delta: "Hi".into()
-            }
-        );
+        assert_eq!(events[1], StreamEvent::ContentDelta { delta: "Hi".into() });
         assert_eq!(
             events[2],
             StreamEvent::ContentDelta {
@@ -717,9 +725,8 @@ mod streaming_parser {
             Err(LlmError::transport("connection reset by peer", true)),
         ];
 
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::iter(events));
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::iter(events));
 
         let handle = StreamHandle::new(inner, "gpt-4o".to_string(), Some("req-1".to_string()));
         let mut stream = handle.into_stream();
@@ -744,15 +751,12 @@ mod streaming_parser {
     #[tokio::test]
     async fn mid_event_disconnect_no_done_event() {
         // A stream that yields content but never sends Done
-        let events: Vec<Result<StreamEvent, LlmError>> = vec![
-            Ok(StreamEvent::ContentDelta {
-                delta: "partial".into(),
-            }),
-        ];
+        let events: Vec<Result<StreamEvent, LlmError>> = vec![Ok(StreamEvent::ContentDelta {
+            delta: "partial".into(),
+        })];
 
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::iter(events));
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::iter(events));
 
         let handle = StreamHandle::new(inner, "test-model".to_string(), None);
         let mut stream = handle.into_stream();
@@ -770,9 +774,8 @@ mod streaming_parser {
     async fn empty_stream_yields_nothing() {
         let events: Vec<Result<StreamEvent, LlmError>> = vec![];
 
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::iter(events));
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::iter(events));
 
         let handle = StreamHandle::new(inner, "gpt-4o".to_string(), None);
         let mut stream = handle.into_stream();
@@ -822,9 +825,8 @@ mod streaming_parser {
             Ok(StreamEvent::Done),
         ];
 
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::iter(events));
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::iter(events));
 
         let handle = StreamHandle::new(inner, "gpt-4o".to_string(), Some("req-42".to_string()));
         assert_eq!(handle.model, "gpt-4o");
@@ -834,7 +836,9 @@ mod streaming_parser {
         assert_eq!(collected.len(), 3);
 
         let first = collected[0].as_ref().unwrap();
-        assert!(matches!(first, StreamEvent::ContentDelta { delta } if delta == "Complete answer in one chunk."));
+        assert!(
+            matches!(first, StreamEvent::ContentDelta { delta } if delta == "Complete answer in one chunk.")
+        );
 
         let second = collected[1].as_ref().unwrap();
         assert!(matches!(second, StreamEvent::Usage { usage } if usage.output_tokens == 8));
@@ -897,7 +901,8 @@ mod streaming_parser {
     #[test]
     fn anthropic_content_block_start_text_type_ignored() {
         // Text blocks at content_block_start are not tool_use, so return None
-        let data = r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
+        let data =
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
         let result = parse_anthropic_event("content_block_start", data);
         assert_eq!(result, None);
     }
@@ -1030,9 +1035,8 @@ mod streaming_parser {
 
     #[test]
     fn stream_handle_fields_accessible() {
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::empty());
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::empty());
         let handle = StreamHandle::new(inner, "test-model".into(), Some("req-id".into()));
         assert_eq!(handle.model, "test-model");
         assert_eq!(handle.request_id.as_deref(), Some("req-id"));
@@ -1040,9 +1044,8 @@ mod streaming_parser {
 
     #[test]
     fn stream_handle_no_request_id() {
-        let inner: Pin<
-            Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>,
-        > = Box::pin(stream::empty());
+        let inner: Pin<Box<dyn futures::Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
+            Box::pin(stream::empty());
         let handle = StreamHandle::new(inner, "model".into(), None);
         assert!(handle.request_id.is_none());
     }

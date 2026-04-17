@@ -15,6 +15,10 @@ pub mod types;
 pub use adapter::{CompletionOptions, LlmAdapter};
 pub use cost::{CostTracker, ModelPricing, calculate_cost};
 pub use error::{ErrorOrigin, ErrorPersistence, LlmError};
+pub use providers::{
+    ProviderConfig, StubAdapter, StubFixtures, StubMatcher, StubResponse, StubToolCall,
+    build_adapter,
+};
 pub use rate_limit::{RateLimitConfig, RateLimiter};
 pub use result::{CompletionResult, Cost, ModelInfo, ProviderHealth, TokenUsage, ToolCall};
 pub use retry::{BackoffStrategy, RetryConfig};

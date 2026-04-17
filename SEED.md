@@ -19,7 +19,7 @@ They are shipped as two binaries with gRPC between them; the monorepo exists for
 
 ## Current State (Post M0–M7 merge + W1–W7 wiring + post-audit workstream)
 
-**Branch:** `dev`, 5 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits), then §13.7.6b WA1/WA2/WA3 + strategy-doc update + WA3.5/WA3.6 + deferral docs landed on dev. Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`) plus the new `coverage` workflow.
+**Branch:** `dev` @ `d97ba7a`, 6 commits ahead of `main` @ `743c9bd`. The dev→main batched merge ran 2026-04-17 morning (fast-forward, 21 commits), then §13.7.6b WA1/WA2/WA3 + strategy-doc update + seed refresh + WA3.5/WA3.6 + deferral docs landed on dev. Working tree clean. CI green on all five workflows (`ci-lint`, `ci-wacp`, `ci-console`, `release-runtime`, `release-console`) plus the new `coverage` workflow.
 
 **Since the 2026-04-15 audit (from `a6773d6`)**, these have landed in order — all 25 through `743c9bd` now on `main`; the last 4 (WA1–WA3 + strategy update) still on `dev`:
 

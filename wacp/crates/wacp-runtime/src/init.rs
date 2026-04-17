@@ -913,11 +913,12 @@ impl Runtime {
                 let checkpoint_id = format!("cp-{cp_id}");
 
                 // Index the checkpoint for later retrieval via GetCheckpoint.
+                // ResourceUsage impls Copy, so no `.clone()` on that field.
                 self.checkpoint_index.insert(
                     checkpoint_id.clone(),
                     CheckpointRecord {
                         content_hash: hash_bytes,
-                        workspace_id,
+                        workspace_id: workspace_id.clone(),
                         checkpoint_type: request.r#type.clone(),
                         intent: request.intent.clone(),
                         status: request.status,
@@ -925,6 +926,51 @@ impl Runtime {
                         resource_usage: request.resource_usage,
                     },
                 );
+
+                // WA3: forward to the workspace actor so the checkpoint is
+                // pushed onto state.checkpoint_register, resource_meter is
+                // updated, and WorkspaceEvent::CheckpointCreated +
+                // auto-Signal(Checkpoint) events fire. If the actor has
+                // already terminated the response still succeeds — the
+                // payload is archived via the index above; this matches a
+                // "recorded but not observed" semantics.
+                let ws_id = WorkspaceId::from(workspace_id.as_str());
+                if let Some(handle) = self.coordinator.handle(&ws_id) {
+                    let status =
+                        wacp_transport::wacp_v1::CheckpointStatus::try_from(request.status)
+                            .map(proto_to_checkpoint_status)
+                            .unwrap_or(CheckpointStatus::Provisional);
+                    let confidence =
+                        wacp_transport::wacp_v1::Confidence::try_from(request.confidence)
+                            .map(proto_to_confidence)
+                            .unwrap_or(Confidence::High);
+                    let resource_usage = request.resource_usage.as_ref().map(|ru| ResourceUsage {
+                        tokens: ru.tokens,
+                        wall_time_ms: ru.wall_time_ms,
+                        storage_bytes: ru.storage_bytes,
+                        network_bytes: ru.network_bytes,
+                        cost_micros: ru.cost_micros,
+                    });
+                    if handle
+                        .agent_tx
+                        .send(wacp_workspace::AgentMessage::CreateCheckpoint {
+                            checkpoint_type: request.r#type.clone(),
+                            payload: request.payload.clone(),
+                            content_hash: hash_hex.clone(),
+                            intent: request.intent.clone(),
+                            status,
+                            confidence,
+                            resource_usage,
+                        })
+                        .await
+                        .is_err()
+                    {
+                        tracing::warn!(
+                            workspace_id = %workspace_id,
+                            "checkpoint actor-forward failed: channel closed"
+                        );
+                    }
+                }
 
                 let response = wacp_transport::wacp_v1::CreateCheckpointResponse {
                     checkpoint_id,
@@ -1883,6 +1929,27 @@ fn envelope_to_proto(envelope: &Envelope) -> wacp_transport::wacp_v1::Envelope {
         priority: envelope.priority as i32,
         timestamp: None,
         origin: envelope.origin as i32,
+    }
+}
+
+/// Convert a proto `CheckpointStatus` into the internal enum. Used by WA3
+/// when forwarding checkpoints to the workspace actor. Unknown values fall
+/// back to `Provisional`.
+fn proto_to_checkpoint_status(s: wacp_transport::wacp_v1::CheckpointStatus) -> CheckpointStatus {
+    use wacp_transport::wacp_v1::CheckpointStatus as P;
+    match s {
+        P::Unspecified | P::Provisional => CheckpointStatus::Provisional,
+        P::Final => CheckpointStatus::Final,
+    }
+}
+
+/// Convert a proto `Confidence` into the internal enum. Used by WA3.
+fn proto_to_confidence(c: wacp_transport::wacp_v1::Confidence) -> Confidence {
+    use wacp_transport::wacp_v1::Confidence as P;
+    match c {
+        P::Unspecified | P::High => Confidence::High,
+        P::Medium => Confidence::Medium,
+        P::Low => Confidence::Low,
     }
 }
 

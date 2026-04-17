@@ -929,6 +929,142 @@ async fn wa2_emit_signal_unknown_workspace_returns_not_found() {
     assert!(err.1.contains("not running"), "got: {}", err.1);
 }
 
+// ── WA3 — CreateCheckpoint forwards to the workspace actor ──
+
+async fn create_checkpoint_via_handler(
+    rt: &mut Runtime,
+    workspace_id: &str,
+    checkpoint_type: &str,
+    payload: &[u8],
+    status: wacp_v1::CheckpointStatus,
+    confidence: wacp_v1::Confidence,
+) -> wacp_v1::CreateCheckpointResponse {
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_agent_request(wacp_transport::AgentRequest::CreateCheckpoint {
+        workspace_id: workspace_id.into(),
+        request: wacp_v1::CreateCheckpointRequest {
+            r#type: checkpoint_type.into(),
+            payload: payload.to_vec(),
+            intent: "wa3-intent".into(),
+            status: status as i32,
+            confidence: confidence as i32,
+            resource_usage: None,
+            client_request_id: "cp-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    reply_rx.await.expect("reply").expect("status")
+}
+
+#[tokio::test]
+async fn wa3_create_checkpoint_updates_actor_state() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-goal").await;
+
+    let resp = create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "artifact",
+        b"payload-bytes",
+        wacp_v1::CheckpointStatus::Provisional,
+        wacp_v1::Confidence::High,
+    )
+    .await;
+    assert!(!resp.checkpoint_id.is_empty());
+    assert!(!resp.content_hash.is_empty());
+
+    // The actor emits `CheckpointCreated` with a matching content hash.
+    let ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(e, WorkspaceEvent::CheckpointCreated(_))
+    })
+    .await
+    .expect("checkpoint_created event");
+    if let WorkspaceEvent::CheckpointCreated(cp) = ev {
+        assert_eq!(cp.content_hash, resp.content_hash);
+        assert_eq!(cp.checkpoint_type, "artifact");
+        assert_eq!(cp.status, CheckpointStatus::Provisional);
+    }
+}
+
+#[tokio::test]
+async fn wa3_create_checkpoint_emits_auto_signal() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-autosignal").await;
+    create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "artifact",
+        b"p",
+        wacp_v1::CheckpointStatus::Provisional,
+        wacp_v1::Confidence::Medium,
+    )
+    .await;
+
+    // The actor's `handle_create_checkpoint` auto-emits a Signal(Checkpoint)
+    // after the CheckpointCreated event.
+    let ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::Signal(s) if s.signal_type == SignalType::Checkpoint
+        )
+    })
+    .await;
+    assert!(ev.is_some(), "expected auto Signal(Checkpoint)");
+}
+
+#[tokio::test]
+async fn wa3_create_checkpoint_unknown_workspace_still_persists() {
+    // When the workspace actor is absent (either never created or already
+    // terminated), the checkpoint is still hashed, persisted to the CAS, and
+    // indexed for GetCheckpoint. The response succeeds; no actor event fires.
+    let mut rt = test_runtime();
+    let resp = create_checkpoint_via_handler(
+        &mut rt,
+        "ws-does-not-exist",
+        "artifact",
+        b"orphan-payload",
+        wacp_v1::CheckpointStatus::Final,
+        wacp_v1::Confidence::Low,
+    )
+    .await;
+    assert!(!resp.checkpoint_id.is_empty());
+    assert!(!resp.content_hash.is_empty());
+
+    // No CheckpointCreated event should arrive within a short window.
+    let ev = drain_until(&mut rt, std::time::Duration::from_millis(200), |e| {
+        matches!(e, WorkspaceEvent::CheckpointCreated(_))
+    })
+    .await;
+    assert!(ev.is_none(), "no actor means no CheckpointCreated event");
+}
+
+#[tokio::test]
+async fn wa3_proto_status_confidence_roundtrip() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa3-roundtrip").await;
+    create_checkpoint_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        "observation",
+        b"data",
+        wacp_v1::CheckpointStatus::Final,
+        wacp_v1::Confidence::Low,
+    )
+    .await;
+
+    let ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(e, WorkspaceEvent::CheckpointCreated(_))
+    })
+    .await
+    .expect("event");
+    if let WorkspaceEvent::CheckpointCreated(cp) = ev {
+        assert_eq!(cp.status, CheckpointStatus::Final);
+        assert_eq!(cp.confidence, Confidence::Low);
+        assert_eq!(cp.checkpoint_type, "observation");
+    }
+}
+
 #[tokio::test]
 async fn wa2_emit_started_from_idle_emits_fsm_error_event() {
     // Submit a fresh goal — the workspace starts in Idle. The FSM only

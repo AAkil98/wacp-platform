@@ -37,6 +37,7 @@ allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "MIT",
+    "MIT-0",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
@@ -63,6 +64,10 @@ license-files = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# `{ workspace = true }` path deps surface as wildcards to cargo-deny's ban
+# checker; allow them explicitly so the workspace-member re-exports don't
+# trip the gate. External (crates.io) wildcards still fail.
+allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"
 external-default-features = "allow"

@@ -14,9 +14,9 @@
     "test:changed": "vitest run --changed",
     "test:ci": "vitest run --coverage",
     "test:isolated": "bash scripts/run-tests-isolated.sh",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
+    "test:e2e": "bash scripts/e2e-cleanup.sh && playwright test",
+    "test:e2e:ui": "bash scripts/e2e-cleanup.sh && playwright test --ui",
+    "test:e2e:debug": "bash scripts/e2e-cleanup.sh && playwright test --debug",
     "coverage": "vitest run --coverage",
     "gen:api": "openapi-typescript ../openapi.yaml -o src/api/types.ts"
   },

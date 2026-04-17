@@ -19,12 +19,18 @@ pub struct RestState {
     pub verticals: Arc<HashMap<String, VerticalManifest>>,
 }
 
-/// Summary returned in the list endpoint.
+/// Summary returned in the list endpoint. Shape matches
+/// `console_runtime::rest_client::VerticalSummary` so the console's real
+/// REST client can deserialize the mock's response without drift. See
+/// perf-opt §12.2 for the mismatch this replaced.
 #[derive(Serialize)]
 struct VerticalListItem {
     id: String,
     name: String,
     defining_constraint: String,
+    task_type_count: u32,
+    workflow_count: u32,
+    tool_count: u32,
 }
 
 /// Build the Axum router for the mock REST gateway.
@@ -43,6 +49,9 @@ async fn list_verticals(State(state): State<RestState>) -> impl IntoResponse {
             id: m.id.clone(),
             name: m.name.clone(),
             defining_constraint: m.defining_constraint.clone(),
+            task_type_count: m.task_types.len() as u32,
+            workflow_count: m.workflows.len() as u32,
+            tool_count: m.tool_policies.len() as u32,
         })
         .collect();
     Json(items)

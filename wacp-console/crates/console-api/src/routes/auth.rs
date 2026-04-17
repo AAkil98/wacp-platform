@@ -22,7 +22,7 @@ use console_db::queries::{user_sessions, users};
 
 use crate::AppState;
 use crate::error::ApiError;
-use crate::middleware::{Auth, RequestContext, is_bearer_auth, validate_csrf};
+use crate::middleware::{Auth, AuthAllowPendingChange, RequestContext, is_bearer_auth, validate_csrf};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -217,11 +217,16 @@ struct ChangePasswordRequest {
 
 async fn change_password(
     State(state): State<Arc<AppState>>,
-    auth: Auth,
+    auth: AuthAllowPendingChange,
     ctx: RequestContext,
     headers: HeaderMap,
     Json(body): Json<ChangePasswordRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // Bearer tokens are `AuthAllowPendingChange::Rejection`-ed upstream; CSRF
+    // enforcement here is for cookie-auth'd state-changing requests only, and
+    // that's what this handler accepts. `is_bearer_auth(&headers)` always
+    // evaluates to `false` for this route — kept for symmetry with the other
+    // state-changing handlers.
     validate_csrf(&headers, is_bearer_auth(&headers)).map_err(ApiError::from)?;
 
     // Get user with password hash

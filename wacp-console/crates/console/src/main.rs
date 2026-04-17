@@ -126,6 +126,38 @@ async fn main() -> anyhow::Result<()> {
             run_migrations(&pool).await?;
             info!("database migrations applied");
 
+            // First-launch bootstrap: create an admin + one-time password if the
+            // users table is empty. Writes the generated credential to
+            // `$XDG_STATE_HOME/wacp-console/bootstrap-token` (0o600) so the
+            // operator can read it once and rotate.
+            // Library side (`console-core::bootstrap`) is fully tested; until
+            // §13.7.7 D2 this call was missing here, and fresh boots shipped
+            // without an admin (wcon-vision BC6 violated at the binary
+            // boundary). See perf-opt §12.1.
+            match console_core::bootstrap::bootstrap_if_needed(&pool).await {
+                Ok(console_core::bootstrap::BootstrapResult::Bootstrapped {
+                    username,
+                    password,
+                }) => match console_core::bootstrap::write_bootstrap_token(&password) {
+                    Ok(path) => info!(
+                        username = %username,
+                        credential_path = %path.display(),
+                        "bootstrap admin created — one-time credential written"
+                    ),
+                    Err(e) => {
+                        error!(error = %e, "bootstrap admin created but credential write failed");
+                        return Err(e.into());
+                    }
+                },
+                Ok(console_core::bootstrap::BootstrapResult::AlreadyBootstrapped) => {
+                    info!("bootstrap: users table non-empty, skipping");
+                }
+                Err(e) => {
+                    error!(error = %e, "bootstrap check failed");
+                    return Err(e.into());
+                }
+            }
+
             // Build taxonomy index from runtime REST API.
             let taxonomy_index = match build_taxonomy(&config.runtime.rest_address, &pool).await {
                 Ok(idx) => idx,

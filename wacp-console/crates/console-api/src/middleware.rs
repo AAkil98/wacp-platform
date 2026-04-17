@@ -58,6 +58,37 @@ impl FromRequestParts<Arc<AppState>> for Auth {
     }
 }
 
+/// Cookie-only authenticator that does NOT reject users with
+/// `must_change_password = true`. Used exclusively by the change-password
+/// endpoint — without this, a bootstrapped admin is locked out of the only
+/// route that can clear the flag. Bearer tokens are rejected on purpose
+/// (tokens are scoped to post-rotation clients; pre-rotation rotation must
+/// come from the browser session).
+pub struct AuthAllowPendingChange(pub AuthenticatedUser);
+
+impl std::ops::Deref for AuthAllowPendingChange {
+    type Target = AuthenticatedUser;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromRequestParts<Arc<AppState>> for AuthAllowPendingChange {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let cookie_value = extract_cookie(&parts.headers, "wcon_sid")
+            .ok_or_else(|| ApiError::from(ConsoleError::Unauthenticated))?;
+        authenticator::authenticate_cookie_allow_pending_change(&state.db, &cookie_value)
+            .await
+            .map(AuthAllowPendingChange)
+            .map_err(ApiError::from)
+    }
+}
+
 /// Extract request metadata for audit logging.
 #[derive(Debug, Clone)]
 pub struct RequestContext {

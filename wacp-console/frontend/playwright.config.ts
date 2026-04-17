@@ -22,9 +22,12 @@ const CONSOLE_LISTEN = "[::1]:8787";
 const CONSOLE_STATE_DIR = path.join(__dirname, ".e2e-state");
 const CONSOLE_DB = path.join(CONSOLE_STATE_DIR, "console.db");
 
-// SQLite refuses to create parent directories; pre-create the per-run state
-// dir before the webServer spawns. Running this at config load time keeps
-// setup deterministic without needing a separate `globalSetup` file.
+// Ensure the per-run state dir exists before the webServer spawns so SQLite
+// can create its database file. The wipe happens BEFORE this module loads —
+// the `test:e2e` npm script runs `scripts/e2e-cleanup.sh` first. Doing the
+// wipe here bites because Playwright imports the config twice per run
+// (runner + worker); the second import would wipe the just-bootstrapped
+// state dir out from under the webServer.
 fs.mkdirSync(CONSOLE_STATE_DIR, { recursive: true });
 
 export default defineConfig({
@@ -63,7 +66,11 @@ export default defineConfig({
       // responds 200 with the fixture list, so Playwright knows the mock is
       // up once this URL replies.
       url: `http://${MOCK_REST}/v1/verticals`,
-      reuseExistingServer: !process.env.CI,
+      // Always spawn fresh — the globalSetup above wipes the DB state dir on
+      // every run, so a reused server would have stale state relative to the
+      // freshly-bootstrapped DB we just set up. PLAYWRIGHT_REUSE_STATE opts
+      // both out (state + server) for local iteration.
+      reuseExistingServer: !!process.env.PLAYWRIGHT_REUSE_STATE,
       timeout: 15_000,
       stdout: "pipe",
       stderr: "pipe",
@@ -96,7 +103,11 @@ export default defineConfig({
         XDG_STATE_HOME: CONSOLE_STATE_DIR,
       },
       url: `http://${CONSOLE_LISTEN}/api/health`,
-      reuseExistingServer: !process.env.CI,
+      // Always spawn fresh — the globalSetup above wipes the DB state dir on
+      // every run, so a reused server would have stale state relative to the
+      // freshly-bootstrapped DB we just set up. PLAYWRIGHT_REUSE_STATE opts
+      // both out (state + server) for local iteration.
+      reuseExistingServer: !!process.env.PLAYWRIGHT_REUSE_STATE,
       timeout: 30_000,
       stdout: "pipe",
       stderr: "pipe",

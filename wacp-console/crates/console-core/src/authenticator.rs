@@ -22,8 +22,34 @@ pub fn hash_token(token: &str) -> String {
     })
 }
 
-/// Authenticate from a session cookie value (`wcon_sid`).
+/// Authenticate from a session cookie value (`wcon_sid`). Rejects users with
+/// `must_change_password = true` via `PasswordChangeRequired` so most routes
+/// get the right behaviour by default.
 pub async fn authenticate_cookie(
+    pool: &DbPool,
+    cookie_value: &str,
+) -> Result<AuthenticatedUser, ConsoleError> {
+    let user = authenticate_cookie_allow_pending_change(pool, cookie_value).await?;
+    // Re-fetch the flag — `authenticate_cookie_allow_pending_change` discards
+    // it intentionally, but the non-pending path must enforce it here. This
+    // is the second DB round-trip of the request and is kept short by
+    // `users::get_by_id` being indexed.
+    let user_row = users::get_by_id(pool, &user.user_id)
+        .await
+        .map_err(|e| ConsoleError::Database(e.to_string()))?
+        .ok_or(ConsoleError::Unauthenticated)?;
+    if user_row.must_change_password {
+        return Err(ConsoleError::PasswordChangeRequired);
+    }
+    Ok(user)
+}
+
+/// Same as `authenticate_cookie` but does NOT enforce the
+/// `must_change_password` flag. Intended for the `POST /api/auth/change-
+/// password` handler (and nowhere else) — a bootstrapped user must be able
+/// to hit that endpoint to clear the flag, so enforcing it on every route
+/// is a chicken-and-egg bug.
+pub async fn authenticate_cookie_allow_pending_change(
     pool: &DbPool,
     cookie_value: &str,
 ) -> Result<AuthenticatedUser, ConsoleError> {
@@ -42,10 +68,6 @@ pub async fn authenticate_cookie(
 
     if user.disabled_at.is_some() {
         return Err(ConsoleError::Unauthenticated);
-    }
-
-    if user.must_change_password {
-        return Err(ConsoleError::PasswordChangeRequired);
     }
 
     let role: ConsoleRole = user

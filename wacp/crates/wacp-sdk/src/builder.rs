@@ -5,11 +5,13 @@ use wacp_transport::wacp_v1;
 use wacp_transport::wacp_v1::agent_service_client::AgentServiceClient;
 use wacp_types::*;
 
+use crate::connection::ws_request;
 use crate::error::Error;
 
 /// Builder for creating checkpoints (sdk-agent spec §4).
 pub struct CheckpointBuilder {
     client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
+    workspace_id: WorkspaceId,
     checkpoint_type: Option<String>,
     payload: Option<Vec<u8>>,
     intent: Option<String>,
@@ -19,9 +21,13 @@ pub struct CheckpointBuilder {
 }
 
 impl CheckpointBuilder {
-    pub(crate) fn new(client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>) -> Self {
+    pub(crate) fn new(
+        client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
+        workspace_id: WorkspaceId,
+    ) -> Self {
         Self {
             client,
+            workspace_id,
             checkpoint_type: None,
             payload: None,
             intent: None,
@@ -87,9 +93,9 @@ impl CheckpointBuilder {
             cost_micros: r.cost_micros,
         });
 
-        let mut client = self.client.lock().await;
-        let response = client
-            .create_checkpoint(wacp_v1::CreateCheckpointRequest {
+        let req = ws_request(
+            &self.workspace_id,
+            wacp_v1::CreateCheckpointRequest {
                 r#type: checkpoint_type,
                 payload,
                 intent: self.intent.unwrap_or_default(),
@@ -97,9 +103,10 @@ impl CheckpointBuilder {
                 confidence: proto_confidence.into(),
                 resource_usage: proto_usage,
                 client_request_id: String::new(),
-            })
-            .await?
-            .into_inner();
+            },
+        );
+        let mut client = self.client.lock().await;
+        let response = client.create_checkpoint(req).await?.into_inner();
 
         Ok(CheckpointResult {
             id: response.checkpoint_id,
@@ -118,6 +125,7 @@ pub struct CheckpointResult {
 /// Builder for sending envelopes (sdk-agent spec §4).
 pub struct EnvelopeBuilder {
     client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
+    workspace_id: WorkspaceId,
     to: Option<WorkspaceId>,
     envelope_type: Option<String>,
     payload: Option<Vec<u8>>,
@@ -126,9 +134,13 @@ pub struct EnvelopeBuilder {
 }
 
 impl EnvelopeBuilder {
-    pub(crate) fn new(client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>) -> Self {
+    pub(crate) fn new(
+        client: Arc<Mutex<AgentServiceClient<tonic::transport::Channel>>>,
+        workspace_id: WorkspaceId,
+    ) -> Self {
         Self {
             client,
+            workspace_id,
             to: None,
             envelope_type: None,
             payload: None,
@@ -175,9 +187,9 @@ impl EnvelopeBuilder {
             EnvelopePriority::Blocking => wacp_v1::EnvelopePriority::Blocking,
         };
 
-        let mut client = self.client.lock().await;
-        let response = client
-            .send_envelope(wacp_v1::SendEnvelopeRequest {
+        let req = ws_request(
+            &self.workspace_id,
+            wacp_v1::SendEnvelopeRequest {
                 to_workspace: to.to_string(),
                 r#type: envelope_type,
                 payload: self.payload.unwrap_or_default(),
@@ -187,9 +199,10 @@ impl EnvelopeBuilder {
                     .unwrap_or_default(),
                 priority: proto_priority.into(),
                 client_request_id: String::new(),
-            })
-            .await?
-            .into_inner();
+            },
+        );
+        let mut client = self.client.lock().await;
+        let response = client.send_envelope(req).await?.into_inner();
 
         Ok(EnvelopeResult {
             id: response.envelope_id,

@@ -774,3 +774,192 @@ async fn wa1_bind_unknown_workspace_returns_not_found() {
         .expect_err("expected not_found");
     assert!(err.contains("workspace not found"), "got: {err}");
 }
+
+// ── WA2 — EmitSignal drives the workspace FSM ──
+
+async fn emit_signal_via_handler(
+    rt: &mut Runtime,
+    workspace_id: &str,
+    signal_type: wacp_v1::SignalType,
+    reason: &str,
+    context: &[u8],
+) -> Result<wacp_v1::EmitSignalResponse, (i32, String)> {
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_agent_request(wacp_transport::AgentRequest::EmitSignal {
+        workspace_id: workspace_id.into(),
+        request: wacp_v1::EmitSignalRequest {
+            r#type: signal_type as i32,
+            reason: reason.into(),
+            context: context.to_vec(),
+            client_request_id: "emit-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    reply_rx
+        .await
+        .expect("reply")
+        .map_err(|s| (s.code() as i32, s.message().to_string()))
+}
+
+/// Drain events from the runtime's event_rx until `predicate` returns true or
+/// `max_wait` elapses. Returns the matched event.
+async fn drain_until<F>(
+    rt: &mut Runtime,
+    max_wait: std::time::Duration,
+    predicate: F,
+) -> Option<WorkspaceEvent>
+where
+    F: Fn(&WorkspaceEvent) -> bool,
+{
+    let deadline = std::time::Instant::now() + max_wait;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        match tokio::time::timeout(remaining, rt.event_rx.recv()).await {
+            Ok(Some(ev)) => {
+                if predicate(&ev) {
+                    return Some(ev);
+                }
+            }
+            _ => return None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn wa2_emit_signal_forwards_to_actor_event_channel() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa2-goal").await;
+
+    emit_signal_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        wacp_v1::SignalType::Ready,
+        "",
+        b"",
+    )
+    .await
+    .expect("emit ok");
+
+    // Actor emits WorkspaceEvent::Signal(Ready) for the workspace.
+    let ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::Signal(s) if s.signal_type == SignalType::Ready
+                && s.workspace_id.as_ref() == submit.root_workspace_id.as_str()
+        )
+    })
+    .await;
+    assert!(ev.is_some(), "expected a Ready signal event");
+}
+
+#[tokio::test]
+async fn wa2_emit_signal_reason_and_context_passthrough() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa2-goal-rc").await;
+
+    emit_signal_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        wacp_v1::SignalType::Blocked,
+        "stuck on dependency",
+        b"why",
+    )
+    .await
+    .expect("emit ok");
+
+    let ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(
+            e,
+            WorkspaceEvent::Signal(s) if s.signal_type == SignalType::Blocked
+        )
+    })
+    .await
+    .expect("blocked signal");
+
+    if let WorkspaceEvent::Signal(signal) = ev {
+        assert_eq!(signal.reason.as_deref(), Some("stuck on dependency"));
+        assert_eq!(signal.context.as_deref(), Some(&b"why"[..]));
+    } else {
+        unreachable!();
+    }
+}
+
+#[tokio::test]
+async fn wa2_emit_signal_unknown_discriminant_returns_invalid_argument() {
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa2-goal-bad").await;
+
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+    rt.handle_agent_request(wacp_transport::AgentRequest::EmitSignal {
+        workspace_id: submit.root_workspace_id.clone(),
+        request: wacp_v1::EmitSignalRequest {
+            r#type: 99, // out of range for wacp_v1::SignalType
+            reason: String::new(),
+            context: vec![],
+            client_request_id: "bad-1".into(),
+        },
+        reply: reply_tx,
+    })
+    .await;
+    let err = reply_rx
+        .await
+        .expect("reply")
+        .expect_err("expected invalid_argument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    assert!(err.message().contains("unknown SignalType discriminant"));
+}
+
+#[tokio::test]
+async fn wa2_emit_signal_unknown_workspace_returns_not_found() {
+    let mut rt = test_runtime();
+    let err = emit_signal_via_handler(
+        &mut rt,
+        "ws-nonexistent",
+        wacp_v1::SignalType::Ready,
+        "",
+        b"",
+    )
+    .await
+    .expect_err("expected not_found");
+    assert_eq!(err.0, tonic::Code::NotFound as i32);
+    assert!(err.1.contains("not running"), "got: {}", err.1);
+}
+
+#[tokio::test]
+async fn wa2_emit_started_from_idle_emits_fsm_error_event() {
+    // Submit a fresh goal — the workspace starts in Idle. The FSM only
+    // accepts AgentStarted from Blocked, so Started from Idle triggers an
+    // `IllegalTransition` that the actor surfaces as WorkspaceEvent::Error.
+    // This documents the ordering contract: an agent must wait for the
+    // first envelope (which transitions Idle→Active) before emitting
+    // Started. The test verifies the actor does NOT silently accept
+    // out-of-order signals.
+    let mut rt = test_runtime();
+    let submit = submit_goal_via_handler(&mut rt, "wa2-ordering").await;
+
+    emit_signal_via_handler(
+        &mut rt,
+        &submit.root_workspace_id,
+        wacp_v1::SignalType::Started,
+        "",
+        b"",
+    )
+    .await
+    .expect("emit ok — actor-level rejection is not a gRPC-level error");
+
+    let err_ev = drain_until(&mut rt, std::time::Duration::from_secs(2), |e| {
+        matches!(e, WorkspaceEvent::Error { .. })
+    })
+    .await
+    .expect("error event");
+    if let WorkspaceEvent::Error { message, .. } = err_ev {
+        assert!(
+            message.contains("illegal") || message.contains("Illegal"),
+            "unexpected message: {message}"
+        );
+    }
+}

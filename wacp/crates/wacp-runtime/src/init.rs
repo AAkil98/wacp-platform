@@ -765,10 +765,65 @@ impl Runtime {
                 }
             }
             AgentRequest::EmitSignal {
-                workspace_id: _,
+                workspace_id,
                 request,
                 reply,
             } => {
+                // WA2: forward the signal to the workspace actor so
+                // `handle_agent_msg::EmitSignal` can map it to a FSM trigger
+                // and transition the workspace state. The actor emits a
+                // `WorkspaceEvent::Signal` for the trail + a
+                // `WorkspaceEvent::StateChanged` if the trigger advances
+                // the FSM; both are fanned out by the event loop's
+                // `fan_out_event` path. See `wacp/impl/wa2-emit-signal-fsm.md`.
+                let ws_id = WorkspaceId::from(workspace_id.as_str());
+                let signal_type =
+                    match wacp_transport::wacp_v1::SignalType::try_from(request.r#type) {
+                        Ok(t) => proto_to_signal_type(t),
+                        Err(_) => {
+                            let _ = reply.send(Err(tonic::Status::invalid_argument(format!(
+                                "unknown SignalType discriminant: {}",
+                                request.r#type
+                            ))));
+                            return;
+                        }
+                    };
+
+                let handle = match self.coordinator.handle(&ws_id) {
+                    Some(h) => h,
+                    None => {
+                        let _ = reply.send(Err(tonic::Status::not_found(format!(
+                            "workspace '{workspace_id}' not running"
+                        ))));
+                        return;
+                    }
+                };
+
+                let reason = if request.reason.is_empty() {
+                    None
+                } else {
+                    Some(request.reason.clone())
+                };
+                let context = if request.context.is_empty() {
+                    None
+                } else {
+                    Some(request.context.clone())
+                };
+                let send_result = handle
+                    .agent_tx
+                    .send(wacp_workspace::AgentMessage::EmitSignal {
+                        signal_type,
+                        reason,
+                        context,
+                    })
+                    .await;
+                if send_result.is_err() {
+                    let _ = reply.send(Err(tonic::Status::unavailable(format!(
+                        "workspace '{workspace_id}' actor channel closed"
+                    ))));
+                    return;
+                }
+
                 let response = wacp_transport::wacp_v1::EmitSignalResponse {
                     timestamp: None,
                     client_request_id: request.client_request_id,
@@ -1828,6 +1883,27 @@ fn envelope_to_proto(envelope: &Envelope) -> wacp_transport::wacp_v1::Envelope {
         priority: envelope.priority as i32,
         timestamp: None,
         origin: envelope.origin as i32,
+    }
+}
+
+/// Convert a proto `SignalType` into the internal `wacp_types::SignalType`.
+/// Used by `AgentService::EmitSignal` (WA2) to hand the signal to the
+/// workspace actor. Mirrors the internal→proto direction in
+/// `wacp-sdk::connection::signal_with`.
+fn proto_to_signal_type(t: wacp_transport::wacp_v1::SignalType) -> SignalType {
+    use wacp_transport::wacp_v1::SignalType as P;
+    match t {
+        P::Unspecified | P::Ready => SignalType::Ready,
+        P::Started => SignalType::Started,
+        P::Blocked => SignalType::Blocked,
+        P::Checkpoint => SignalType::Checkpoint,
+        P::Complete => SignalType::Complete,
+        P::Failed => SignalType::Failed,
+        P::Integrate => SignalType::Integrate,
+        P::Acknowledged => SignalType::Acknowledged,
+        P::Escalation => SignalType::Escalation,
+        P::Suspend => SignalType::Suspend,
+        P::Migrate => SignalType::Migrate,
     }
 }
 

@@ -10,6 +10,24 @@ use crate::builder::{CheckpointBuilder, EnvelopeBuilder};
 use crate::error::Error;
 use crate::streams::{CommandStream, InboxStream};
 
+/// gRPC metadata header that carries the bound workspace id on every
+/// post-Bind request. The runtime's `AgentService` routes signals /
+/// checkpoints / envelopes by this header (see `wacp-transport::grpc_agent::
+/// extract_workspace_id`). The Bind RPC itself carries the id in its body
+/// and does not require this header.
+pub(crate) const WORKSPACE_ID_HEADER: &str = "x-workspace-id";
+
+/// Wrap a message in a `tonic::Request` with the `x-workspace-id` header set
+/// to `workspace_id`. Used by every post-Bind call so the runtime-side
+/// handler can look up the bound workspace.
+pub(crate) fn ws_request<T>(workspace_id: &WorkspaceId, inner: T) -> tonic::Request<T> {
+    let mut req = tonic::Request::new(inner);
+    if let Ok(value) = workspace_id.to_string().parse() {
+        req.metadata_mut().insert(WORKSPACE_ID_HEADER, value);
+    }
+    req
+}
+
 /// A connected WACP agent — the primary SDK type.
 ///
 /// Created via `Agent::connect()`. Provides the full agent API:
@@ -120,46 +138,44 @@ impl Agent {
             SignalType::Migrate => wacp_v1::SignalType::Migrate,
         };
 
-        let mut client = self.client.lock().await;
-        client
-            .emit_signal(wacp_v1::EmitSignalRequest {
+        let req = ws_request(
+            &self.workspace_id,
+            wacp_v1::EmitSignalRequest {
                 r#type: proto_type.into(),
                 reason: reason.unwrap_or_default(),
                 context: context.unwrap_or_default(),
                 client_request_id: String::new(),
-            })
-            .await?;
+            },
+        );
+        let mut client = self.client.lock().await;
+        client.emit_signal(req).await?;
 
         Ok(())
     }
 
     /// Start building a checkpoint.
     pub fn checkpoint(&self) -> CheckpointBuilder {
-        CheckpointBuilder::new(self.client.clone())
+        CheckpointBuilder::new(self.client.clone(), self.workspace_id.clone())
     }
 
     /// Start building an envelope to send.
     pub fn send_envelope(&self) -> EnvelopeBuilder {
-        EnvelopeBuilder::new(self.client.clone())
+        EnvelopeBuilder::new(self.client.clone(), self.workspace_id.clone())
     }
 
     /// Open the inbox stream — receives envelopes as they arrive.
     pub async fn inbox(&self) -> Result<InboxStream, Error> {
+        let req = ws_request(&self.workspace_id, wacp_v1::ReceiveEnvelopesRequest {});
         let mut client = self.client.lock().await;
-        let stream = client
-            .receive_envelopes(wacp_v1::ReceiveEnvelopesRequest {})
-            .await?
-            .into_inner();
+        let stream = client.receive_envelopes(req).await?.into_inner();
         Ok(InboxStream::new(stream))
     }
 
     /// Open the commands stream — receives coordinator commands.
     pub async fn commands(&self) -> Result<CommandStream, Error> {
+        let req = ws_request(&self.workspace_id, wacp_v1::ReceiveCommandsRequest {});
         let mut client = self.client.lock().await;
-        let stream = client
-            .receive_commands(wacp_v1::ReceiveCommandsRequest {})
-            .await?
-            .into_inner();
+        let stream = client.receive_commands(req).await?.into_inner();
         Ok(CommandStream::new(stream))
     }
 
@@ -170,18 +186,19 @@ impl Agent {
         event_type: Option<&str>,
         limit: u32,
     ) -> Result<Vec<wacp_v1::TrailEntry>, Error> {
-        let mut client = self.client.lock().await;
-        let response = client
-            .query_trail(wacp_v1::QueryTrailRequest {
+        let req = ws_request(
+            &self.workspace_id,
+            wacp_v1::QueryTrailRequest {
                 workspace_id: workspace_id.unwrap_or_default().into(),
                 event_type: event_type.unwrap_or_default().into(),
                 from: None,
                 to: None,
                 limit,
                 client_request_id: String::new(),
-            })
-            .await?
-            .into_inner();
+            },
+        );
+        let mut client = self.client.lock().await;
+        let response = client.query_trail(req).await?.into_inner();
         Ok(response.entries)
     }
 

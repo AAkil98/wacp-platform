@@ -49,7 +49,7 @@ describe("injection flow integration", () => {
     await waitFor(() => {
       expect(mockInject).toHaveBeenCalledOnce();
     });
-    const arg = mockInject.mock.calls[0][0];
+    const arg = mockInject.mock.calls[0]![0];
     expect(arg.toWorkspace).toBe("ws-target");
   });
 

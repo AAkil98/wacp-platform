@@ -40,7 +40,7 @@ describe("injectEnvelope", () => {
     });
     expect(result.envelopeId).toBe("env-123");
     expect(mockClient.injectEnvelope).toHaveBeenCalledOnce();
-    const arg = mockClient.injectEnvelope.mock.calls[0][0];
+    const arg = mockClient.injectEnvelope.mock.calls[0]![0];
     expect(arg.toWorkspace).toBe("ws-target");
     expect(arg.type).toBe("feedback");
   });
@@ -53,7 +53,7 @@ describe("injectEnvelope", () => {
       priority: "Normal",
       payload: "",
     });
-    const arg = mockClient.injectEnvelope.mock.calls[0][0];
+    const arg = mockClient.injectEnvelope.mock.calls[0]![0];
     expect(arg.clientRequestId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     );
@@ -72,7 +72,7 @@ describe("respondToGate", () => {
   it("generates clientRequestId as UUID", async () => {
     mockClient.respondToGate.mockResolvedValueOnce({ applied: true });
     await respondToGate("gate-2", GateDecision.REJECT);
-    const arg = mockClient.respondToGate.mock.calls[0][0];
+    const arg = mockClient.respondToGate.mock.calls[0]![0];
     expect(arg.clientRequestId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     );
@@ -84,7 +84,7 @@ describe("respondToEscalation", () => {
     mockClient.respondToEscalation.mockResolvedValueOnce({ applied: true });
     const result = await respondToEscalation("esc-1", { type: "abort" });
     expect(result.applied).toBe(true);
-    const arg = mockClient.respondToEscalation.mock.calls[0][0];
+    const arg = mockClient.respondToEscalation.mock.calls[0]![0];
     expect(arg.action.case).toBe("abort");
     expect(arg.action.value).toBe(true);
     expect(mockStore.markEscalationInFlight).toHaveBeenCalledWith("esc-1");
@@ -94,7 +94,7 @@ describe("respondToEscalation", () => {
   it("sends delegate action", async () => {
     mockClient.respondToEscalation.mockResolvedValueOnce({ applied: true });
     await respondToEscalation("esc-2", { type: "delegate" });
-    const arg = mockClient.respondToEscalation.mock.calls[0][0];
+    const arg = mockClient.respondToEscalation.mock.calls[0]![0];
     expect(arg.action.case).toBe("delegateToCoordinator");
     expect(arg.action.value).toBe(true);
   });
@@ -110,7 +110,7 @@ describe("respondToEscalation", () => {
         payload: "try this approach",
       },
     });
-    const arg = mockClient.respondToEscalation.mock.calls[0][0];
+    const arg = mockClient.respondToEscalation.mock.calls[0]![0];
     expect(arg.action.case).toBe("feedback");
     expect(arg.action.value.toWorkspace).toBe("ws-target");
   });

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { useStore } from "@/store";
 import { ConnectionBanner } from "./ConnectionBanner.js";
@@ -26,7 +26,7 @@ beforeEach(() => {
 
 describe("ConnectionBanner", () => {
   it("renders nothing when connected and no escalation", () => {
-    const { container } = renderBanner();
+    renderBanner();
     // No visible banner text
     expect(screen.queryByText(/reconnecting|disconnected|authenticating/i)).toBeNull();
   });
@@ -52,7 +52,7 @@ describe("ConnectionBanner", () => {
   it("shows escalation banner with dismiss button", () => {
     useStore.setState({
       notifications: {
-        escalationBanner: { workspaceId: "ws-urgent", message: "help needed" },
+        escalationBanner: { workspaceId: "ws-urgent", escalationId: "esc-1" },
       },
     });
     renderBanner();

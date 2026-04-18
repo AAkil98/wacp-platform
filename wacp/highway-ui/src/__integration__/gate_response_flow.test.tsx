@@ -79,7 +79,7 @@ describe("gate response flow integration", () => {
       expect(mockRespondToGate).toHaveBeenCalledOnce();
     });
 
-    const arg = mockRespondToGate.mock.calls[0][0];
+    const arg = mockRespondToGate.mock.calls[0]![0];
     expect(arg.decision).toBe(GateDecision.REJECT);
   });
 });

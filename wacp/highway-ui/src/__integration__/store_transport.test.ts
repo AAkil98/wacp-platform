@@ -25,8 +25,8 @@ describe("store ← transport integration", () => {
 
     const entries = useStore.getState().trail.entries;
     expect(entries).toHaveLength(2);
-    expect(entries[0].sequenceNumber).toBe(1n);
-    expect(entries[1].sequenceNumber).toBe(2n);
+    expect(entries[0]!.sequenceNumber).toBe(1n);
+    expect(entries[1]!.sequenceNumber).toBe(2n);
   });
 
   it("upsertWorkspace adds new workspace to views map", () => {

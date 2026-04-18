@@ -111,7 +111,7 @@ describe("SessionManager", () => {
     await sm.connect("token");
     sm.disconnect();
 
-    const lastCall = mockSetSession.mock.calls[mockSetSession.mock.calls.length - 1];
+    const lastCall = mockSetSession.mock.calls[mockSetSession.mock.calls.length - 1]!;
     expect(lastCall[0]).toBe("disconnected");
   });
 

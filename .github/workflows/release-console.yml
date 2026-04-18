@@ -32,6 +32,7 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           version: "29.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: cargo check --workspace
         run: cargo check --workspace

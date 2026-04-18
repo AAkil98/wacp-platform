@@ -418,9 +418,19 @@ Both deferred scenarios are tracked with in-file `// Not covered (deferred, see 
 
 **Performance.** 7 tests spawn 7 runtime children serialized. Walltime 0.57 s — well under the 5 s per-file stretch target. No optimization needed.
 
-### 13.3 I3 — `auth_matrix.rs`
+### 13.3 I3 — `auth_matrix.rs` (landed, scope adjusted)
 
-*Reserved for findings; empty until the suite lands.*
+Twelve tests — three smoke (admin/operator/viewer bearer tokens each reach `/api/health`), three role-gated reads (admin ✓, operator ✗, viewer ✗ on `/api/users`), two role-gated writes (operator passes authz on `POST /api/profiles`, viewer 403'd), anonymous 401, unknown-bearer 401, revoked-token 401, and account-lockout-after-5-failed-logins. All 12 green in 3.50 s.
+
+**Scope adjustment vs the AUDIT §13.7.8 original plan.** The original called for a 45-cell matrix (3 runtime-auth × 3 console-auth × 3 roles × 5 actions); the plan (`impl/audit-13-7-8-plan.md` §3.3) pre-scoped this to 45 cells that exclude runtime-auth-variants (the runtime doesn't distinguish today — see §11). After writing the suite: the console-authorizer role matrix is already exhaustively unit-tested in `authorizer.rs::tests`. What was actually missing was *integration-scope proof that the middleware + auth extractor + authz check + handler wiring works end-to-end.* Twelve carefully chosen tests prove that — the rest of the 45 cells would re-test `authorize` through a more expensive harness.
+
+**One assertion shape worth flagging.** `role_gated_write_operator_passes_authz_on_create_profile` asserts `resp.status() != 403` rather than `== 201`. The harness ships with an empty taxonomy, so the handler's role_ref validation returns 422 with `UNKNOWN_ROLE`. A 403 would fire in the authz layer BEFORE validation; any non-403 response (including 422) means authz allowed the request — which is the integration-scope assertion. Prevents a false-positive test failure every time we don't pre-seed a taxonomy.
+
+**Runtime-auth drift confirmed.** Today's `wacp-runtime::Bind` handler accepts any token ≥ 8 chars regardless of kind — no api-key vs. session vs. oauth distinction on the wire. Flagged in the suite header and here, perf-opt §11's P0 enum-audit recommendation covers it. When the runtime gains real auth, this file is the natural extension point; just add `runtime_auth_matrix` tests and drop the in-file DRIFT comment.
+
+**Performance note.** Walltime 3.50 s — 12× the I1 baseline (0.35 s). Dominating cost: the account-lockout test does 5 HTTP `POST /api/auth/login` calls each with one Argon2id verification on the server. Argon2id with OWASP params (memory=19 MiB, t=2, p=1) runs ~500 ms in debug mode, so the 5 verifications alone account for ~2.5 s of the 3.50. In release mode this drops ~10×; in CI (release profile off) it'll stay near 3 s. Not worth optimizing — 5 real Argon2 verifications are exactly what this test is proving the lockout path does.
+
+**Deferred.** `must_change_password` forced-change deadlock (the D2 fix from §12.4) has Playwright E2E coverage in `wacp-console/frontend/e2e/auth-flows.spec.ts` — no integration-scope value in duplicating it here.
 
 ### 13.4 I4 — `ws_chaos.rs`
 

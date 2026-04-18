@@ -401,9 +401,22 @@ Ten tests across the full SubmitGoal / Decompose / Dispatch error axis plus the 
 
 **No perf signal.** Per-test walltime is bounded by the runtime-harness spawn (~200 ms) + a single coordinator call roundtrip (~10 ms). Each test serially spawns a runtime child, so the 10-test suite walltime is dominated by child-spawn cost. Cache not relevant at this scale. If I2 + I3 later push the full `cargo test -p console-integration` past 20 s, consider sharing a runtime child across tests within a file (non-trivial — the rollback tests mutate runtime state).
 
-### 13.2 I2 — `recovery_matrix.rs`
+### 13.2 I2 — `recovery_matrix.rs` (landed, two deferred scenarios)
 
-*Reserved for findings; empty until the suite lands.*
+Seven tests — six scenario tests + one direct `recovery::run` call that inspects the returned `RecoveryReport` counters. All seven green in 0.57 s. No latent bugs surfaced (the same "regression-guard" observation as §13.1).
+
+**What it proves.**
+- Every recovery outcome arm reliably maps DB state + runtime state → session state + `active_sessions` map. Seven live tests cover: resumed (ACTIVE + live workspace), stuck (ACTIVE with no coord_ws), not-found (ACTIVE + unknown workspace), unavailable (runtime down), terminal-closed (runtime reports `Closed`), multi-session mixed-in-one-pass, and a RecoveryReport counter-consistency check.
+- The `runtime_unavailable` case keeps the session ACTIVE — re-probing happens at next restart, no state mutation on transient probe failures. Load-bearing: a buggy change that marked sessions FAILED on Unavailable would strand long-running sessions across a runtime blip.
+- `multi_session_mixed_outcomes_in_one_pass` proves recovery isn't globally short-circuited by one session's failure — each is independently reconciled.
+
+**Deferred scenarios (not regressions, just not reachable with current test tooling).**
+1. **Workspace in `Failed` state → session FAILED.** The runtime won't reach `WorkspaceState::Failed` without the workspace actor emitting a signal the coordinator interprets as fatal, which isn't a clean seeding path from a test. Resolution: once a mock `HighwayService` exists (I4 might need one anyway), scripting `GetWorkspace` to return `state = Failed` closes the gap in three lines. Until then, the `_ => COMPLETED` branch in `recover_one` is exercised by the `Closed` case; the `Failed → FAILED` specific branch is only covered by the in-crate `#[cfg(test)]` tests in `recovery.rs:249+`.
+2. **DB-degraded boot.** `FaultyDb::hold_write_lock` holds a SQLite write lock, but `recovery::run` reads from `sessions` — the write lock doesn't block the read path. A different fault-injection mode (e.g., `FaultyDb::drop_reads` or pool-closed) would be needed to exercise the `list_active` error arm. Filed for a future `console-db::testing` extension; not blocking this suite.
+
+Both deferred scenarios are tracked with in-file `// Not covered (deferred, see perf-opt §13.2):` notes at the top of `recovery_matrix.rs`. Un-skipping is additive when either prereq lands.
+
+**Performance.** 7 tests spawn 7 runtime children serialized. Walltime 0.57 s — well under the 5 s per-file stretch target. No optimization needed.
 
 ### 13.3 I3 — `auth_matrix.rs`
 

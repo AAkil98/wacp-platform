@@ -23,9 +23,12 @@ sqlx = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-tungstenite = { version = "0.27", features = ["rustls-tls-native-roots"] }
+tonic = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+wacp-transport = { workspace = true }
 http = "1"
 futures = { workspace = true }
 
@@ -34,6 +37,3 @@ console-test-support = { workspace = true }
 wacp-llm = { workspace = true }
 wacp-sdk = { workspace = true }
 wacp-types = { workspace = true }
-wacp-transport = { workspace = true }
-tonic = { workspace = true }
-tokio-stream = { workspace = true }

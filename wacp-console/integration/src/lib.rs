@@ -19,9 +19,11 @@
 //! `#[ignore]` with a `// ignored: needs LLM stub` reason.
 
 pub mod console_harness;
+pub mod mock_coordinator;
 pub mod runtime_harness;
 pub mod test_client;
 
 pub use console_harness::ConsoleHarness;
+pub use mock_coordinator::InjectableCoordinator;
 pub use runtime_harness::{RuntimeHarness, RuntimeHarnessError};
 pub use test_client::{TestClient, WsClient};

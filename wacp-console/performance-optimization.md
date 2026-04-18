@@ -373,6 +373,46 @@ The click's handler (`ProfilesPage.tsx::handleNew`) is pure state mutation — `
 
 This drift is the fifth F-series–shaped signal after §2.5 F8 (RefusalPanel / InjectionBar), F10 (Notifications stub), §9 (console-db schema-type mismatch), §11 (runtime enum-offset), and the D2 auth deadlock — continuing to support the claim that **writing cross-layer tests is the forcing function for finding latent bugs** in surfaces that have never had an end-to-end user flow exercised against them.
 
+## 13. §13.7.8 I1–I5 — integration + chaos findings
+
+Opened up-front so each §13.7.8 I-suite has a home to file anything it surfaces. Leave subsections empty until something lands — the empty header is a drift-filing *prompt*, not a claim.
+
+Patterns to actively look for while writing these suites (priority order per `AUDIT-2026-04-15.md` §13.7.8 plan §4):
+
+1. **Rust-enum-as-i32 offset** (§11.1, §11.4) — two instances already caught on `GateType` + `WorkspaceState`; the §11 P0 audit recommendation stands. Most likely to trip I2 (recovery decodes `WorkspaceState` from runtime responses) and I5 (vertical manifest decode).
+2. **Schema-vs-type drift** (§9.1) — `session_assignments.profile_id` `Option<String>` vs `NOT NULL`. I2 seeds DB rows directly; any column whose runtime value is never `None` while the struct says `Option<T>` is a candidate.
+3. **Cleanup-that-leaks** (§3.3, §11.5) — the WS chaos suite (I4) is the whole point of this row.
+4. **Spec-vs-impl drift** (§2.5, §12.1, §12.4) — features described in the audit but not wired end-to-end. I3's runtime-auth matrix already flags one (no actual api-key vs. session distinction on the runtime wire today).
+5. **Async cascade from signature change** (§11.3) — not expected in this workstream but worth flagging if any shared helper's signature changes mid-suite.
+
+### 13.1 I1 — `launch_failure_matrix.rs`
+
+*Reserved for findings; empty until the suite lands.*
+
+### 13.2 I2 — `recovery_matrix.rs`
+
+*Reserved for findings; empty until the suite lands.*
+
+### 13.3 I3 — `auth_matrix.rs`
+
+*Reserved for findings; empty until the suite lands.*
+
+### 13.4 I4 — `ws_chaos.rs`
+
+*Reserved for findings; empty until the suite lands.*
+
+### 13.5 I5 — `taxonomy_reload.rs`
+
+*Reserved for findings; empty until the suite lands.*
+
+### 13.6 Shared infrastructure (P0, `57d3607..`)
+
+`InjectableCoordinator` — reusable failure-injection mock `CoordinatorService`. Per-RPC `VecDeque<Status>` queues for `SubmitGoal`/`Decompose`/`Dispatch`/`AbortWorkspace`; empty queue forwards to the real runtime, non-empty pops the next status and short-circuits. Generalizes WA5's `failure_proxy::FailureProxy` (which only injects on `Dispatch`) — extend with more queues as later suites need them.
+
+Two-test smoke (`tests/mock_coordinator_smoke.rs`) verifies both legs: forward path with empty queue + inject path with one `Unavailable` pushed. Wall: 0.12 s. `cargo clippy -p console-integration --all-targets -- -D warnings` clean.
+
+Cargo.toml edit — moved `tonic`, `tokio-stream`, `wacp-transport` from `[dev-dependencies]` to `[dependencies]` (the new mock lives in `src/` so tests-only deps wouldn't satisfy it). No behaviour change for existing suites; build time unchanged.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

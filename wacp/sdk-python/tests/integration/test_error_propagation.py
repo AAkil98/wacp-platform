@@ -7,7 +7,7 @@ the Agent methods as Python exceptions.
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-import wacp.proto.v1 as pb
+import wacp.v1 as pb
 from wacp.agent import Agent
 
 

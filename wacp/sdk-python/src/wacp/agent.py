@@ -11,7 +11,7 @@ from typing import AsyncIterator, Optional
 
 from grpclib.client import Channel
 
-from wacp.proto.v1 import (
+from wacp.v1 import (
     AgentServiceStub,
     BindRequest,
     BindResponse,

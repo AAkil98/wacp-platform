@@ -10,7 +10,6 @@ target/
 wacp/proto/gen/
 
 # Python
-sdk-python/src/wacp/proto/
 sdk-python/.pytest_cache/
 **/__pycache__/
 *.pyc

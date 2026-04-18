@@ -7,7 +7,7 @@ without a running server.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-import wacp.proto.v1 as pb
+import wacp.v1 as pb
 from wacp.agent import Agent, CheckpointResult, EnvelopeResult
 
 

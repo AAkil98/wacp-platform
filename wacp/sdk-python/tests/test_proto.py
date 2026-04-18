@@ -1,6 +1,6 @@
 """Tests for proto type accessibility and construction (Phase T1.3)."""
 
-import wacp.proto.v1 as pb
+import wacp.v1 as pb
 
 
 def test_bind_request_construction():

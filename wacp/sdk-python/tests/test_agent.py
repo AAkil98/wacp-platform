@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from wacp import Agent, Signal, CheckpointStatus, Confidence
 
-import wacp.proto.v1 as pb
+import wacp.v1 as pb
 from wacp.agent import CheckpointResult, EnvelopeResult
 
 
@@ -17,7 +17,7 @@ def test_import():
 
 def test_proto_generated():
     """Generated proto types are importable."""
-    from wacp.proto.v1 import (
+    from wacp.v1 import (
         SignalType,
         WorkspaceState,
         TaskStatus,

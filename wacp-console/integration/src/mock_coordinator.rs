@@ -36,15 +36,17 @@ use wacp_transport::wacp_v1::coordinator_service_server::{
 
 use crate::runtime_harness::RuntimeHarness;
 
-/// Per-RPC failure queue. A `None` element means "let the next call
-/// pass through"; `Some(status)` means "fail the next call with this
-/// status". Elements are popped from the front in call order.
+/// Per-RPC queue of scripted outcomes. A `None` element means "let the
+/// next call pass through to the real runtime"; `Some(status)` means
+/// "fail the next call with this status". Elements are popped from the
+/// front in call order. An empty queue means all remaining calls
+/// forward.
 #[derive(Default)]
 struct InjectionState {
-    submit_goal: std::collections::VecDeque<Status>,
-    decompose: std::collections::VecDeque<Status>,
-    dispatch: std::collections::VecDeque<Status>,
-    abort: std::collections::VecDeque<Status>,
+    submit_goal: std::collections::VecDeque<Option<Status>>,
+    decompose: std::collections::VecDeque<Option<Status>>,
+    dispatch: std::collections::VecDeque<Option<Status>>,
+    abort: std::collections::VecDeque<Option<Status>>,
 }
 
 /// Mock `CoordinatorService` server. Spawned by [`InjectableCoordinator::spawn`];
@@ -115,16 +117,28 @@ impl InjectableCoordinator {
     }
 
     pub async fn inject_submit_goal(&self, status: Status) {
-        self.state.lock().await.submit_goal.push_back(status);
+        self.state.lock().await.submit_goal.push_back(Some(status));
     }
     pub async fn inject_decompose(&self, status: Status) {
-        self.state.lock().await.decompose.push_back(status);
+        self.state.lock().await.decompose.push_back(Some(status));
     }
     pub async fn inject_dispatch(&self, status: Status) {
-        self.state.lock().await.dispatch.push_back(status);
+        self.state.lock().await.dispatch.push_back(Some(status));
     }
     pub async fn inject_abort(&self, status: Status) {
-        self.state.lock().await.abort.push_back(status);
+        self.state.lock().await.abort.push_back(Some(status));
+    }
+
+    /// Queue a pass-through for the next call of the corresponding RPC.
+    /// Used when the scripted sequence is "forward the first N calls,
+    /// then fail the (N+1)th". Without these, an empty queue forwards
+    /// everything — there's no way to say "forward exactly once then
+    /// intercept".
+    pub async fn pass_dispatch(&self) {
+        self.state.lock().await.dispatch.push_back(None);
+    }
+    pub async fn pass_abort(&self) {
+        self.state.lock().await.abort.push_back(None);
     }
 
     pub fn submit_goal_count(&self) -> u32 {
@@ -165,7 +179,7 @@ impl CoordinatorService for ForwardingInjector {
         request: Request<wacp_v1::SubmitGoalRequest>,
     ) -> Result<Response<wacp_v1::SubmitGoalResponse>, Status> {
         self.submit_goal_count.fetch_add(1, Ordering::SeqCst);
-        if let Some(status) = self.state.lock().await.submit_goal.pop_front() {
+        if let Some(Some(status)) = self.state.lock().await.submit_goal.pop_front() {
             return Err(status);
         }
         self.upstream.clone().submit_goal(request).await
@@ -176,7 +190,7 @@ impl CoordinatorService for ForwardingInjector {
         request: Request<wacp_v1::DecomposeRequest>,
     ) -> Result<Response<wacp_v1::DecomposeResponse>, Status> {
         self.decompose_count.fetch_add(1, Ordering::SeqCst);
-        if let Some(status) = self.state.lock().await.decompose.pop_front() {
+        if let Some(Some(status)) = self.state.lock().await.decompose.pop_front() {
             return Err(status);
         }
         self.upstream.clone().decompose(request).await
@@ -201,7 +215,7 @@ impl CoordinatorService for ForwardingInjector {
         request: Request<wacp_v1::DispatchRequest>,
     ) -> Result<Response<wacp_v1::DispatchResponse>, Status> {
         self.dispatch_count.fetch_add(1, Ordering::SeqCst);
-        if let Some(status) = self.state.lock().await.dispatch.pop_front() {
+        if let Some(Some(status)) = self.state.lock().await.dispatch.pop_front() {
             return Err(status);
         }
         self.upstream.clone().dispatch(request).await
@@ -212,7 +226,7 @@ impl CoordinatorService for ForwardingInjector {
         request: Request<wacp_v1::AbortWorkspaceRequest>,
     ) -> Result<Response<wacp_v1::AbortWorkspaceResponse>, Status> {
         self.abort_count.fetch_add(1, Ordering::SeqCst);
-        if let Some(status) = self.state.lock().await.abort.pop_front() {
+        if let Some(Some(status)) = self.state.lock().await.abort.pop_front() {
             return Err(status);
         }
         self.upstream.clone().abort_workspace(request).await

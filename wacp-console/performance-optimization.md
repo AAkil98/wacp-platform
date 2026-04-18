@@ -385,9 +385,21 @@ Patterns to actively look for while writing these suites (priority order per `AU
 4. **Spec-vs-impl drift** (§2.5, §12.1, §12.4) — features described in the audit but not wired end-to-end. I3's runtime-auth matrix already flags one (no actual api-key vs. session distinction on the runtime wire today).
 5. **Async cascade from signature change** (§11.3) — not expected in this workstream but worth flagging if any shared helper's signature changes mid-suite.
 
-### 13.1 I1 — `launch_failure_matrix.rs`
+### 13.1 I1 — `launch_failure_matrix.rs` (landed, no new bugs surfaced)
 
-*Reserved for findings; empty until the suite lands.*
+Ten tests across the full SubmitGoal / Decompose / Dispatch error axis plus the three rollback permutations (single-root, partial-failure tolerated, total-failure still terminates). All ten pass green in 0.35 s, which is the notable observation — nothing the suite exercises was broken.
+
+**What it proves (regression guard).**
+- Every public `reason_code()` output is shape-correct for its error kind — no cross-wiring where a Dispatch failure produces a `submit_goal`-shaped reason.
+- Rollback is exactly `O(workspaces_created_so_far)` — dispatch failure on task 1 aborts [root]; on task 2 aborts [root + task_1_ws]; on last of N aborts [root + N-1 task workspaces]. Off-by-ones here would be subtle and costly; now asserted.
+- `rollback_partial_failure_does_not_propagate` confirms the launcher's "abort failure is logged at warn but tolerated" contract (launcher `:391`). A future change that accidentally escalated abort-failure to return-error would be caught.
+- `rollback_total_failure_does_not_hang_or_panic` wraps the launch in a 5 s `tokio::time::timeout`. The launcher does one abort per workspace (no retry loop), so a total failure finishes in O(workspaces) time. Any future change that introduces retry-with-backoff on abort failures would surface here as a timeout-triggered test failure — exactly the "make a hang fail fast" pattern §7 recommends.
+
+**InjectableCoordinator API widening (carried back into §13.6).** The initial P0 queue was `VecDeque<Status>` — strictly fail-next-N. Two scenarios in I1 (dispatch-fails-on-task-2, dispatch-fails-on-task-3) need "pass the first K calls, then fail" — a pattern the queue couldn't express because an empty queue forwards everything and there was no way to enqueue "forward". Widened to `VecDeque<Option<Status>>` with a pair of `pass_dispatch()` / `pass_abort()` helpers. Tests express their scripts as an explicit sequence: `pass_dispatch(); pass_dispatch(); inject_dispatch(Unavailable)` means "forward twice, fail the third call".
+
+**`GrpcPool::new()` already returns `Arc<Self>`.** Spent ~30 s re-discovering. Noted for future test authoring: `let pool = GrpcPool::new(...); pool.connect().await;` — no outer `Arc::new(...)`.
+
+**No perf signal.** Per-test walltime is bounded by the runtime-harness spawn (~200 ms) + a single coordinator call roundtrip (~10 ms). Each test serially spawns a runtime child, so the 10-test suite walltime is dominated by child-spawn cost. Cache not relevant at this scale. If I2 + I3 later push the full `cargo test -p console-integration` past 20 s, consider sharing a runtime child across tests within a file (non-trivial — the rollback tests mutate runtime state).
 
 ### 13.2 I2 — `recovery_matrix.rs`
 
@@ -405,11 +417,16 @@ Patterns to actively look for while writing these suites (priority order per `AU
 
 *Reserved for findings; empty until the suite lands.*
 
-### 13.6 Shared infrastructure (P0, `57d3607..`)
+### 13.6 Shared infrastructure (P0, `78a7fab` + I1 follow-up)
 
-`InjectableCoordinator` — reusable failure-injection mock `CoordinatorService`. Per-RPC `VecDeque<Status>` queues for `SubmitGoal`/`Decompose`/`Dispatch`/`AbortWorkspace`; empty queue forwards to the real runtime, non-empty pops the next status and short-circuits. Generalizes WA5's `failure_proxy::FailureProxy` (which only injects on `Dispatch`) — extend with more queues as later suites need them.
+`InjectableCoordinator` — reusable failure-injection mock `CoordinatorService`. Per-RPC `VecDeque<Option<Status>>` queues for `SubmitGoal`/`Decompose`/`Dispatch`/`AbortWorkspace`; empty queue forwards; `Some(status)` short-circuits; `None` forwards explicitly (lets tests script "forward first K, fail the K+1th"). Generalizes WA5's `failure_proxy::FailureProxy` (which only injects on `Dispatch`).
 
-Two-test smoke (`tests/mock_coordinator_smoke.rs`) verifies both legs: forward path with empty queue + inject path with one `Unavailable` pushed. Wall: 0.12 s. `cargo clippy -p console-integration --all-targets -- -D warnings` clean.
+API:
+- `inject_submit_goal(status)` / `inject_decompose(status)` / `inject_dispatch(status)` / `inject_abort(status)` — queue a failure.
+- `pass_dispatch()` / `pass_abort()` — queue an explicit forward. Needed when a later entry in the queue is a failure and the test wants to drive the first N calls through the real runtime first. Added as part of I1 follow-up once the queue-ordering need surfaced.
+- `submit_goal_count()` / `decompose_count()` / `dispatch_count()` / `abort_count()` — per-RPC assertion counters.
+
+Two-test smoke (`tests/mock_coordinator_smoke.rs`) verifies both legs: forward path with empty queue + inject path with one `Unavailable` pushed. Wall: 0.12 s. `cargo clippy -p console-integration --all-targets -- -D warnings` clean after switching the `match` arms to `if let Some(Some(status)) = ...` per `clippy::single_match`.
 
 Cargo.toml edit — moved `tonic`, `tokio-stream`, `wacp-transport` from `[dev-dependencies]` to `[dependencies]` (the new mock lives in `src/` so tests-only deps wouldn't satisfy it). No behaviour change for existing suites; build time unchanged.
 

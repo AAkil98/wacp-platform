@@ -49,7 +49,8 @@ async fn injects_status_when_queued() {
     let mut client = client_for(&mock.addr()).await;
 
     // Push one injection; the next call fails, a follow-up call forwards.
-    mock.inject_submit_goal(Status::unavailable("injected-boom")).await;
+    mock.inject_submit_goal(Status::unavailable("injected-boom"))
+        .await;
 
     let err = client
         .submit_goal(wacp_v1::SubmitGoalRequest {

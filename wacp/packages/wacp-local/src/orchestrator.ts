@@ -11,7 +11,7 @@ export interface WorkflowStage {
   id: string;
   name: string;
   roleId: string;
-  dependsOn: string[];
+  dependsOn: readonly string[];
   gated: boolean;
 }
 
@@ -20,14 +20,14 @@ export interface Workflow {
   id: string;
   name: string;
   description: string;
-  stages: WorkflowStage[];
+  stages: readonly WorkflowStage[];
 }
 
 /** An agent profile — system prompt + tool whitelist. */
 export interface AgentProfile {
   roleId: string;
   systemPrompt: string;
-  tools: string[];
+  tools: readonly string[];
   autonomy: "gated" | "autonomous";
 }
 
@@ -242,7 +242,7 @@ export class WorkflowExecutor {
 // Topological sort
 // ---------------------------------------------------------------------------
 
-function topologicalSort(stages: WorkflowStage[]): WorkflowStage[] {
+function topologicalSort(stages: readonly WorkflowStage[]): WorkflowStage[] {
   const stageMap = new Map(stages.map((s) => [s.id, s]));
   const visited = new Set<string>();
   const result: WorkflowStage[] = [];

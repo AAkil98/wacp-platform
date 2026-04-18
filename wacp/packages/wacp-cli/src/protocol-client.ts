@@ -71,13 +71,13 @@ export class CoordinatorClient {
     });
   }
 
-  async decompose(tasks: Array<{
+  async decompose(tasks: ReadonlyArray<{
     name: string;
     description: string;
-    dependsOn: string[];
+    dependsOn: readonly string[];
     role: string;
     directivePayload: Buffer;
-    tools: string[];
+    tools: readonly string[];
   }>): Promise<string[]> {
     const resp = await this.unaryCall("decompose", { tasks, clientRequestId: "" });
     return resp.taskIds;
@@ -92,7 +92,7 @@ export class CoordinatorClient {
     taskId: string,
     role: string,
     directivePayload: Buffer = Buffer.alloc(0),
-    tools: string[] = [],
+    tools: readonly string[] = [],
   ): Promise<DispatchResult> {
     return this.unaryCall("dispatch", {
       taskId,

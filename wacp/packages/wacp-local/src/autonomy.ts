@@ -1,3 +1,13 @@
+/**
+ * Operation type for autonomy gating.
+ *
+ * The nine string literals are the canonical core ops (`file_*`, `shell_*`,
+ * `git_*`, `web_fetch`, `llm_call`) used by the built-in tooling. Verticals
+ * are free to introduce vertical-specific operations (e.g. finance's
+ * `data_read`/`trade_exec`, mlops' `compute_exec`); the trailing
+ * `string & {}` keeps the union open to those while preserving literal
+ * autocomplete for the canonical set.
+ */
 export type OperationType =
   | "file_read"
   | "file_write"
@@ -7,7 +17,8 @@ export type OperationType =
   | "git_read"
   | "git_write"
   | "web_fetch"
-  | "llm_call";
+  | "llm_call"
+  | (string & {});
 
 export type AutonomyPreset = "supervised" | "assisted" | "autonomous";
 

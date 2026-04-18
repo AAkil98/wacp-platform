@@ -291,6 +291,22 @@ WA3.6 + T7.3 surfaced the same Rust↔proto enum-offset bug as §11.1, this time
 
 A focused one-shot pass would be: `rg "as i32" wacp/crates/wacp-runtime` and audit every result that's setting a proto field. Estimated 30–60 min. Lower-effort than waiting for the third instance to bite.
 
+**P0 pass executed 2026-04-18.** Swept every `as i32` in `wacp/crates/wacp-runtime/src/init.rs`. Seven broken sites, all on the same shape (internal enum cast into a proto field). Added `signal_type_to_proto`, `task_status_to_proto`, `envelope_priority_to_proto`, `envelope_origin_to_proto` helpers next to the existing two; routed each broken cast through its helper; folded the hand-rolled `TaskStatus` match at 1123–1131 into the new helper (correct today, but a maintenance hazard if a variant gets inserted).
+
+| Site | Field | Internal enum | Before (wire) | After (wire) |
+|---|---|---|---|---|
+| init.rs:411 | `SignalEvent.signal_type` | `SignalType` | off-by-one | correct |
+| init.rs:750 | `BindResponse.state` | `WorkspaceState` | off-by-one | correct |
+| init.rs:1344 | `WorkspaceView.state` | `WorkspaceState` | off-by-one | correct |
+| init.rs:1464 | `WorkspaceSummaryItem.state` | `WorkspaceState` | off-by-one | correct |
+| init.rs:1596 | `TaskView.status` | `TaskStatus` | off-by-one | correct |
+| init.rs:1999 | `Envelope.priority` | `EnvelopePriority` | off-by-one | correct |
+| init.rs:2001 | `Envelope.origin` | `EnvelopeOrigin` | off-by-one | correct |
+
+**One integration test was exposed as coincidentally-green.** `terminal_workspace_closed_marked_completed` (recovery_matrix.rs:254) named itself for the Closed-terminal → COMPLETED branch of `recovery::recover_one` (recovery.rs:173–175). But its only path to a terminal state was `abort_workspace`, which lands the workspace in internal `WorkspaceState::Failed` (tree.rs:256 cascade_failure). The off-by-one cast at `WorkspaceView.state` aliased wire 8 (Failed) to proto `Closed`, so recovery decoded "Closed" and marked session COMPLETED — test passed, wrong reason. Renamed to `terminal_workspace_aborted_marked_failed` and flipped expectation to `FAILED`, matching actual behaviour. Coverage of the Closed-terminal → COMPLETED branch is now missing — reaching internal `Closed` requires an agent-side Complete signal → WA3.6 auto-integration, which is too much plumbing for a recovery test without a short-path helper. **Follow-up (small):** either add a `mark_workspace_closed(ws_id)` test-only helper to `RuntimeHarness` that pokes `WorkspaceTree::get_mut(...).status = Closed`, or accept the unit-level coverage at `wa3_6_complete_signal_drives_workspace_to_closed` as sufficient.
+
+**Scope note.** §11.4 was explicitly scoped to `wacp-runtime`. A sweep of `wacp-console` + `wacp-transport` turned up only `as i32` casts of *proto* enum variants (wire-correct) or `tonic::Code`. Console-side stays clean; no fix needed.
+
 ### 11.5 Discovered patterns from the un-ignore sweep
 
 T7.7 (10 concurrent sessions) and T7.8 (slow WS consumer) surfaced two patterns worth recording:

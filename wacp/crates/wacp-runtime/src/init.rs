@@ -408,7 +408,7 @@ impl Runtime {
             WorkspaceEvent::Signal(signal) => {
                 let proto_ev = Ok(wacp_v1::SignalEvent {
                     workspace_id: signal.workspace_id.to_string(),
-                    signal_type: signal.signal_type as i32,
+                    signal_type: signal_type_to_proto(signal.signal_type) as i32,
                     reason: signal.reason.clone().unwrap_or_default(),
                     context: signal.context.clone().unwrap_or_default(),
                     timestamp: signal.timestamp,
@@ -747,7 +747,7 @@ impl Runtime {
                     let cfg = self.workspace_configs.get(&ws_id.to_string());
                     let response = wacp_transport::wacp_v1::BindResponse {
                         workspace_id: ws_id.to_string(),
-                        state: node.status as i32,
+                        state: workspace_state_to_proto(node.status) as i32,
                         role: cfg.map(|c| c.role.clone()).unwrap_or_default(),
                         directive: cfg.map(|c| envelope_to_proto(&c.directive)),
                         context: cfg.map(|c| c.context.clone()).unwrap_or_default(),
@@ -1120,16 +1120,7 @@ impl Runtime {
                         continue;
                     }
                     if let Some(task) = self.coordinator.task_graph.get(&tid) {
-                        let status = match task.status {
-                            TaskStatus::Draft => 1,
-                            TaskStatus::Pending => 2,
-                            TaskStatus::Assigned => 3,
-                            TaskStatus::InProgress => 4,
-                            TaskStatus::Completed => 5,
-                            TaskStatus::Failed => 6,
-                            TaskStatus::Integrated => 7,
-                            TaskStatus::Cancelled => 8,
-                        };
+                        let status = task_status_to_proto(task.status) as i32;
                         tasks.push(wacp_transport::wacp_v1::Task {
                             id: task.id.to_string(),
                             name: task.name.clone(),
@@ -1341,7 +1332,7 @@ impl Runtime {
                 if let Some(node) = self.coordinator.tree.get(&ws_id) {
                     let response = wacp_transport::wacp_v1::WorkspaceView {
                         id: node.id.to_string(),
-                        state: node.status as i32,
+                        state: workspace_state_to_proto(node.status) as i32,
                         role: node.owner.to_string(),
                         parent: node
                             .parent
@@ -1461,7 +1452,7 @@ impl Runtime {
                         Some(wacp_transport::WorkspaceSummaryItem {
                             id: ws_id.to_string(),
                             parent_id: node_parent.unwrap_or_default(),
-                            state: node.status as i32,
+                            state: workspace_state_to_proto(node.status) as i32,
                             owner: node.owner.to_string(),
                             task_id: node
                                 .task_id
@@ -1593,7 +1584,7 @@ impl Runtime {
                             task_id: t.id.to_string(),
                             name: t.name.clone(),
                             description: t.description.clone(),
-                            status: t.status as i32,
+                            status: task_status_to_proto(t.status) as i32,
                             assigned_workspace: t
                                 .workspace_ref
                                 .as_ref()
@@ -1996,9 +1987,9 @@ fn envelope_to_proto(envelope: &Envelope) -> wacp_transport::wacp_v1::Envelope {
             .as_ref()
             .map(|e| e.to_string())
             .unwrap_or_default(),
-        priority: envelope.priority as i32,
+        priority: envelope_priority_to_proto(envelope.priority) as i32,
         timestamp: None,
-        origin: envelope.origin as i32,
+        origin: envelope_origin_to_proto(envelope.origin) as i32,
     }
 }
 
@@ -2080,6 +2071,54 @@ fn workspace_state_to_proto(ws: WorkspaceState) -> wacp_transport::wacp_v1::Work
         WorkspaceState::Conflicted => P::Conflicted,
         WorkspaceState::Closed => P::Closed,
         WorkspaceState::Failed => P::Failed,
+    }
+}
+
+fn signal_type_to_proto(st: SignalType) -> wacp_transport::wacp_v1::SignalType {
+    use wacp_transport::wacp_v1::SignalType as P;
+    match st {
+        SignalType::Ready => P::Ready,
+        SignalType::Started => P::Started,
+        SignalType::Blocked => P::Blocked,
+        SignalType::Checkpoint => P::Checkpoint,
+        SignalType::Complete => P::Complete,
+        SignalType::Failed => P::Failed,
+        SignalType::Integrate => P::Integrate,
+        SignalType::Acknowledged => P::Acknowledged,
+        SignalType::Escalation => P::Escalation,
+        SignalType::Suspend => P::Suspend,
+        SignalType::Migrate => P::Migrate,
+    }
+}
+
+fn task_status_to_proto(ts: TaskStatus) -> wacp_transport::wacp_v1::TaskStatus {
+    use wacp_transport::wacp_v1::TaskStatus as P;
+    match ts {
+        TaskStatus::Draft => P::Draft,
+        TaskStatus::Pending => P::Pending,
+        TaskStatus::Assigned => P::Assigned,
+        TaskStatus::InProgress => P::InProgress,
+        TaskStatus::Completed => P::Completed,
+        TaskStatus::Failed => P::Failed,
+        TaskStatus::Integrated => P::Integrated,
+        TaskStatus::Cancelled => P::Cancelled,
+    }
+}
+
+fn envelope_priority_to_proto(p: EnvelopePriority) -> wacp_transport::wacp_v1::EnvelopePriority {
+    use wacp_transport::wacp_v1::EnvelopePriority as P;
+    match p {
+        EnvelopePriority::Normal => P::Normal,
+        EnvelopePriority::Urgent => P::Urgent,
+        EnvelopePriority::Blocking => P::Blocking,
+    }
+}
+
+fn envelope_origin_to_proto(o: EnvelopeOrigin) -> wacp_transport::wacp_v1::EnvelopeOrigin {
+    use wacp_transport::wacp_v1::EnvelopeOrigin as P;
+    match o {
+        EnvelopeOrigin::Agent => P::Agent,
+        EnvelopeOrigin::Human => P::Human,
     }
 }
 

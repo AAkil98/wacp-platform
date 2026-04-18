@@ -245,17 +245,17 @@ One outstanding known issue from that work — `ProfilesPage.actions.test.tsx` O
 - `impl/audit-13-7-8-plan.md` — seven-phase integration plan with per-suite deliverables, scope adjustments, and drift-filing discipline captured.
 - `wacp-console/frontend/e2e/README.md` — local-run recipe for Playwright.
 - `wacp-console/performance-optimization.md` §13 — integration + chaos findings per suite (all five subsections + P0 infra documented); §12.5 `ProfilesPage` Create-New click unmounts React still open (30–60 min bisect).
-- §11.4 P0 audit pass on remaining Rust-enum-as-i32 sites still open and high-ROI (~30–60 min).
+- `wacp-console/performance-optimization.md` §11.4 — **P0 pass executed 2026-04-18**, full table of seven fixed sites; one recovery-matrix test exposed as coincidentally-green, renamed + flipped, Closed-terminal → COMPLETED branch coverage flagged as follow-up.
 
 **When resuming:**
 
 **Branch state to start:** `git checkout dev`. Working tree clean. All four CI workflows green on dev; 33 commits ahead of main.
 
 **Primary tracks — in rough ROI order:**
-1. **§11.4 P0 audit pass** — 30–60 min. High-ROI: sweep remaining Rust-enum-as-i32 sites across the workspace. Next third-instance-of-the-bug prevention; cheap and mechanical.
+1. ~~**§11.4 P0 audit pass**~~ — **done 2026-04-18**. Swept `as i32` in `wacp-runtime/src/init.rs`; added 4 helpers + routed 7 broken casts through them + folded the hand-rolled TaskStatus match into the new helper. One recovery_matrix test renamed + flipped (was passing on the bug). Closed-terminal → COMPLETED branch coverage now a small follow-up (short-path helper on `RuntimeHarness`).
 2. **§12.5 `ProfilesPage` Create-New unmount** — 30–60 min bisect, per `wacp-console/performance-optimization.md` §12.5.
 3. **Playwright `--coverage` merge** — 1–2 h: wire Playwright's `--coverage` → `wacp-console/frontend/coverage/lcov.info`. Deferred during D3; pick up when baseline numbers settle.
-4. **Merge `dev` → `main`** — dev is 33 commits ahead with every CI check green. Natural cut point; either ff now or accumulate more work first.
+4. **Merge `dev` → `main`** — dev is now 34 commits ahead (after the §11.4 landing) with every CI check green. Natural cut point; either ff now or accumulate more work first.
 
 **Independent / scheduled:**
 5. **§13.7.10 (Codecov monthly ratchet)** — still deferred until 2–3 `main` merges land the §13.7.6b + §13.7.7 + §13.7.8 + §2.7 batch so the baseline settles.

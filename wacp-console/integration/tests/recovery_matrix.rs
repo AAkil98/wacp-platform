@@ -251,16 +251,17 @@ async fn runtime_unavailable_keeps_session_active() {
 }
 
 #[tokio::test]
-async fn terminal_workspace_closed_marked_completed() {
+async fn terminal_workspace_aborted_marked_failed() {
     let rt = RuntimeHarness::spawn_default().await.expect("runtime");
-    let closed_ws = submit_live_goal(&rt, "terminal-close-goal").await;
-    // Drive it to terminal.
-    abort_workspace(&rt, &closed_ws).await;
+    let aborted_ws = submit_live_goal(&rt, "terminal-abort-goal").await;
+    // `AbortWorkspace` invokes `cascade_failure`, landing the workspace in
+    // internal `WorkspaceState::Failed` (wacp-coordinator/src/tree.rs:256).
+    abort_workspace(&rt, &aborted_ws).await;
 
     let db = console_db::create_test_pool().await.expect("db");
     seed_user(&db, "u-1").await;
     let sid = format!("s-{}", uuid::Uuid::new_v4());
-    seed_active_session(&db, &sid, "u-1", Some(&closed_ws)).await;
+    seed_active_session(&db, &sid, "u-1", Some(&aborted_ws)).await;
 
     let console = ConsoleHarness::spawn_with_db(&rt, db.clone())
         .await
@@ -275,8 +276,14 @@ async fn terminal_workspace_closed_marked_completed() {
             .contains_key(&sid),
         "terminal session must not have a monitor"
     );
-    // Closed-without-Failed → COMPLETED per `recovery::recover_one::177`.
-    assert_eq!(session_state(&db, &sid).await, session_state::COMPLETED);
+    // Failed → FAILED per `recovery::recover_one` (recovery.rs:173–175).
+    //
+    // Note: the sibling "Closed (non-Failed terminal) → COMPLETED" branch is
+    // not currently covered end-to-end. Reaching internal `Closed` requires
+    // an agent-side Complete signal that triggers WA3.6 auto-integration;
+    // there's no short-path helper in this harness. Tracked in
+    // `wacp-console/performance-optimization.md` §11.4.
+    assert_eq!(session_state(&db, &sid).await, session_state::FAILED);
 }
 
 #[tokio::test]

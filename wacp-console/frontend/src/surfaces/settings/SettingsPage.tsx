@@ -134,6 +134,9 @@ export function SettingsPage() {
     }
     setLocalValues(vals);
     setDirty({});
+    // Deliberate: re-init from server only when the query refreshes. Depending
+    // on `settings` would reset user edits on every local change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsQuery.dataUpdatedAt]);
 
   function handleChange(key: string, value: string) {

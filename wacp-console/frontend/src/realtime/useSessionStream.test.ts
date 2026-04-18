@@ -623,24 +623,17 @@ describe("useSessionStream", () => {
 
   describe("URL construction", () => {
     it("uses wss: when page is served over https", () => {
-      // jsdom location is not easily patchable via defineProperty, so we
-      // replace the entire window.location with a stub.
-      const originalLocation = window.location;
-      // @ts-expect-error -- intentionally replacing location for test
-      delete (window as { location?: Location }).location;
-      // @ts-expect-error -- partial Location stub
-      window.location = {
-        ...originalLocation,
+      vi.stubGlobal("location", {
+        ...window.location,
         protocol: "https:",
         host: "example.com",
-      };
+      });
 
       renderHook(() => useSessionStream({ sessionId: "sess-1" }));
       const ws = latestWS();
       expect(ws.url).toMatch(/^wss:\/\/example\.com/);
 
-      // Restore
-      window.location = originalLocation;
+      vi.unstubAllGlobals();
     });
 
     it("uses ws: when page is served over http", () => {

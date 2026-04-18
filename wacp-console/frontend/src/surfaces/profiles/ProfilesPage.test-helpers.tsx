@@ -51,7 +51,7 @@ export function queryWrapper() {
 }
 
 export function makeMutationMock(result?: unknown, opts?: { isPending?: boolean }) {
-  const mutateFn = vi.fn((data: unknown, callbacks?: { onSuccess?: (r: unknown) => void }) => {
+  const mutateFn = vi.fn((_data: unknown, callbacks?: { onSuccess?: (r: unknown) => void }) => {
     callbacks?.onSuccess?.(result);
   });
   return {

@@ -50,7 +50,7 @@ function makeGate(id: string) {
     type: "quality_gate",
     workspace_id: "ws1",
     workspace_label: "w",
-    subject: "x",
+    subject: { detail: "x" } as Record<string, unknown>,
     urgency: "medium",
   };
 }

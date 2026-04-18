@@ -264,7 +264,7 @@ describe("UsersPage", () => {
 
       // Fill username but leave password empty
       const inputs = screen.getAllByRole("textbox");
-      fireEvent.change(inputs[0], { target: { value: "newuser" } });
+      fireEvent.change(inputs[0]!, { target: { value: "newuser" } });
 
       fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -297,7 +297,7 @@ describe("UsersPage", () => {
 
       // Fill username
       const inputs = screen.getAllByRole("textbox");
-      fireEvent.change(inputs[0], { target: { value: "newuser" } });
+      fireEvent.change(inputs[0]!, { target: { value: "newuser" } });
       // Fill password
       const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement;
       fireEvent.change(passwordInput, { target: { value: "securePass1!" } });
@@ -368,7 +368,7 @@ describe("UsersPage", () => {
       });
 
       const disableButtons = screen.getAllByRole("button", { name: "Disable" });
-      fireEvent.click(disableButtons[0]); // disable first active user (admin_one)
+      fireEvent.click(disableButtons[0]!); // disable first active user (admin_one)
 
       await waitFor(() => {
         expect(mockedApi.patch).toHaveBeenCalledWith("/api/users/u1", { disabled: true });
@@ -397,7 +397,7 @@ describe("UsersPage", () => {
       });
 
       const disableButtons = screen.getAllByRole("button", { name: "Disable" });
-      fireEvent.click(disableButtons[0]);
+      fireEvent.click(disableButtons[0]!);
 
       await waitFor(() => {
         expect(screen.getByText("Failed to disable user.")).toBeInTheDocument();
@@ -443,7 +443,7 @@ describe("UsersPage", () => {
       });
 
       const resetButtons = screen.getAllByRole("button", { name: "Reset Password" });
-      fireEvent.click(resetButtons[1]); // operator_two
+      fireEvent.click(resetButtons[1]!); // operator_two
 
       await waitFor(() => {
         expect(mockedApi.post).toHaveBeenCalledWith("/api/users/u2/reset-password");
@@ -459,7 +459,7 @@ describe("UsersPage", () => {
       });
 
       const resetButtons = screen.getAllByRole("button", { name: "Reset Password" });
-      fireEvent.click(resetButtons[0]);
+      fireEvent.click(resetButtons[0]!);
 
       await waitFor(() => {
         expect(alertSpy).toHaveBeenCalledWith(
@@ -476,7 +476,7 @@ describe("UsersPage", () => {
       });
 
       const resetButtons = screen.getAllByRole("button", { name: "Reset Password" });
-      fireEvent.click(resetButtons[0]);
+      fireEvent.click(resetButtons[0]!);
 
       await waitFor(() => {
         expect(screen.getByText("Failed to reset password.")).toBeInTheDocument();
@@ -506,7 +506,7 @@ describe("UsersPage", () => {
       });
 
       const unlockButtons = screen.getAllByRole("button", { name: "Unlock" });
-      fireEvent.click(unlockButtons[1]); // operator_two
+      fireEvent.click(unlockButtons[1]!); // operator_two
 
       await waitFor(() => {
         expect(mockedApi.post).toHaveBeenCalledWith("/api/users/u2/unlock");
@@ -521,7 +521,7 @@ describe("UsersPage", () => {
       });
 
       const unlockButtons = screen.getAllByRole("button", { name: "Unlock" });
-      fireEvent.click(unlockButtons[0]);
+      fireEvent.click(unlockButtons[0]!);
 
       await waitFor(() => {
         expect(screen.getByText("Failed to unlock user.")).toBeInTheDocument();
@@ -550,7 +550,7 @@ describe("UsersPage", () => {
       });
 
       const changeRoleButtons = screen.getAllByRole("button", { name: "Change Role" });
-      fireEvent.click(changeRoleButtons[0]);
+      fireEvent.click(changeRoleButtons[0]!);
 
       // Should show a select with roles + OK and X buttons
       await waitFor(() => {
@@ -566,7 +566,7 @@ describe("UsersPage", () => {
       });
 
       const changeRoleButtons = screen.getAllByRole("button", { name: "Change Role" });
-      fireEvent.click(changeRoleButtons[0]); // admin_one (role = admin)
+      fireEvent.click(changeRoleButtons[0]!); // admin_one (role = admin)
 
       await waitFor(() => {
         const selects = screen.getAllByRole("combobox");
@@ -583,7 +583,7 @@ describe("UsersPage", () => {
       });
 
       const changeRoleButtons = screen.getAllByRole("button", { name: "Change Role" });
-      fireEvent.click(changeRoleButtons[1]); // operator_two
+      fireEvent.click(changeRoleButtons[1]!); // operator_two
 
       await waitFor(() => {
         expect(screen.getByRole("button", { name: "OK" })).toBeInTheDocument();
@@ -608,7 +608,7 @@ describe("UsersPage", () => {
       });
 
       const changeRoleButtons = screen.getAllByRole("button", { name: "Change Role" });
-      fireEvent.click(changeRoleButtons[0]);
+      fireEvent.click(changeRoleButtons[0]!);
 
       await waitFor(() => {
         expect(screen.getByRole("button", { name: "X" })).toBeInTheDocument();
@@ -629,7 +629,7 @@ describe("UsersPage", () => {
       });
 
       const changeRoleButtons = screen.getAllByRole("button", { name: "Change Role" });
-      fireEvent.click(changeRoleButtons[0]);
+      fireEvent.click(changeRoleButtons[0]!);
 
       await waitFor(() => {
         expect(screen.getByRole("button", { name: "OK" })).toBeInTheDocument();

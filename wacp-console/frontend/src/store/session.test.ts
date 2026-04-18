@@ -200,7 +200,7 @@ describe("useSessionStore", () => {
 
       const trail = useSessionStore.getState().trail;
       expect(trail).toHaveLength(1);
-      expect(trail[0].id).toBe("t1");
+      expect(trail[0]!.id).toBe("t1");
     });
 
     it("handles entry with extra unknown fields", () => {
@@ -218,7 +218,7 @@ describe("useSessionStore", () => {
       useSessionStore.getState().addGate(makeGate());
 
       expect(useSessionStore.getState().gates).toHaveLength(1);
-      expect(useSessionStore.getState().gates[0].gate_id).toBe("g1");
+      expect(useSessionStore.getState().gates[0]!.gate_id).toBe("g1");
     });
 
     it("appends multiple gates in order", () => {
@@ -233,7 +233,7 @@ describe("useSessionStore", () => {
     it("preserves optional fields like timeout_at", () => {
       useSessionStore.getState().addGate(makeGate({ timeout_at: "2026-04-17T00:00:00Z" }));
 
-      expect(useSessionStore.getState().gates[0].timeout_at).toBe("2026-04-17T00:00:00Z");
+      expect(useSessionStore.getState().gates[0]!.timeout_at).toBe("2026-04-17T00:00:00Z");
     });
   });
 
@@ -243,7 +243,7 @@ describe("useSessionStore", () => {
       useSessionStore.getState().addEscalation(makeEscalation());
 
       expect(useSessionStore.getState().escalations).toHaveLength(1);
-      expect(useSessionStore.getState().escalations[0].escalation_id).toBe("e1");
+      expect(useSessionStore.getState().escalations[0]!.escalation_id).toBe("e1");
     });
 
     it("appends multiple escalations in order", () => {
@@ -263,7 +263,7 @@ describe("useSessionStore", () => {
       useSessionStore.getState().addRefusal(makeRefusal());
 
       expect(useSessionStore.getState().refusals).toHaveLength(1);
-      expect(useSessionStore.getState().refusals[0].refusal_id).toBe("r1");
+      expect(useSessionStore.getState().refusals[0]!.refusal_id).toBe("r1");
     });
 
     it("appends multiple refusals in order", () => {
@@ -278,7 +278,7 @@ describe("useSessionStore", () => {
     it("preserves all refusal fields", () => {
       useSessionStore.getState().addRefusal(makeRefusal());
 
-      const ref = useSessionStore.getState().refusals[0];
+      const ref = useSessionStore.getState().refusals[0]!;
       expect(ref.tool_name).toBe("shell");
       expect(ref.error_code).toBe("POLICY_DENIED");
       expect(ref.policy_kind).toBe("deny-list");
@@ -408,7 +408,7 @@ describe("useSessionStore", () => {
 
       const trail = useSessionStore.getState().trail;
       expect(trail).toHaveLength(1);
-      expect(trail[0].id).toBe("new");
+      expect(trail[0]!.id).toBe("new");
     });
 
     it("setSessionId followed by data accumulation, then setSessionId again resets", () => {

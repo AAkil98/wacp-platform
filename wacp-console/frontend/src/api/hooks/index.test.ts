@@ -190,7 +190,7 @@ describe("useRoles", () => {
       wrapper: makeWrapper(qc),
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("base_role=operator");
     expect(url).toContain("vertical=kyc");
   });
@@ -244,7 +244,7 @@ describe("useTools", () => {
       wrapper: makeWrapper(qc),
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("vertical=kyc");
     expect(url).toContain("has_policy=true");
   });
@@ -385,7 +385,7 @@ describe("useSearch", () => {
     const qc = makeClient();
     renderHook(() => useSearch("test", "tool", "kyc"), { wrapper: makeWrapper(qc) });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("type=tool");
     expect(url).toContain("vertical=kyc");
   });
@@ -483,7 +483,7 @@ describe("useProfiles", () => {
       wrapper: makeWrapper(qc),
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("role_ref=admin");
     expect(url).toContain("search=foo");
   });
@@ -592,7 +592,7 @@ describe("useAuditLog", () => {
       wrapper: makeWrapper(qc),
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("user_id=u1");
     expect(url).toContain("action=login");
     expect(url).toContain("limit=50");
@@ -620,7 +620,7 @@ describe("useSessions", () => {
     const qc = makeClient();
     renderHook(() => useSessions({ state: "active" }), { wrapper: makeWrapper(qc) });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url: string = fetchMock.mock.calls[0][0];
+    const url: string = fetchMock.mock.calls[0]![0];
     expect(url).toContain("state=active");
   });
 });
@@ -697,7 +697,7 @@ function describeMutationErrors(
   name: string,
   setup: () => {
     qc: QueryClient;
-    hook: ReturnType<typeof renderHook<ReturnType<typeof useCreateProfile>, unknown>>;
+    hook: { result: { current: { isError: boolean; error: unknown } } };
     trigger: () => void;
   },
 ) {
@@ -760,7 +760,7 @@ describe("useCreateProfile", () => {
     await act(async () => { result.current.mutate({ name: "prof" }); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/profiles");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ name: "prof" });
@@ -797,7 +797,7 @@ describe("useUpdateProfile", () => {
     await act(async () => { result.current.mutate({ name: "updated" }); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/profiles/p1");
     expect(opts.method).toBe("PUT");
   });
@@ -832,7 +832,7 @@ describe("useDeleteProfile", () => {
     await act(async () => { result.current.mutate(); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/profiles/p1");
     expect(opts.method).toBe("DELETE");
   });
@@ -868,7 +868,7 @@ describe("useCloneProfile", () => {
     await act(async () => { result.current.mutate(); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/profiles/p1/clone");
     expect(opts.method).toBe("POST");
   });
@@ -904,7 +904,7 @@ describe("useImportProfile", () => {
     await act(async () => { result.current.mutate(yamlStr); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/profiles/import");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ yaml: yamlStr });
@@ -941,7 +941,7 @@ describe("useCreateUser", () => {
     await act(async () => { result.current.mutate({ username: "alice" }); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/users");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ username: "alice" });
@@ -978,7 +978,7 @@ describe("useSetSetting", () => {
     await act(async () => { result.current.mutate({ key: "theme", value: "dark" }); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/settings/theme");
     expect(opts.method).toBe("PUT");
     expect(JSON.parse(opts.body)).toBe("dark");
@@ -1016,7 +1016,7 @@ describe("useReloadTaxonomy", () => {
     await act(async () => { result.current.mutate(); });
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
-    const [url, opts] = fetchMock.mock.calls[0];
+    const [url, opts] = fetchMock.mock.calls[0]!;
     expect(url).toBe("/api/taxonomy/reload");
     expect(opts.method).toBe("POST");
   });

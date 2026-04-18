@@ -24,7 +24,7 @@
 //!    any UI that sends ping-like text; Playwright auth-flows.spec.ts
 //!    is a latent consumer).
 //!
-//! **Not covered (deferred, see `performance-optimization.md` §13.4):**
+//! **Not covered (deferred, see `HEALTH-LOG.md` §13.4):**
 //! - **Gap-fill replay.** The AUDIT §13.7.8 scenario calls for an
 //!   `/api/sessions/:id/trail?since=<seq>` REST endpoint that returns
 //!   dropped frames after a Lagged. The endpoint **does not exist**

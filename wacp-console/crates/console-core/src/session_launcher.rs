@@ -2,7 +2,7 @@
 //!
 //! Replaces the pre-W2 SQLite-only `LAUNCHING → ACTIVE` transition with the
 //! real gRPC sequence against `CoordinatorService`. See
-//! `impl/notes/w2-proto-shapes.md` for the proto-level contract the launcher
+//! `impl/archive/notes/w2-proto-shapes.md` for the proto-level contract the launcher
 //! relies on; see `wacp-console/specs/coding/wcon-w2-launch-flow.md` for the
 //! coding spec.
 //!

@@ -127,7 +127,7 @@ match launcher.launch(session_id).await {
 
 ### 4.0 Proto shape review (pre-coding task W2.1)
 
-Produce a short file `impl/notes/w2-proto-shapes.md` before writing `session_launcher.rs`:
+Produce a short file `impl/archive/notes/w2-proto-shapes.md` before writing `session_launcher.rs`:
 
 - `CoordinatorService::CreateSession` — request fields, response fields, error codes.
 - `CoordinatorService::SubmitGoal` — same.
@@ -202,7 +202,7 @@ Defer end-to-end assertion to W7.2. W2 phase-close accepts mock-layer green.
 
 ## 6. Acceptance Criteria
 
-- [ ] `impl/notes/w2-proto-shapes.md` lands before any `session_launcher.rs` commit.
+- [ ] `impl/archive/notes/w2-proto-shapes.md` lands before any `session_launcher.rs` commit.
 - [ ] `cargo test -p console-core --lib session_launcher::` — all green, ≥ 8 tests (T2.1–T2.8).
 - [ ] `cargo test -p console-api --lib routes::sessions::launch::` — handler tests green.
 - [ ] `cargo build --workspace` green.

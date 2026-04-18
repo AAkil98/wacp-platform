@@ -126,7 +126,7 @@ ALTER TABLE audit ADD COLUMN runtime_applied BOOLEAN;
 ```
 via migration, default NULL for historical rows. Update audit insert to set `runtime_applied = runtime_resp.applied`.
 
-If the schema change is out of scope for W4, defer and log the intent in this spec's deviation section (record in §4.2 bullet of `impl/wiring-phases.md` at phase close).
+If the schema change is out of scope for W4, defer and log the intent in this spec's deviation section (record in §4.2 bullet of `impl/archive/wiring-phases.md` at phase close).
 
 ### 4.3 Optimistic pending removal
 

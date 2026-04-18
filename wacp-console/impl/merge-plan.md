@@ -30,7 +30,7 @@ depends_on: [wcon-wiring-strategy, wcon-architecture]
 
 Merge two local Rust workspaces — `wacp/` (runtime, 16 crates) and `wacp-console/` (workbench, 6 crates + SPA) — into a new umbrella repo `wacp-platform/` at `github.com/Madahub-dev/wacp-platform`. The sibling repo `../wacp-protocol/` (protocol specs) is **out of scope** — it stays independent by deliberate design; cross-references resolve via spec IDs (path-independent).
 
-**Estimated effort:** 1–2 working days. The "~4 hours mechanical" framing in `impl/wiring-strategy.md` under-scoped git history, `[workspace.dependencies]` union, proto codegen extraction, and CI rewrite.
+**Estimated effort:** 1–2 working days. The "~4 hours mechanical" framing in `impl/archive/wiring-strategy.md` under-scoped git history, `[workspace.dependencies]` union, proto codegen extraction, and CI rewrite.
 
 ### 1.1 Source Inventories
 
@@ -261,8 +261,8 @@ In root `Cargo.toml` `[workspace.dependencies]`, remove explicit paths on `wacp-
 - Write root `README.md`: 1-page umbrella, links to both subprojects and to the sibling `wacp-protocol/` repo.
 - Write root `docker-compose.yml`: services for `wacp-runtime` (exposes 9090–9093) and `wacp-console` (exposes HTTP port), sqlite volume for `console.db`, env overrides so console's `runtime.*_address` points at the compose-internal `wacp-runtime` hostname instead of `[::1]`.
 - Write `wacp-console/Dockerfile` (per D11): multi-stage — Stage 1 `node:22-alpine` runs `pnpm install && pnpm build` in `frontend/`. Stage 2 `rust:1-slim` runs `cargo build --release -p console` (rust-embed picks up `frontend/dist/`). Stage 3 distroless or `debian:stable-slim` with binary + non-root user. CMD `["console", "serve"]`.
-- Write `impl/adr-009-oci-only-console.md` at umbrella root: supersedes ADR-004; defers cargo-dist; ships console as OCI image.
-- Move `wacp-console/impl/wiring-strategy.md` → umbrella `impl/wiring-strategy.md` (cross-cutting per D7).
+- Write `adr/adr-009-oci-only-console.md` at umbrella root: supersedes ADR-004; defers cargo-dist; ships console as OCI image.
+- Move `wacp-console/impl/archive/wiring-strategy.md` → umbrella `impl/archive/wiring-strategy.md` (cross-cutting per D7).
 
 ### 5.7 M6 — Rewrite CI
 
@@ -384,7 +384,7 @@ Source repos untouched until M7. `pre-monorepo-wacp` and `pre-monorepo-console` 
 - [ ] Cut fresh `dev` off umbrella `main`; protect `main`; set `dev` as default PR target for W1–W6 work.
 - [ ] Update `wacp-console/IMPLEMENTATION.md` for new layout.
 - [ ] Update `wacp-console/SEED.md` — W0 ✅.
-- [ ] Update umbrella `impl/wiring-strategy.md` — mark W0 complete; strike the §3 monorepo section.
+- [ ] Update umbrella `impl/archive/wiring-strategy.md` — mark W0 complete; strike the §3 monorepo section.
 - [ ] Archive source `wacp/` and `wacp-console/` GitHub repos as read-only (after ~30-day fallback window).
 - [ ] Begin W1 (gRPC pool → AppState) in the monorepo.
 - [ ] Write `scripts/release.sh <runtime|console|both> <semver>` — coordinated proto-bump releases.

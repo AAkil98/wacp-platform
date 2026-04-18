@@ -256,7 +256,7 @@ Each produces a `Refusal` payload with policy metadata resolved from taxonomy.
 
 ## 6. Acceptance Criteria
 
-- [ ] Proto-review notes at `impl/notes/w3-stream-shapes.md` land before `session_monitor.rs`. Cite proto file + line for all four streams' Item types, ordering guarantees, terminal conditions.
+- [ ] Proto-review notes at `impl/archive/notes/w3-stream-shapes.md` land before `session_monitor.rs`. Cite proto file + line for all four streams' Item types, ordering guarantees, terminal conditions.
 - [ ] `cargo test -p console-core --lib session_monitor::` — all green, ≥ 15 tests.
 - [ ] `cargo test -p console-core --lib event_enricher::` and `refusal_synthesizer::` — green.
 - [ ] `cargo test -p console-api --lib routes::ws::` — green (WS subscribes to broadcast).

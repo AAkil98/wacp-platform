@@ -10,9 +10,9 @@ depends_on: [wcon-wiring-strategy, wcon-llm-stub, wcon-w7-integration-tests]
 
 # Wiring Strategy B — Runtime Agent-Service ↔ Coordinator
 
-> **Scope.** The runtime-side counterpart to `impl/wiring-strategy.md`. The original strategy (W1–W7) wired the **Console** to the runtime: gRPC pool, session monitor, highway forwarding, cross-session queues. This follow-up wires the **runtime's own AgentService** to the coordinator and workspace actor so agent signals / checkpoints / envelopes actually drive the state machines the Console is already observing.
+> **Scope.** The runtime-side counterpart to `impl/archive/wiring-strategy.md`. The original strategy (W1–W7) wired the **Console** to the runtime: gRPC pool, session monitor, highway forwarding, cross-session queues. This follow-up wires the **runtime's own AgentService** to the coordinator and workspace actor so agent signals / checkpoints / envelopes actually drive the state machines the Console is already observing.
 >
-> **Positioning.** Lives alongside the original at `impl/wiring-strategy-b.md`. Follows the same structure (inventory → plan → execution order → risk map → acceptance) so a reader can diff the two documents to see what changed.
+> **Positioning.** Lives alongside the original at `impl/archive/wiring-strategy-b.md`. Follows the same structure (inventory → plan → execution order → risk map → acceptance) so a reader can diff the two documents to see what changed.
 >
 > **Why "B".** Audit §13.7.6 landed the deterministic `wacp-llm` stub provider and the I6 integration test that exercises it end-to-end. T7.2 / T7.3 (and the four inheritors T7.5 / T7.7 / T7.8 / T7.10) stayed `#[ignore]`-ed because the runtime's `AgentService` handlers in `wacp/crates/wacp-runtime/src/init.rs` are currently shells — they acknowledge requests but do not feed the coordinator or workspace FSM. Every ignored test asserts behavior that presupposes the wiring this document plans. Audit tracks this as §13.7.6b.
 

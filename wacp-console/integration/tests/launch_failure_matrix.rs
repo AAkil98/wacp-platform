@@ -10,7 +10,7 @@
 //! surface tight: we prove the launcher's error shape + rollback
 //! behaviour, not the handler wrapping.
 //!
-//! **Perf-opt watch (`wacp-console/performance-optimization.md` §13.1).**
+//! **Perf-opt watch (`HEALTH-LOG.md` §13.1).**
 //! Any `LaunchError::reason_code()` output that looks inconsistent across
 //! the matrix (e.g., a dispatch failure producing a submit_goal-shaped
 //! code) is a public-contract drift — file under §13.1 with the exact

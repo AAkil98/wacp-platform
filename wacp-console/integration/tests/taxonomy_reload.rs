@@ -16,7 +16,7 @@
 //! 4. **repeated_reload_is_idempotent** — two consecutive reloads against
 //!    the same mock state return identical counts.
 //!
-//! **Not covered (deferred, see `performance-optimization.md` §13.5):**
+//! **Not covered (deferred, see `HEALTH-LOG.md` §13.5):**
 //! - `context_schema` change affects new sessions but not running ones.
 //!   Requires a second runtime process + SubmitGoal flow + a schema
 //!   evolution in the fixture; multi-step and outside integration scope.

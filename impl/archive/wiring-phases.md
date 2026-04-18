@@ -11,7 +11,7 @@ depends_on: [wcon-wiring-strategy, wcon-architecture, wcon-sessions, wcon-highwa
 
 # Wiring Phases — Deliverables, Tests, Acceptance Bars
 
-> Operational companion to `impl/wiring-strategy.md`. The strategy doc frames the "why" (the hollow-code inventory, the architectural shape). This doc frames the "what, in what order, done when." Each W-phase is one row in §3 below with explicit deliverables, a test strategy layered mock-then-real, and a binary acceptance bar. Coding specs at `wacp-console/specs/coding/wcon-w{1..7}-*.md` drill further into function signatures, types, and test cases.
+> Operational companion to `impl/archive/wiring-strategy.md`. The strategy doc frames the "why" (the hollow-code inventory, the architectural shape). This doc frames the "what, in what order, done when." Each W-phase is one row in §3 below with explicit deliverables, a test strategy layered mock-then-real, and a binary acceptance bar. Coding specs at `wacp-console/specs/coding/wcon-w{1..7}-*.md` drill further into function signatures, types, and test cases.
 >
 > **Ground rule — no shortcuts.** Mock-runtime tests are the fast feedback loop; real-runtime integration tests are the ground truth. Both layers must be green before a phase closes. Skipping the real-runtime layer is how stream protocol bugs reach production — §7 of `wcon-wiring-strategy.md` calls this risk out explicitly.
 
@@ -78,10 +78,10 @@ W1 (pool → AppState)
 
 ### W2 — Launch Flow   *(DONE — commit `5cba194`)*
 
-**Estimate:** 1 working day (actual: ~2h end-to-end). **Coding spec:** `wcon-w2-launch-flow`. **Proto-shape note:** `impl/notes/w2-proto-shapes.md`.
+**Estimate:** 1 working day (actual: ~2h end-to-end). **Coding spec:** `wcon-w2-launch-flow`. **Proto-shape note:** `impl/archive/notes/w2-proto-shapes.md`.
 
 **Deviations landed with the W2 commit:**
-- The original spec wrote a 5-step sequence with a distinct `CreateSession` RPC. That RPC does not exist — `CoordinatorService::SubmitGoal` is itself the session constructor and returns `root_workspace_id` as a side effect. Sequence collapsed to `SubmitGoal → Decompose → Dispatch × N → Finalize` (step 4 = SendDirective is a no-op at launch; `Dispatch` carries the directive). Details in `impl/notes/w2-proto-shapes.md` §8.
+- The original spec wrote a 5-step sequence with a distinct `CreateSession` RPC. That RPC does not exist — `CoordinatorService::SubmitGoal` is itself the session constructor and returns `root_workspace_id` as a side effect. Sequence collapsed to `SubmitGoal → Decompose → Dispatch × N → Finalize` (step 4 = SendDirective is a no-op at launch; `Dispatch` carries the directive). Details in `impl/archive/notes/w2-proto-shapes.md` §8.
 - Runtime-side quirk: `Dispatch` silently drops `request.tools` and `request.budget` (`init.rs:1418-1477`). The launcher sends them for contract fidelity, but tests cannot assert they reach the worker — flagged as a wacp-side W-phase follow-up.
 - `ProgrammableCoordinator` landed in `console-test-support` so future phases (W4, W5, W7) can inject per-RPC failures without respawning tonic servers per test.
 
@@ -102,11 +102,11 @@ W1 (pool → AppState)
 
 ### W3 — Session Monitor *(DONE — commit `a90ac5f`)*
 
-**Estimate:** 2 working days. **Coding spec:** `wcon-w3-session-monitor`. **Proto-shape note:** `impl/notes/w3-stream-shapes.md`.
+**Estimate:** 2 working days. **Coding spec:** `wcon-w3-session-monitor`. **Proto-shape note:** `impl/archive/notes/w3-stream-shapes.md`.
 
 **Deviations landed with the W3 commit:**
 
-- Runtime ignores every stream's request filter (`impl/notes/w3-stream-shapes.md` §6) — every monitor is a full firehose subscriber and filters by `WorkspaceSet` post-receive.
+- Runtime ignores every stream's request filter (`impl/archive/notes/w3-stream-shapes.md` §6) — every monitor is a full firehose subscriber and filters by `WorkspaceSet` post-receive.
 - `ListPendingGates` / `ListPendingEscalations` RPCs do not exist; reconnect emits a `Lag` control frame with `refresh_hint` so the frontend re-queries REST instead of resyncing in-band.
 - Memory regression test (T3.15, 100 monitors < 50 MB) is not yet wired — deferred to W7's integration sweep where mock-runtime fixtures already exist.
 

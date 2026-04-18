@@ -153,7 +153,7 @@ W1 alone does not ship real-runtime tests; W7 will replay these with the real bi
 
 ### Deviations landed with the W1 commit
 
-- **Status freshness.** The current `GrpcPool` does not run a background reconnect loop — statuses update only when the pool is explicitly told to reconnect (`reconnect_*()`) or when a call returns `None` and the caller triggers a reconnect. That means after a runtime crash the pool's status stays `Connected` until either a handler hits `None` on `.agent()` / etc., or W3's monitor reconnects from its stream driver. Acceptable for W1 (W2+ call sites + W3 monitor drive the refresh); a dedicated `PoolRefresh` task would add scope. If this becomes a usability issue we add a small tick-based refresh — tracked in `impl/wiring-phases.md` §7.
+- **Status freshness.** The current `GrpcPool` does not run a background reconnect loop — statuses update only when the pool is explicitly told to reconnect (`reconnect_*()`) or when a call returns `None` and the caller triggers a reconnect. That means after a runtime crash the pool's status stays `Connected` until either a handler hits `None` on `.agent()` / etc., or W3's monitor reconnects from its stream driver. Acceptable for W1 (W2+ call sites + W3 monitor drive the refresh); a dedicated `PoolRefresh` task would add scope. If this becomes a usability issue we add a small tick-based refresh — tracked in `impl/archive/wiring-phases.md` §7.
 - **Overall status mapping.** Health returns `"degraded"` when db is `ok` but any runtime check fails (preserves the pre-W1 semantics from `health.rs`). Only db failure escalates to `"unhealthy"`.
 
 ---

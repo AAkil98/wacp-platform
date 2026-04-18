@@ -36,7 +36,7 @@ This spec narrows WA3 to deliverable (a) only. Part (b) is carved out as **WA3.5
 - `GateController::open_checkpoint_gate()`.
 - `RespondToGate` → workspace-actor resumption callback.
 
-Tracked in `impl/wiring-strategy-b.md` as **WA3.5** (added in the same commit that lands this spec).
+Tracked in `impl/archive/wiring-strategy-b.md` as **WA3.5** (added in the same commit that lands this spec).
 
 ## 2. Changes — `wacp-runtime/src/init.rs`
 

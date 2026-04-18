@@ -4,7 +4,7 @@ import { Notifications, NavBadge } from "./Notifications";
 import { useSessionStore } from "../store/session";
 
 // ----------------------------------------------------------------------------
-// Deliverable drift for AUDIT-2026-04-15 §13.7.4 (see performance-optimization
+// Deliverable drift for AUDIT-2026-04-15 §13.7.4 (see HEALTH-LOG
 // §2.5).  The deliverable described:
 //
 //  - Toast variants: success / warning / error / info
@@ -27,7 +27,7 @@ import { useSessionStore } from "../store/session";
 //  - NavBadge (functional) — 11 tests.
 //  - Notifications lifecycle (interval + null render) — 5 tests.
 //
-// The drift itself is captured in `performance-optimization.md` §2.5 as a
+// The drift itself is captured in `HEALTH-LOG.md` §2.5 as a
 // latent-bug signal: operators currently have no way to receive toasts.
 // ----------------------------------------------------------------------------
 

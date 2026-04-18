@@ -200,7 +200,7 @@ Add after the existing task-gate block (~line 1695):
 - `cargo test -p console-integration --test llm_stub_e2e` still green (no regression).
 - `cargo clippy --workspace -- -D warnings` clean.
 - `cargo fmt --check --all` clean.
-- T7.2 un-`#[ignore]`s separately (part of the sweep in `impl/wiring-strategy-b.md` §4) once WA3.6 + WA5 also land.
+- T7.2 un-`#[ignore]`s separately (part of the sweep in `impl/archive/wiring-strategy-b.md` §4) once WA3.6 + WA5 also land.
 
 ## 8. References
 

@@ -13,7 +13,7 @@ depends_on: [wcon-architecture, wcon-sessions, wcon-highway, wcon-merge-plan]
 
 > **Scope.** This is a **cross-cutting document** spanning both `wacp/` (runtime, protocol, taxonomy) and `wacp-console/` (workbench, SPA). It describes how the two halves connect across process boundaries via gRPC and REST.
 >
-> **Positioning.** Lives at the **monorepo root** (`impl/wiring-strategy.md` of `wacp-platform/`) — the canonical wiring plan for the workspace. Relocated here at M5; see `wacp-console/impl/merge-plan.md` for the merge procedure and `impl/merge-execution-log.md` for the execution record.
+> **Positioning.** Lives at the **monorepo root** (`impl/archive/wiring-strategy.md` of `wacp-platform/`) — the canonical wiring plan for the workspace. Relocated here at M5; see `wacp-console/impl/merge-plan.md` for the merge procedure and `impl/merge-execution-log.md` for the execution record.
 >
 > **Relationship to `merge-plan.md`.** W0 (monorepo merge) is the precondition for the wiring phases W1–W6. The detailed merge procedure is at `wacp-console/impl/merge-plan.md`; this document only summarizes it and defers for detail.
 
@@ -331,7 +331,7 @@ W7: Integration tests                       ~1 day
 
 **Critical path:** W3 (session monitor) — 4 concurrent streams, aggregation, reconnect, completion detection, broadcast fan-out. Every other phase is mechanical wiring.
 
-**Phase breakdown with per-phase deliverables, test strategy, and acceptance bar:** see `impl/wiring-phases.md`. Each phase has a coding spec at `wacp-console/specs/coding/wcon-w{1..7}-*.md` that drills into function signatures, types, and test cases.
+**Phase breakdown with per-phase deliverables, test strategy, and acceptance bar:** see `impl/archive/wiring-phases.md`. Each phase has a coding spec at `wacp-console/specs/coding/wcon-w{1..7}-*.md` that drills into function signatures, types, and test cases.
 
 ### 5.1 Pre-Flight — Done at M7 §6
 

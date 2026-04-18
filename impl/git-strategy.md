@@ -2,7 +2,7 @@
 
 > Codifies the branching, commit, merge, CI, and release conventions in use today across the `wacp-platform` monorepo. Written 2026-04-18 after the project settled into a steady dev→main fast-forward cadence and accumulated enough commit history (every commit tagged with a spec section like §11.4, §13.7.8 I3, §2.7.2) to name the pattern.
 >
-> Scope: this is the operational doc for how code moves through the tree. Companion docs: `impl/merge-plan.md` (M0–M7 monorepo merger, one-time event), `impl/ci-health-2026-04-17.md` (CI workflow history), `impl/tech-debt-2026-04-18.md` (refactor plan referenced in §8).
+> Scope: this is the operational doc for how code moves through the tree. Companion docs: `impl/merge-plan.md` (M0–M7 monorepo merger, one-time event), `impl/ci-health-2026-04-17.md` (CI workflow history), `tech-debt-2026-04-18.md` (refactor plan referenced in §8).
 
 ## 1. Purpose
 
@@ -328,7 +328,7 @@ Per SEED.md "Merge strategy" section:
 1. Rust branch-coverage floor ≥ 85 % (§13.7.9 ratchet).
 2. First mutation run ≥ 85 % per module (§13.7.9 Monday cron).
 3. All four CI workflows green on `main` (not just `dev`) after ff.
-4. Tech-debt doc Bucket A landed (sourcemap flip + highway-ui decision per `impl/tech-debt-2026-04-18.md` §3.1).
+4. Tech-debt doc Bucket A landed (sourcemap flip + highway-ui decision per `tech-debt-2026-04-18.md` §3.1).
 
 Tagging before these gates is not prevented by tooling — it's prevented by habit + this doc.
 
@@ -457,9 +457,9 @@ Prevent with branch protection on GitHub: require linear history + disallow forc
 
 ## 12. Relationship to other planning docs
 
-- **`impl/tech-debt-2026-04-18.md` §3.2 Bucket B** proposes a post-v0.1 `refactor/file-splits` branch. Per §3.2 naming, this is a `refactor/*` topic branch, single-PR review, ff to `dev` when green. Its single-blame-event goal requires ff, not squash.
+- **`tech-debt-2026-04-18.md` §3.2 Bucket B** proposes a post-v0.1 `refactor/file-splits` branch. Per §3.2 naming, this is a `refactor/*` topic branch, single-PR review, ff to `dev` when green. Its single-blame-event goal requires ff, not squash.
 - **`impl/merge-plan.md`** (M0–M7) was a one-time event. It used its own branch naming (`merge/m*`) that predates this doc. Consider the naming grandfathered.
-- **`impl/ci-cleanup-2.7-plan.md`** is the reference example of a `ci/*` topic branch executed under this strategy (branched from `f6efc32`, ff'd to `dev` after Phases A+B+C+D+E landed across 9 commits).
+- **`impl/archive/ci-cleanup-2.7-plan.md`** is the reference example of a `ci/*` topic branch executed under this strategy (branched from `f6efc32`, ff'd to `dev` after Phases A+B+C+D+E landed across 9 commits).
 - **`SEED.md` "Merge strategy" section** is a short-form recap for session resumption. When this doc changes, update the SEED summary too.
 
 ## 13. Tooling to add pre-launch (not blocking)

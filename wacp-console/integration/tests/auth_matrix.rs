@@ -21,7 +21,7 @@
 //! 7. Account lockout — 5 failed logins for a username returns 401 with
 //!    body `{"error":"account_locked"}` (per `rate_limit.rs::MAX_FAILED_PER_ACCOUNT`).
 //!
-//! **Runtime-auth drift** (`performance-optimization.md` §11.4 + §13.3).
+//! **Runtime-auth drift** (`HEALTH-LOG.md` §11.4 + §13.3).
 //! The `AUDIT-2026-04-15.md` §13.7.8 original matrix called for "every
 //! runtime auth path (api-key / session / oauth)" but the runtime's
 //! `Bind` handler today accepts any token ≥ 8 chars regardless of kind
@@ -30,7 +30,7 @@
 //! `DRIFT:` comment on the runtime-auth smoke test below.
 //!
 //! **Not covered (deferred):** `must_change_password` forced-change
-//! deadlock (the D2 fix from `performance-optimization.md` §12.4) has
+//! deadlock (the D2 fix from `HEALTH-LOG.md` §12.4) has
 //! frontend E2E coverage in `wacp-console/frontend/e2e/auth-flows.spec.ts`
 //! — there's no integration-scope value in replicating it here.
 

@@ -46,12 +46,19 @@ wacp-platform/
 ├── .cargo/config.toml          # WSL2 memory-pressure mitigation (jobs=1 + mold)
 ├── docker-compose.yml          # Dev compose: runtime + console
 ├── SEED.md                     # Umbrella seed for fresh sessions
+├── HEALTH-LOG.md               # Living drift/health log (tier 1 — append per session)
+├── AUDIT-YYYY-MM-DD.md         # Dated audit snapshots (tier 2)
+├── tech-debt-YYYY-MM-DD.md     # Dated tech-debt snapshots (tier 2)
 ├── README.md                   # This file
 │
-├── impl/
-│   ├── wiring-strategy.md      # W0–W6 cross-cutting wiring plan (post-merge work)
-│   ├── merge-execution-log.md  # Live record of the M0→M7 merge (this assembly)
+├── adr/
 │   └── adr-009-oci-only-console.md  # Console distribution: OCI image only
+│
+├── impl/
+│   ├── git-strategy.md         # Branching / commits / merges (active reference)
+│   ├── merge-execution-log.md  # Historical record of the M0→M7 merge
+│   ├── ci-health-2026-04-17.md # Historical record of §2.1–§2.7 CI cleanup
+│   └── archive/                # Executed plans (wiring-*, ci-cleanup-2.7-plan, audit-13-7-8-plan, notes/)
 │
 ├── wacp/                       # Runtime subtree — preserved history
 │   ├── crates/                 # 17 Rust crates (incl. wacp-proto)

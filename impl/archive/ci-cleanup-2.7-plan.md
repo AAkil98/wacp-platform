@@ -492,7 +492,7 @@ Every commit lands on the same branch — `ci/cleanup-2.7` (new branch, cut from
 | `impl/ci-health-2026-04-17.md` | Source doc; §2.7 subsection frames the 9 drift items. |
 | `AUDIT-2026-04-15.md` §13.7.7 | Playwright CI stage (D3) is unblocked by this plan. |
 | `SEED.md` | Current-state narrative; will refresh to "§2.7 closed" at plan's acceptance. |
-| `wacp-console/performance-optimization.md` §12 | Cross-referenced for the pre-cleanup drift findings. |
+| `HEALTH-LOG.md` §12 | Cross-referenced for the pre-cleanup drift findings. |
 | Commits `efd23e9..0845acd` (on `dev`) | §2.1–§2.6 landing this plan builds on. |
 
 *wacp-platform — §2.7 full-fix plan, drafted 2026-04-17 evening. Plan status: draft; execution pending.*

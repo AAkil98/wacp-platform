@@ -15,7 +15,7 @@
 //! The runtime expects a real LLM provider to make forward progress on
 //! coordinator state (decompose, dispatch, integrate). There is no built-in
 //! mock LLM — see W7's `5.1 Happy-path lifecycle` deviation note in
-//! `impl/wiring-phases.md`. Tests that need a live LLM are marked
+//! `impl/archive/wiring-phases.md`. Tests that need a live LLM are marked
 //! `#[ignore]` with a `// ignored: needs LLM stub` reason.
 
 pub mod console_harness;

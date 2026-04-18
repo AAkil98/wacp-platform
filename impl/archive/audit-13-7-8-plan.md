@@ -24,7 +24,7 @@ depends_on: [wacp-audit-2026-04-15, wacp-ci-cleanup-2.7-plan]
   - 3.3 I3 `auth_matrix.rs`
   - 3.4 I4 `ws_chaos.rs` (expand `chaos.rs`)
   - 3.5 I5 `taxonomy_reload.rs`
-- 4. `performance-optimization.md` watch list
+- 4. `HEALTH-LOG.md` watch list
 - 5. Verification matrix + CI
 - 6. Phasing + commit strategy
 - 7. Non-goals / deferred
@@ -42,7 +42,7 @@ depends_on: [wacp-audit-2026-04-15, wacp-ci-cleanup-2.7-plan]
 - No suite's per-test RSS peak > 500 MB (consistent with frontend §6 watch list; Rust tests are cheaper anyway).
 - Every new suite produces at least one *failure-path* assertion that would have caught a historical bug (perf-opt §9/§11 are the prompt list).
 
-**Anchors:** AUDIT §13.7.8 deliverables; `performance-optimization.md` §11.5 (T7.7/T7.8 lessons already baked in); `wacp-console/integration/src/*.rs` for the harness API.
+**Anchors:** AUDIT §13.7.8 deliverables; `HEALTH-LOG.md` §11.5 (T7.7/T7.8 lessons already baked in); `wacp-console/integration/src/*.rs` for the harness API.
 
 ## 2. Shared infrastructure (pre-work)
 
@@ -223,7 +223,7 @@ impl TestClient {
 
 ---
 
-## 4. `performance-optimization.md` watch list
+## 4. `HEALTH-LOG.md` watch list
 
 Every suite below should produce either a PASS-path assertion or a WATCH-for addition to perf-opt §6 depending on what shows up. Keeping this explicit so drift-filing happens as part of each commit, not at the end.
 
@@ -245,7 +245,7 @@ Add a new `§13` section header pre-commit with empty subsections per suite so t
 - …
 - §13.5 — I5 findings.
 
-**Pre-work (free, ~5 min) at the start:** append the `§13` shell to `performance-optimization.md` as part of I1's commit so future I-commits have a home.
+**Pre-work (free, ~5 min) at the start:** append the `§13` shell to `HEALTH-LOG.md` as part of I1's commit so future I-commits have a home.
 
 **Specific items to look for — based on the audit's recommendations:**
 
@@ -329,10 +329,10 @@ Ordered for fast-unblocked flow: pre-work first (shared), then the two suites th
 | Doc | Relationship |
 |---|---|
 | `AUDIT-2026-04-15.md` §13.7.8 | Source deliverables (I1–I5). |
-| `wacp-console/performance-optimization.md` §9, §11, §12 | Drift patterns to guard against + the pre-existing §11 P0 enum-audit recommendation. |
+| `HEALTH-LOG.md` §9, §11, §12 | Drift patterns to guard against + the pre-existing §11 P0 enum-audit recommendation. |
 | `wacp-console/integration/src/{runtime_harness,console_harness,test_client}.rs` | Harness API reused by every new suite. |
 | `wacp-console/integration/tests/chaos.rs` (T7.5 `ForwardingMockCoordinator`) | Prior-art mock for I1's failure injection. |
 | `wacp-console/integration/tests/llm_stub_e2e.rs` | Reference shape for a clean I-style file (222 lines, 2 tests, strict assertions). |
-| `impl/ci-cleanup-2.7-plan.md` | Commit-discipline template (per-phase commits, no bypasses, drift captured). |
+| `impl/archive/ci-cleanup-2.7-plan.md` | Commit-discipline template (per-phase commits, no bypasses, drift captured). |
 
 *wacp-platform — §13.7.8 plan, drafted 2026-04-18 after §13.7.7 closed. Plan status: draft; execution pending.*

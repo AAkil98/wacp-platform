@@ -2,7 +2,7 @@
 
 > Compressed summary of the full design, current implementation state, and next steps.
 > For detail on any topic, follow the spec references. For task-level implementation detail, see `IMPLEMENTATION.md`.
-> For the wiring strategy (cross-cutting, intended to sit at the monorepo root post-merge), see `../impl/wiring-strategy.md`.
+> For the wiring strategy (cross-cutting, intended to sit at the monorepo root post-merge), see `../impl/archive/wiring-strategy.md`.
 > For the monorepo merge procedure (W0 detail, 7 milestones, decisions still open), see `impl/merge-plan.md`.
 
 ## What This Is
@@ -106,7 +106,7 @@ Four endpoints, three independent Tonic channels + one REST client:
 
 ## Next Step: Wiring Strategy
 
-**Documents:** `../impl/wiring-strategy.md` (cross-cutting plan — intended to sit at the monorepo root post-merge) and `impl/merge-plan.md` (W0 detail — `status: final`, 12 decisions resolved, 6 pre-M0 open items resolved with decisions recorded in §10).
+**Documents:** `../impl/archive/wiring-strategy.md` (cross-cutting plan — intended to sit at the monorepo root post-merge) and `impl/merge-plan.md` (W0 detail — `status: final`, 12 decisions resolved, 6 pre-M0 open items resolved with decisions recorded in §10).
 
 Phase 7 (distribution) is postponed. The next work is wiring the Console to the real WACP runtime. The strategy has 7 steps:
 
@@ -166,7 +166,7 @@ Pre-flight complete: merge-plan `status: final`, §10 items resolved, `wacp/.car
 
 When resuming:
 1. Read `impl/merge-plan.md` §5 procedure and §10 decisions (~10 min refresh).
-2. Finish M0 — commit outstanding docs (this SEED update, `../impl/wiring-strategy.md`, `impl/merge-plan.md`) on `wacp-console/dev`, then tag `pre-monorepo-wacp` on wacp and `pre-monorepo-console` on wacp-console.
+2. Finish M0 — commit outstanding docs (this SEED update, `../impl/archive/wiring-strategy.md`, `impl/merge-plan.md`) on `wacp-console/dev`, then tag `pre-monorepo-wacp` on wacp and `pre-monorepo-console` on wacp-console.
 3. Execute M1 → M7 in one focused session (1–2 days).
 4. Post-M7, begin W1 (gRPC pool → AppState) on umbrella `dev` branch.
 
@@ -212,7 +212,7 @@ When resuming:
 | 008 | OpenAPI as shared contract (utoipa → openapi-typescript) |
 | 009 | *(pending — written at M5)* OCI-only console distribution; cargo-dist deferred; `rust-embed` retained inside Dockerfile cargo build stage |
 
-**Full ADR text:** `SPEC_BUILD.md` (ADR-009 will live at umbrella `impl/adr-009-oci-only-console.md` post-merge).
+**Full ADR text:** `SPEC_BUILD.md` (ADR-009 will live at umbrella `adr/adr-009-oci-only-console.md` post-merge).
 
 ## Workspace Layout
 

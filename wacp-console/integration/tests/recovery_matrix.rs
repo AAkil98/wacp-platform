@@ -10,7 +10,7 @@
 //!   - terminal_closed: ACTIVE + runtime reports `Closed` → COMPLETED
 //!   - mixed: three sessions, three distinct outcomes in one pass
 //!
-//! **Not covered (deferred, see `performance-optimization.md` §13.2):**
+//! **Not covered (deferred, see `HEALTH-LOG.md` §13.2):**
 //! - Workspace in `Failed` state → FAILED session. The real runtime won't
 //!   reach Failed without the workspace actor emitting a signal the
 //!   coordinator interprets as fatal, which isn't a clean seeding path.
@@ -282,7 +282,7 @@ async fn terminal_workspace_aborted_marked_failed() {
     // not currently covered end-to-end. Reaching internal `Closed` requires
     // an agent-side Complete signal that triggers WA3.6 auto-integration;
     // there's no short-path helper in this harness. Tracked in
-    // `wacp-console/performance-optimization.md` §11.4.
+    // `HEALTH-LOG.md` §11.4.
     assert_eq!(session_state(&db, &sid).await, session_state::FAILED);
 }
 

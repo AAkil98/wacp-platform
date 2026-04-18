@@ -1,6 +1,8 @@
-# Console — Performance Optimization Notes
+# WACP Platform — Health Log
 
-> Notes collected while stabilizing the Vitest suite (session 2026-04-16) and extrapolated into a guide for runtime-performance work on the React/Axum console. Testing pain is usually a leading indicator of app-performance smells — this document captures both sides.
+> **Tier-1 living log** (see `SEED.md` §"Doc Tiers & Audit Process"). Append-only drift/health ledger spanning both binaries — runtime (`wacp/`) and console (`wacp-console/`). Every session that surfaces a spec-vs-impl drift, schema-vs-struct drift, `useEffect` leak, coincidentally-green test, dependency smell, or other health signal adds a new `## N.M` subsection. Dated snapshots (`AUDIT-YYYY-MM-DD.md`, `tech-debt-YYYY-MM-DD.md`) consolidate entries here into numbered work packages when a cluster warrants triage.
+>
+> Seeded 2026-04-16 as `wacp-console/performance-optimization.md` while stabilizing the Vitest suite; relocated + renamed to `HEALTH-LOG.md` at platform root 2026-04-18 once the log had clearly outgrown its console-only framing (§9 backend schema drifts, §10 runtime llm-stub, §11 runtime WA3.5/3.6 wiring, §12 Playwright-surfaced backend drifts, §13 cross-binary integration findings all cover the runtime side). The original Vitest-stabilization framing remains in §1–§8 as the log's genesis; newer sections extend beyond it.
 
 ## 1. Why this doc exists
 
@@ -438,7 +440,7 @@ Both deferred scenarios are tracked with in-file `// Not covered (deferred, see 
 
 Twelve tests — three smoke (admin/operator/viewer bearer tokens each reach `/api/health`), three role-gated reads (admin ✓, operator ✗, viewer ✗ on `/api/users`), two role-gated writes (operator passes authz on `POST /api/profiles`, viewer 403'd), anonymous 401, unknown-bearer 401, revoked-token 401, and account-lockout-after-5-failed-logins. All 12 green in 3.50 s.
 
-**Scope adjustment vs the AUDIT §13.7.8 original plan.** The original called for a 45-cell matrix (3 runtime-auth × 3 console-auth × 3 roles × 5 actions); the plan (`impl/audit-13-7-8-plan.md` §3.3) pre-scoped this to 45 cells that exclude runtime-auth-variants (the runtime doesn't distinguish today — see §11). After writing the suite: the console-authorizer role matrix is already exhaustively unit-tested in `authorizer.rs::tests`. What was actually missing was *integration-scope proof that the middleware + auth extractor + authz check + handler wiring works end-to-end.* Twelve carefully chosen tests prove that — the rest of the 45 cells would re-test `authorize` through a more expensive harness.
+**Scope adjustment vs the AUDIT §13.7.8 original plan.** The original called for a 45-cell matrix (3 runtime-auth × 3 console-auth × 3 roles × 5 actions); the plan (`impl/archive/audit-13-7-8-plan.md` §3.3) pre-scoped this to 45 cells that exclude runtime-auth-variants (the runtime doesn't distinguish today — see §11). After writing the suite: the console-authorizer role matrix is already exhaustively unit-tested in `authorizer.rs::tests`. What was actually missing was *integration-scope proof that the middleware + auth extractor + authz check + handler wiring works end-to-end.* Twelve carefully chosen tests prove that — the rest of the 45 cells would re-test `authorize` through a more expensive harness.
 
 **One assertion shape worth flagging.** `role_gated_write_operator_passes_authz_on_create_profile` asserts `resp.status() != 403` rather than `== 201`. The harness ships with an empty taxonomy, so the handler's role_ref validation returns 422 with `UNKNOWN_ROLE`. A 403 would fire in the authz layer BEFORE validation; any non-403 response (including 422) means authz allowed the request — which is the integration-scope assertion. Prevents a false-positive test failure every time we don't pre-seed a taxonomy.
 

@@ -1,7 +1,7 @@
 //! Per-session Tokio task that bridges the runtime's four highway streams
 //! to the WebSocket clients for a single session. Critical-path phase of
 //! the wiring plan — see `wacp-console/specs/coding/wcon-w3-session-monitor.md`
-//! and the gate artifact `impl/notes/w3-stream-shapes.md`.
+//! and the gate artifact `impl/archive/notes/w3-stream-shapes.md`.
 //!
 //! Topology:
 //! ```text
@@ -16,7 +16,7 @@
 //! ```
 //!
 //! **Filtering is client-side.** The runtime ignores every stream request
-//! filter — see `impl/notes/w3-stream-shapes.md` §6.
+//! filter — see `impl/archive/notes/w3-stream-shapes.md` §6.
 //!
 //! **Scope of this implementation.**
 //! - 4 stream drivers with client-side filtering.

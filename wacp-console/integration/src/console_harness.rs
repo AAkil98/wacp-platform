@@ -43,6 +43,17 @@ impl ConsoleHarness {
     }
 
     pub async fn spawn_with_db(rt: &RuntimeHarness, db: DbPool) -> std::io::Result<Self> {
+        Self::spawn_with_db_and_rest(rt, db, rt.rest_url()).await
+    }
+
+    /// Like [`Self::spawn_with_db`] but routes the console's REST client at
+    /// `rest_url` instead of the runtime's. Used by §13.7.8 I5 to put a
+    /// swappable vertical-manifest mock between the console and the runtime.
+    pub async fn spawn_with_db_and_rest(
+        rt: &RuntimeHarness,
+        db: DbPool,
+        rest_url: String,
+    ) -> std::io::Result<Self> {
         let pool = GrpcPool::new(&rt.agent_addr(), &rt.highway_addr(), &rt.coordinator_addr());
         pool.connect().await;
 
@@ -72,7 +83,7 @@ impl ConsoleHarness {
                 agent_address: rt.agent_addr(),
                 highway_address: rt.highway_addr(),
                 coordinator_address: rt.coordinator_addr(),
-                rest_address: rt.rest_url(),
+                rest_address: rest_url,
             },
             grpc_pool: pool,
             active_sessions,

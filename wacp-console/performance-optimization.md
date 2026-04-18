@@ -449,9 +449,17 @@ Recommending (2): `wcon-highway.md` §4.3 already describes the `control/lag` fr
 
 **Performance.** 3 tests in 0.19 s. Nothing to optimize.
 
-### 13.5 I5 — `taxonomy_reload.rs`
+### 13.5 I5 — `taxonomy_reload.rs` (landed, one harness finding)
 
-*Reserved for findings; empty until the suite lands.*
+Four tests, all green in 0.14 s — swap-to-new-set, remove-vertical, upstream-500-preserves-previous-index, idempotent. Added a `GuardedState` mock-REST wrapper at the test level (adds a toggleable 500-response flag without modifying `mock_rest::RestState`'s public surface). Required upgrading `mock_rest::RestState` to use `Arc<ArcSwap<HashMap<...>>>` so tests can hot-swap served fixtures between requests — that's a library change, small, fully backward-compatible (only one call site in `mock_runtime.rs`, updated to `RestState::new(...)`).
+
+**Harness finding worth noting (not a bug, but counterintuitive).** The `/api/taxonomy/reload` handler doesn't read `AppState.runtime_config.rest_address` — it reads the `runtime.rest_address` key from the SQLite `settings` table first, falling back to the hardcoded default `http://[::1]:9093`. So `ConsoleHarness::spawn_with_db_and_rest(..., mock_rest.url())` (which sets `AppState.runtime_config.rest_address`) had *no effect* on the reload. Integration tests point the mock REST via `console_core::settings::set(&db, "runtime.rest_address", mock_url)` before the reload. The `spawn_with_db_and_rest` variant added for this suite still sets `AppState.runtime_config.rest_address` — consumer is the startup `taxonomy_builder::build_index` (for the boot-time initial load), which *does* read from config. Two paths for the same setting — flagged for future rationalization in an unrelated refactor; not a defect.
+
+**Paginated-response shape.** `/api/verticals` returns `{items: [...], has_more, cursor?}` per `pagination.rs`, not a raw array. Test helper parses `resp["items"]`. Noted for any future test that hits a listing endpoint on this console.
+
+**No perf signal.** Mock REST + 4 axum calls per reload is pure in-process; the 0.14 s walltime is dominated by the runtime-harness spawn at test setup.
+
+**Deferred (confirmed from the audit scope).** `context_schema` evolution affects new-session validation but not running sessions. Requires multi-step fixture (SubmitGoal → seed active session → evolve schema → attempt new session creation). Outside the reload endpoint's surface; would fit better under a future `session_lifecycle_with_schema_change` scenario if that becomes a priority.
 
 ### 13.6 Shared infrastructure (P0, `78a7fab` + I1 follow-up)
 

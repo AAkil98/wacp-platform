@@ -36,4 +36,5 @@ futures = { workspace = true }
 console-test-support = { workspace = true }
 wacp-llm = { workspace = true }
 wacp-sdk = { workspace = true }
+wacp-taxonomy = { workspace = true }
 wacp-types = { workspace = true }

@@ -121,9 +121,7 @@ impl MockRuntime {
         let complex = fixtures::fixture_complex();
         verticals.insert(simple.id.clone(), simple);
         verticals.insert(complex.id.clone(), complex);
-        let state = RestState {
-            verticals: Arc::new(verticals),
-        };
+        let state = RestState::new(verticals);
         let app = rest_router(state);
         handles.push(tokio::spawn(async move {
             axum::serve(rest_listener, app).await.ok();

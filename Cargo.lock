@@ -529,6 +529,7 @@ dependencies = [
  "uuid",
  "wacp-llm",
  "wacp-sdk",
+ "wacp-taxonomy",
  "wacp-transport",
  "wacp-types",
 ]
@@ -556,6 +557,7 @@ dependencies = [
 name = "console-test-support"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "axum",
  "console-runtime",
  "prost",

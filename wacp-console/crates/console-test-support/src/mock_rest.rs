@@ -2,10 +2,16 @@
 //!
 //! Implements `GET /v1/verticals` and `GET /v1/verticals/{id}` using the
 //! same `wacp_taxonomy::VerticalManifest` type as the real runtime.
+//!
+//! The underlying manifest map is wrapped in an `ArcSwap` so tests can
+//! hot-swap the served set between requests — used by §13.7.8 I5
+//! `taxonomy_reload.rs` to drive the console through
+//! `/api/taxonomy/reload` with a changing upstream.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -14,9 +20,25 @@ use serde::Serialize;
 use wacp_taxonomy::VerticalManifest;
 
 /// Shared state holding the fixture manifests keyed by vertical ID.
+/// Cheap to `Clone` (one `Arc` deep); tests hot-swap via
+/// [`RestState::set_verticals`].
 #[derive(Clone)]
 pub struct RestState {
-    pub verticals: Arc<HashMap<String, VerticalManifest>>,
+    pub verticals: Arc<ArcSwap<HashMap<String, VerticalManifest>>>,
+}
+
+impl RestState {
+    pub fn new(verticals: HashMap<String, VerticalManifest>) -> Self {
+        Self {
+            verticals: Arc::new(ArcSwap::from_pointee(verticals)),
+        }
+    }
+
+    /// Atomically replace the served vertical set. Existing in-flight
+    /// requests see the old snapshot; new requests see the new one.
+    pub fn set_verticals(&self, verticals: HashMap<String, VerticalManifest>) {
+        self.verticals.store(Arc::new(verticals));
+    }
 }
 
 /// Summary returned in the list endpoint. Shape matches
@@ -42,8 +64,8 @@ pub fn rest_router(state: RestState) -> Router {
 }
 
 async fn list_verticals(State(state): State<RestState>) -> impl IntoResponse {
-    let items: Vec<VerticalListItem> = state
-        .verticals
+    let snapshot = state.verticals.load();
+    let items: Vec<VerticalListItem> = snapshot
         .values()
         .map(|m| VerticalListItem {
             id: m.id.clone(),
@@ -58,7 +80,8 @@ async fn list_verticals(State(state): State<RestState>) -> impl IntoResponse {
 }
 
 async fn get_vertical(State(state): State<RestState>, Path(id): Path<String>) -> impl IntoResponse {
-    match state.verticals.get(&id) {
+    let snapshot = state.verticals.load();
+    match snapshot.get(&id) {
         Some(manifest) => Ok(Json(manifest.clone())),
         None => Err((
             StatusCode::NOT_FOUND,

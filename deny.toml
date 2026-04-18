@@ -64,16 +64,11 @@ license-files = [
 # ---------------------------------------------------------------------------
 [bans]
 multiple-versions = "warn"
-# `wildcards = "warn"` (was "deny") because `allow-wildcard-paths` is not
-# enough: cargo-deny v0.15+ only exempts path deps in crates explicitly
-# marked `publish = false`. The workspace-internal crates (console-api,
-# console-core, console-runtime, console-test-support, wacp-runtime, …)
-# aren't marked that way, and tagging them requires a workspace-wide
-# sweep (tracked in ci-health-2026-04-17.md §2.5 follow-up). Keeping the
-# check as "warn" preserves the signal without blocking. External wildcards
-# from crates.io remain flagged — cargo-deny surfaces them in the workflow
-# log even at warn level.
-wildcards = "warn"
+# Internal workspace members declare `{ path = "...", version = "..." }` in the
+# root [workspace.dependencies] (not bare `{ path = "..." }`), so cargo-deny
+# does not treat them as wildcards. `allow-wildcard-paths` is kept as a
+# belt-and-suspenders for future path-only deps (e.g. test fixtures).
+wildcards = "deny"
 allow-wildcard-paths = true
 highlight = "all"
 workspace-default-features = "allow"

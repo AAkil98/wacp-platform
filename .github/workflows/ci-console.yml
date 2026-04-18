@@ -153,3 +153,90 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  e2e:
+    name: E2E — Playwright (console + mock runtime)
+    runs-on: ubuntu-latest
+    # Needs both the Rust toolchain (for the two binaries the webServer blocks
+    # spawn) AND the pnpm toolchain (for `pnpm exec playwright test`). Split
+    # from the `frontend` job because the browser download + two cargo builds
+    # add ~3–5 min; keeping `frontend` fast.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e-runtime-console
+
+      - uses: rui314/setup-mold@v1
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      # 1. Frontend dist/ — the console binary's `--frontend-path` argument
+      #    (set in playwright.config.ts) points at this directory.
+      - name: Build frontend (for playwright webServer)
+        working-directory: wacp-console/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      # 2. The two binaries the Playwright `webServer` blocks spawn:
+      #    `wacp-console` (real console bin, `--frontend-path dist/`) and
+      #    `wacp-mock-runtime` (the `[[bin]]` in console-test-support).
+      - name: Build wacp-console + wacp-mock-runtime
+        run: |
+          cargo build \
+            -p wacp-console --bin wacp-console \
+            -p console-test-support --bin wacp-mock-runtime
+        env:
+          CARGO_BUILD_JOBS: "2"
+
+      # 3. Playwright caches Chromium at ~/.cache/ms-playwright — cache it so
+      #    reruns don't re-download ~140 MB on every push.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('wacp-console/frontend/pnpm-lock.yaml') }}
+
+      - name: Install Chromium (via Playwright)
+        working-directory: wacp-console/frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: wacp-console/frontend
+        run: pnpm test:e2e
+
+      # Upload the HTML report on failure so failing runs are debuggable
+      # without reproducing locally. Keep for 14 days — long enough to
+      # triage a bad PR without bloating storage.
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: wacp-console/frontend/playwright-report
+          retention-days: 14
+
+      - name: Upload Playwright traces / videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: wacp-console/frontend/test-results
+          retention-days: 14

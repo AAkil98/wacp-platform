@@ -1,16 +1,13 @@
-//! Generates the OpenAPI specification YAML file.
+//! Generates the OpenAPI specification YAML and prints it to stdout.
 //!
-//! Usage: `cargo run --bin gen-openapi`
-//! CI gate: `cargo run --bin gen-openapi && git diff --exit-code openapi.yaml`
+//! Run: `cargo run -p console-api --bin gen-openapi > wacp-console/openapi.yaml`
+//! CI:  `cargo run -p console-api --bin gen-openapi > openapi.yaml.gen && diff openapi.yaml openapi.yaml.gen`
+
+use std::io::Write;
 
 fn main() {
     let yaml = console_api::openapi::generate_openapi_yaml();
-    let out_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join("openapi.yaml");
-
-    std::fs::write(&out_path, &yaml).expect("failed to write openapi.yaml");
-    println!("wrote {} bytes to {}", yaml.len(), out_path.display());
+    std::io::stdout()
+        .write_all(yaml.as_bytes())
+        .expect("failed to write openapi yaml to stdout");
 }

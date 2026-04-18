@@ -103,7 +103,13 @@ paths:
       operationId: health_handler
       responses:
         '200':
-          description: Runtime healthy
+          description: Runtime ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Runtime starting or draining
           content:
             application/json:
               schema:
@@ -524,9 +530,14 @@ components:
       required:
       - status
       - version
+      - uptime_seconds
       properties:
         status:
           type: string
+        uptime_seconds:
+          type: integer
+          format: int64
+          minimum: 0
         version:
           type: string
     InjectBody:

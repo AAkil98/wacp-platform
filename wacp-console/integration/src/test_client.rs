@@ -160,4 +160,11 @@ impl WsClient {
     pub async fn close(mut self) {
         let _ = self.stream.close(None).await;
     }
+
+    /// Send a raw tungstenite message through the WebSocket. Used by
+    /// `ws_chaos` to drive the server with malformed / unexpected input.
+    pub async fn send_raw(&mut self, msg: Message) {
+        use futures::SinkExt;
+        self.stream.send(msg).await.expect("ws send_raw");
+    }
 }

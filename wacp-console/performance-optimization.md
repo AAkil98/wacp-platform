@@ -432,9 +432,22 @@ Twelve tests — three smoke (admin/operator/viewer bearer tokens each reach `/a
 
 **Deferred.** `must_change_password` forced-change deadlock (the D2 fix from §12.4) has Playwright E2E coverage in `wacp-console/frontend/e2e/auth-flows.spec.ts` — no integration-scope value in duplicating it here.
 
-### 13.4 I4 — `ws_chaos.rs`
+### 13.4 I4 — `ws_chaos.rs` (landed, two deferrals)
 
-*Reserved for findings; empty until the suite lands.*
+Three tests, all green in 0.19 s:
+- `broadcast_cap_exhaustion_emits_control_lag_frame` — capacity=4 + direct push of 64 frames triggers server's broadcast receiver to Lag; server emits `{channel:"control", event:{type:"lag", missed:N}}` per `ws.rs:124`.
+- `client_disconnect_drops_broadcast_receiver` — asserts `broadcast_tx.receiver_count()` decrements within 1 s of client drop. Proves the WS select loop exits cleanly on client close, dropping its receiver. Any future regression that leaked the receiver (e.g., holding it across an awaited read that never returns) would be caught.
+- `malformed_text_frame_from_client_is_silently_ignored` — server per `ws.rs:96` drops incoming text with `Some(Ok(Message::Text(_))) => {}`. Sending a non-JSON text doesn't close the connection; a subsequent broadcast still arrives. Required a `WsClient::send_raw` helper (additive; integration-lib only).
+
+**Drift finding (NEW).** The AUDIT §13.7.8 scenario "gap-fill replay correctness" calls for an `/api/sessions/:id/trail?since=<seq>` REST endpoint that returns frames dropped during a Lagged event. The endpoint **does not exist** — grep of `routes/` confirms only the WS `/api/sessions/:id/ws` channel for trail streaming, no REST replay. This is the fourth instance of the "audit writes scenario against an imagined endpoint" pattern (after F8 RefusalPanel, F10 Notifications-stub, auth-flows D2 `must_change_password` deadlock). Two possible resolutions:
+1. **Build it.** `routes/sessions.rs` adds a `GET /api/sessions/:id/trail` handler that queries the trail store from `last_seen_sequence` forward. Non-trivial: the current trail buffer is in-memory per monitor, bounded to the last N entries; a proper replay needs DB-backed trail persistence. Probably weeks not hours.
+2. **Strike from the audit.** Lag-tolerant clients that reconnect-and-catch-up via the existing WS stream are the current design intent; the AUDIT scenario was aspirational.
+
+Recommending (2): `wcon-highway.md` §4.3 already describes the `control/lag` frame as "authoritative signal to client that it must refresh state via its own strategy" — there's no spec commitment to a server-driven replay. The integration suite's deferred scenario is tracked here; the AUDIT itself should note "replay considered; not shipping v1" when §13.7.8 closes out.
+
+**Tokio-broadcast invariant not tested.** tokio's `broadcast::channel` delivers whole `Frame` values; there's no split-frame possible at the transport layer. A "no partial frames" test would exercise tokio, not the console — skipped for low signal.
+
+**Performance.** 3 tests in 0.19 s. Nothing to optimize.
 
 ### 13.5 I5 — `taxonomy_reload.rs`
 

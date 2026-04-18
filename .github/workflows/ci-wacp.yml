@@ -137,6 +137,17 @@ jobs:
         with:
           node-version: 22
 
+      # @wacp/local ships compiled JS + d.ts from `dist/`; consumers reference it
+      # via `file:` and resolve types against the emitted output. Build it here so
+      # downstream typecheck has the artefacts available. Skip when the matrix
+      # entry IS @wacp/local — its own Install/Build steps cover it.
+      - name: Pre-build @wacp/local
+        if: matrix.package != 'wacp/packages/wacp-local'
+        working-directory: wacp/packages/wacp-local
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
       - name: Install
         run: pnpm install --frozen-lockfile
 

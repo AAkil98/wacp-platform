@@ -52,6 +52,12 @@ Conflict-resolution memory — records how a conflict was resolved so the same c
 git config --global rerere.enabled true
 ```
 
+Opt-in pre-push hook — runs `cargo fmt --check` + `cargo clippy --workspace --all-targets -- -D warnings` before each push so fmt/clippy drift fails locally rather than in CI (adds ~2–5 min per push depending on cache state):
+
+```bash
+./scripts/install-hooks.sh     # uninstall: git config --unset core.hooksPath
+```
+
 ## Repository Layout
 
 ```

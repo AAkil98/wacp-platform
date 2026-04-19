@@ -34,3 +34,11 @@ jobs:
         with:
           command: check advisories bans licenses sources
           arguments: --all-features --workspace
+
+  file-size:
+    name: File-size guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check file sizes
+        run: bash scripts/check-file-sizes.sh

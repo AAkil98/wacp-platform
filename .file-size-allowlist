@@ -1,0 +1,47 @@
+# File-size allowlist — wacp-platform
+#
+# Entries here are exempt from the file-size guardrail run by
+# scripts/check-file-sizes.sh (and the ci-lint.yml file-size job).
+#
+# Thresholds (from tech-debt-2026-04-18.md §3.3):
+#   Rust  — warn > 1000 lines, fail > 1500 lines
+#   TS    — warn >  500 lines, fail > 1000 lines
+#
+# Shrink-only convention: removing a line is free; adding one requires
+# a PR change that reviewers see, plus a rationale comment. The refactor
+# in tech-debt §3.2 Bucket B will shrink this list as its own progress
+# signal.
+
+# Rust production — oversized; refactor targets per tech-debt §3.2 Bucket B
+wacp/crates/wacp-runtime/src/init.rs
+wacp/crates/wacp-runtime/src/config.rs
+wacp-console/crates/console-core/src/session_monitor.rs
+wacp-console/crates/console-core/src/session_launcher.rs
+wacp-console/crates/console-api/src/routes/highway.rs
+
+# Rust production — moderately oversized (1000–1500); warn-only
+wacp-console/crates/console-core/src/recovery.rs
+wacp/crates/wacp-transport/src/rest_gateway.rs
+wacp-console/crates/console-api/src/routes/sessions.rs
+wacp/crates/wacp-tools/src/execution.rs
+
+# TS test monoliths — one test module per API surface is conventional;
+# splitting the generated-hook coverage would just scatter the matrix.
+wacp-console/frontend/src/api/hooks/index.test.ts
+
+# Rust test monoliths — intentional: one test module per crate is
+# conventional + searchable. Scrolling tests is a non-event.
+wacp/crates/wacp-coordinator/src/tests.rs
+wacp/crates/wacp-workspace/src/tests.rs
+wacp/crates/wacp-fsm/src/tests.rs
+wacp/crates/wacp-permissions/src/tests.rs
+wacp/crates/wacp-runtime/src/tests.rs
+wacp/crates/wacp-transport/src/tests.rs
+wacp/crates/wacp-trail/src/tests.rs
+wacp/crates/wacp-security/tests/filter_coverage.rs
+wacp/crates/wacp-llm/tests/branch_coverage.rs
+wacp-console/crates/console-db/src/queries/coverage_tests.rs
+
+# Generated files — schema-driven, never hand-edited. Regenerate on
+# schema change (pnpm gen:api, betterproto, tonic-build).
+wacp-console/frontend/src/api/types.ts

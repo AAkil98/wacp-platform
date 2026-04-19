@@ -41,7 +41,7 @@ Per protocol §7.2 rule 5 the actor auto-signals `Checkpoint` on every checkpoin
 
 ### 2.1 `wacp/crates/wacp-types/src/enums.rs:143`
 
-Append `CheckpointApproval` to `GateType`. Serde derivation yields the string `"CheckpointApproval"`; existing callers do not pattern-match exhaustively on `GateType` in production paths, so no downstream matches need `_ =>` arms (verify via `cargo check` — `GateController::open_gate`, `open_gate` tests, and the highway-ui pb are the only consumers).
+Append `CheckpointApproval` to `GateType`. Serde derivation yields the string `"CheckpointApproval"`; existing callers do not pattern-match exhaustively on `GateType` in production paths, so no downstream matches need `_ =>` arms (verify via `cargo check` — `GateController::open_gate` and `open_gate` tests are the only consumers).
 
 ### 2.2 `wacp/proto/primitives.proto:93`
 

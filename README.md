@@ -66,7 +66,6 @@ wacp-platform/
 │   ├── tests/                  # Integration tests
 │   ├── ecosystem/              # 7 vertical manifests
 │   ├── packages/               # TypeScript: @wacp/cli, @wacp/local
-│   ├── highway-ui/             # Human oversight SPA
 │   ├── sdk-python/             # Python agent SDK
 │   ├── Dockerfile              # Runtime image
 │   └── SEED.md, IMPLEMENTATION.md, README.md, …

@@ -65,7 +65,6 @@ wacp/
 │   ├── storage.md           # Trail backend, checkpoints, snapshots
 │   ├── protocol-interface.md # Protobuf, gRPC, transport trait
 │   ├── sdk-agent.md         # Python + Rust SDK surface
-│   ├── highway-ui.md        # TypeScript SPA, gRPC-Web
 │   ├── deployment.md        # Config, CLI, TLS, logging, metrics
 │   ├── migration.md         # Coordinator procedure, snapshot, rollback
 │   ├── topology.md          # Workspace tree, task graph, visibility
@@ -106,8 +105,6 @@ wacp/
 │   └── wacp-security/       # Content filter, secrets, audit — 45 tests
 │
 ├── tests/                   # Cross-crate integration + E2E tests (65 tests)
-│
-├── highway-ui/              # Highway UI — TypeScript SPA (181 tests)
 │
 ├── packages/                # TypeScript packages
 │   ├── wacp-local/          # Local SDK: session, autonomy, orchestrator — 86 tests

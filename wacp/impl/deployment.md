@@ -43,7 +43,7 @@ The runtime binary (`wacp-runtime`) is the trust root (runtime spec, §1). In de
 
 **Scope.** YAML configuration file format and schema. CLI interface for the `wacp-runtime` binary. TLS certificate setup for agent and highway gRPC endpoints. Pluggable authenticator configuration. Structured logging via the `tracing` crate. Prometheus-compatible metrics endpoint. gRPC and HTTP health checks. Docker image build. Systemd unit file. Environment variable overrides for twelve-factor deployments.
 
-**Not in scope.** Runtime internals (runtime spec). Protocol semantics (PROTOCOL.md). Wire format (protocol-interface spec). Highway UI deployment (highway-ui spec — the UI is static files served independently). Kubernetes manifests, Helm charts, or orchestrator-specific configuration — these are deployment-environment concerns that build on the primitives defined here.
+**Not in scope.** Runtime internals (runtime spec). Protocol semantics (PROTOCOL.md). Wire format (protocol-interface spec). Kubernetes manifests, Helm charts, or orchestrator-specific configuration — these are deployment-environment concerns that build on the primitives defined here.
 
 **Design constraint.** Configuration is declarative, not programmatic. The config file is the single source of truth for a running instance. Every tunable has a sensible default — the runtime must start with zero configuration for development. Environment variables override config file values for container deployments. No configuration reload at runtime — changing configuration requires a restart. This is deliberate: the runtime is a trust root, and hot-reloading configuration introduces a class of partial-state bugs that are hard to reason about.
 

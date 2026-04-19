@@ -40,10 +40,9 @@ This is the reference implementation across three language ecosystems:
 - Tool framework, LLM adapters (Anthropic + OpenAI), security framework (content filter, secret store, audit events)
 - Agent SDK v2, Coordinator SDK
 
-**TypeScript applications and middleware** (`packages/`, `highway-ui/`, `ecosystem/`):
+**TypeScript applications and middleware** (`packages/`, `ecosystem/`):
 - `@wacp/local` — local session SDK with autonomy spectrum and workflow executor
 - `@wacp/cli` — protocol-aware CLI agent that spawns the runtime, loads the full ecosystem, and dispatches goals across verticals
-- `highway-ui` — human oversight SPA (trail, gates, escalations, directives)
 
 **Python agent SDK** (`sdk-python/`):
 - Agent, tools, LLM, coordinator, local-session modules mirroring the Rust surface
@@ -148,8 +147,6 @@ wacp/
 │   └── wacp-cli/            # CLI agent
 │
 ├── sdk-python/              # Python agent SDK
-│
-├── highway-ui/              # Human oversight SPA
 │
 ├── deploy/                  # systemd unit
 ├── Dockerfile               # Multi-stage build

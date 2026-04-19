@@ -365,7 +365,6 @@ wacp-platform/
 │   ├── packages/               # @wacp/cli, @wacp/local (TypeScript)
 │   ├── ecosystem/              # 7 verticals: swe, devops, mlops, finance, healthcare, analytics, datasci
 │   ├── sdk-python/             # Python bindings
-│   ├── highway-ui/             # legacy highway webapp
 │   ├── openapi.yaml            # runtime REST spec (16 endpoints)
 │   ├── proto/                  # .proto definitions
 │   ├── impl/                   # 17 impl specs + phase evals

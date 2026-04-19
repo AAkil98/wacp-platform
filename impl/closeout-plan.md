@@ -204,7 +204,9 @@ Per HEALTH-LOG §12.5. Orthogonal to all other phases.
 | P1.3 file-size lint | `08ff88f` | 2026-04-19 | allowlist +1 vs tech-debt §5 (api/hooks/index.test.ts, 1065 lines) |
 | P1.4 gitmessage + rerere | `3364098` | 2026-04-19 | README Development Setup section added |
 | P1.5 pre-push hook | `7e83da5` | 2026-04-19 | opt-in; README line 3 added |
-| P1.6 docs + seed | — | 2026-04-19 | in progress — tech-debt §7 answered, git-strategy §13 struck, SEED manual refresh (15th pass) |
+| P1.6 docs + seed | `c07af7f` | 2026-04-19 | tech-debt §7 answered, git-strategy §13 struck, SEED 15th-pass manual refresh (pre-ff) |
+| P1 topic → dev ff | `c07af7f` on dev | 2026-04-19 | clean ff of 6 topic commits; topic branch deleted locally, `aakil98/ci/pre-launch-closeout` retained |
+| (post-ff SEED 16th pass + seed-refresh SKILL.md invariants) | direct-to-dev | 2026-04-19 | — |
 | P2 branch protection | — | — | repo admin, no commit |
 | P3 ff dev→main | — | — | uses `ff-main` skill |
 | P4 Bucket B refactor | — | — | per tech-debt §3.2; may spawn its own sub-plan |

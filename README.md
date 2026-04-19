@@ -36,6 +36,22 @@ cargo run -p wacp-console -- serve
 docker compose up
 ```
 
+## Development Setup
+
+All optional — each item trims friction vs. leaving defaults. See `impl/git-strategy.md` §4 + §13 for the background.
+
+Commit-message template — prefills the `<type>(<scope>): <subject>` skeleton and the Claude `Co-Authored-By` trailer:
+
+```bash
+git config commit.template .gitmessage
+```
+
+Conflict-resolution memory — records how a conflict was resolved so the same conflict isn't re-solved across rebase rounds:
+
+```bash
+git config --global rerere.enabled true
+```
+
 ## Repository Layout
 
 ```

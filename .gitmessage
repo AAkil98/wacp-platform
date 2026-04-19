@@ -1,0 +1,19 @@
+<type>(<scope>): <subject>
+
+# Types:   feat, fix, refactor, docs, test, chore, ci, build, perf
+# Scope:   §X.Y spec anchor (e.g. §13.7.8 I3) | module (wacp-runtime,
+#          console-api, frontend, sdk-python) | workflow (ci-lint,
+#          release-runtime)
+# Subject: imperative, lowercase, no period, ≤50 chars ideal / ≤72 hard
+#
+# Body (optional, wrap at 72 cols) — use when:
+#   - the subject + diff aren't self-explanatory
+#   - the commit cites a bug path or past incident
+#   - it opens or closes a deferred item
+#
+# See impl/git-strategy.md §4 for full conventions.
+#
+# Co-author trailer — keep the line below for Claude-authored or
+# Claude-edited commits; delete for solo commits.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

@@ -198,12 +198,13 @@ Per HEALTH-LOG §12.5. Orthogonal to all other phases.
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| P1.1 sourcemap | — | — | — |
-| P1.2 highway-ui delete | — | — | run `blast-radius` skill before committing |
-| P1.3 file-size lint | — | — | verify job green on PR before commit 4 |
-| P1.4 gitmessage + rerere | — | — | — |
-| P1.5 pre-push hook | — | — | opt-in; default unchanged |
-| P1.6 docs + seed | — | — | invokes `seed-refresh` skill |
+| (plan scaffold, on `dev`) | `6197263` | 2026-04-19 | direct-to-dev per git-strategy §3.1 |
+| P1.1 sourcemap | `03d195d` | 2026-04-19 | verified `pnpm build` emits no `.map` |
+| P1.2 highway-ui delete | `f75979e` | 2026-04-19 | 74 files / -11,745 / +11; spec archived w/ `status: superseded` |
+| P1.3 file-size lint | `08ff88f` | 2026-04-19 | allowlist +1 vs tech-debt §5 (api/hooks/index.test.ts, 1065 lines) |
+| P1.4 gitmessage + rerere | `3364098` | 2026-04-19 | README Development Setup section added |
+| P1.5 pre-push hook | `7e83da5` | 2026-04-19 | opt-in; README line 3 added |
+| P1.6 docs + seed | — | 2026-04-19 | in progress — tech-debt §7 answered, git-strategy §13 struck, SEED manual refresh (15th pass) |
 | P2 branch protection | — | — | repo admin, no commit |
 | P3 ff dev→main | — | — | uses `ff-main` skill |
 | P4 Bucket B refactor | — | — | per tech-debt §3.2; may spawn its own sub-plan |

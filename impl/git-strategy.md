@@ -464,20 +464,21 @@ Prevent with branch protection on GitHub: require linear history + disallow forc
 
 ## 13. Tooling to add pre-launch (not blocking)
 
-| Item | Effort | Payoff |
-|---|---|---|
-| GitHub branch protection on `main` + `dev` (block force-push, require linear history) | 10 min in repo settings | eliminates §11.5 risk class |
-| `.gitmessage` template with the co-author trailer + spec-scope placeholder | 15 min | cuts message-format errors |
-| Pre-push hook that runs `cargo fmt --check` + `cargo clippy` (opt-in) | 30 min | catches §7.3 invariant breaks earlier |
-| `git config --global rerere.enabled true` in the onboarding doc | 2 min | cuts rebase-conflict re-resolution |
+| Item | Effort | Payoff | Status |
+|---|---|---|---|
+| GitHub branch protection on `main` + `dev` (block force-push, require linear history) | 10 min in repo settings | eliminates §11.5 risk class | pending — `closeout-plan.md` §3.2 P2 |
+| ~~`.gitmessage` template with the co-author trailer + spec-scope placeholder~~ | ~~15 min~~ | ~~cuts message-format errors~~ | **landed 2026-04-19** — `3364098` |
+| ~~Pre-push hook that runs `cargo fmt --check` + `cargo clippy` (opt-in)~~ | ~~30 min~~ | ~~catches §7.3 invariant breaks earlier~~ | **landed 2026-04-19** — `7e83da5` (opt-in via `scripts/install-hooks.sh`) |
+| ~~`git config --global rerere.enabled true` in the onboarding doc~~ | ~~2 min~~ | ~~cuts rebase-conflict re-resolution~~ | **landed 2026-04-19** — `3364098` (README Development Setup) |
 
-Each is a 10–30 min standalone item. None are pre-merge gates.
+Each is a 10–30 min standalone item. None are pre-merge gates. The four items above closed via the `ci/pre-launch-closeout` topic per `impl/closeout-plan.md` P1 + P2.
 
 ## 14. Changelog for this doc
 
 | Date | Change |
 |---|---|
 | 2026-04-18 | Initial draft. Codifies the pattern observed from M0 through §11.4. |
+| 2026-04-19 | §13 — three of four tooling items landed on `ci/pre-launch-closeout` topic (`3364098` + `7e83da5`). Branch protection (§11.5) still pending per `closeout-plan.md` §3.2 P2. |
 
 ---
 

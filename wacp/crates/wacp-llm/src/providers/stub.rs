@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use base64::Engine;
 use futures::Stream;
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -160,13 +159,18 @@ impl StubAdapter {
         &self,
         messages: &[Message],
         options: &CompletionOptions,
-    ) -> Result<StubResponse, LlmError> {
+    ) -> Result<(StubResponse, usize), LlmError> {
+        // C5 (backend-perf-baseline-plan): serialize once per complete(),
+        // return `(response, serialized_len)` so the caller can compute
+        // `input_tokens = len / 4` without a second `serialize_for_match`
+        // allocation. Previously 2× alloc per call; now 1×.
         let serialized = serialize_for_match(messages, &options.tools);
+        let serialized_len = serialized.len();
         match self.fixtures.matches(&serialized) {
-            Some(resp) => Ok(resp.clone()),
+            Some(resp) => Ok((resp.clone(), serialized_len)),
             None => Err(LlmError::structural(format!(
                 "stub: no fixture match for {}-char input (hash={})",
-                serialized.len(),
+                serialized_len,
                 hash_hex(&serialized),
             ))),
         }
@@ -191,9 +195,9 @@ impl LlmAdapter for StubAdapter {
         let options = clone_options(options);
         Box::pin(async move {
             let started = std::time::Instant::now();
-            let response = self.resolve_response(&messages, &options)?;
+            let (response, serialized_len) = self.resolve_response(&messages, &options)?;
             let model = self.resolved_model(&options);
-            let input_tokens = (serialize_for_match(&messages, &options.tools).len() / 4) as u32;
+            let input_tokens = (serialized_len / 4) as u32;
             let tool_calls = response
                 .tool_calls
                 .iter()
@@ -227,24 +231,55 @@ impl LlmAdapter for StubAdapter {
         let messages = messages.to_vec();
         let options = clone_options(options);
         Box::pin(async move {
-            let response = self.resolve_response(&messages, &options)?;
+            let (response, serialized_len) = self.resolve_response(&messages, &options)?;
             let model = self.resolved_model(&options);
-            let input_tokens = (serialize_for_match(&messages, &options.tools).len() / 4) as u32;
+            let input_tokens = (serialized_len / 4) as u32;
             let usage = TokenUsage {
                 input_tokens,
                 output_tokens: response.output_tokens,
             };
             let delay_ms = self.token_delay_ms;
-            let events = build_stream_events(&response, usage);
+            // C6 (backend-perf-baseline-plan): yield stream events lazily via
+            // `async_stream!` instead of materializing the full `Vec<StreamEvent>`
+            // upfront. Peak memory now O(1) in event count — the 1000-token
+            // fixture doesn't preallocate 1000 `StreamEvent`s.
             let stream: Pin<Box<dyn Stream<Item = Result<StreamEvent, LlmError>> + Send>> =
-                Box::pin(futures::stream::iter(events.into_iter().map(Ok)).then(
-                    move |ev| async move {
+                Box::pin(async_stream::stream! {
+                    for ch in response.content.chars() {
                         if delay_ms > 0 {
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         }
-                        ev
-                    },
-                ));
+                        yield Ok(StreamEvent::ContentDelta { delta: ch.to_string() });
+                    }
+                    for (i, tc) in response.tool_calls.iter().enumerate() {
+                        if delay_ms > 0 {
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        }
+                        yield Ok(StreamEvent::ToolCallDelta {
+                            index: i as u32,
+                            id: Some(tc.id.clone()),
+                            name: Some(tc.name.clone()),
+                            arguments_delta: None,
+                        });
+                        if delay_ms > 0 {
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        }
+                        yield Ok(StreamEvent::ToolCallDelta {
+                            index: i as u32,
+                            id: None,
+                            name: None,
+                            arguments_delta: Some(tc.arguments.to_string()),
+                        });
+                    }
+                    if delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    }
+                    yield Ok(StreamEvent::Usage { usage });
+                    if delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    }
+                    yield Ok(StreamEvent::Done);
+                });
             Ok(StreamHandle::new(
                 stream,
                 model,
@@ -373,32 +408,6 @@ fn clone_options(o: &CompletionOptions) -> CompletionOptions {
         timeout_ms: o.timeout_ms,
         extra: o.extra.clone(),
     }
-}
-
-fn build_stream_events(resp: &StubResponse, usage: TokenUsage) -> Vec<StreamEvent> {
-    let mut events = Vec::new();
-    for ch in resp.content.chars() {
-        events.push(StreamEvent::ContentDelta {
-            delta: ch.to_string(),
-        });
-    }
-    for (i, tc) in resp.tool_calls.iter().enumerate() {
-        events.push(StreamEvent::ToolCallDelta {
-            index: i as u32,
-            id: Some(tc.id.clone()),
-            name: Some(tc.name.clone()),
-            arguments_delta: None,
-        });
-        events.push(StreamEvent::ToolCallDelta {
-            index: i as u32,
-            id: None,
-            name: None,
-            arguments_delta: Some(tc.arguments.to_string()),
-        });
-    }
-    events.push(StreamEvent::Usage { usage });
-    events.push(StreamEvent::Done);
-    events
 }
 
 /// Base64-decode a fixture payload field. Exposed so integration tests can

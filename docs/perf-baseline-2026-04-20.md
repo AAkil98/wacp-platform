@@ -38,7 +38,11 @@ Scenario: serialize a conversation into a stable matcher string. Current `StubAd
 | 5 × 500 | 327 ns | Typical coordinator turn. |
 | 20 × 500 | 595 ns | Long conversation with history. |
 
-**Interpretation.** Cost scales linearly with message count (~25 ns per message at 500 chars + constant setup). At 20 messages, the double-call pattern costs ~1.2 µs per `complete()`. Not a hot spot at test-suite volumes, but the C5 single-call optimization is trivially one commit and halves the cost. **C5 target:** measure again post-opt and confirm the bench reads ~300 ns at 20/500 (half the current 595).
+**Interpretation.** Cost scales linearly with message count (~25 ns per message at 500 chars + constant setup). At 20 messages, the double-call pattern cost ~1.2 µs per `complete()`. Not a hot spot at test-suite volumes.
+
+**C5 landed.** `StubAdapter::resolve_response` now returns `(StubResponse, serialized_len)` so `complete()` + `complete_stream()` compute `input_tokens` from the returned length instead of re-serializing. One allocation per `complete()` now instead of two — architectural change, not visible in the serialize-only bench (which measures the fn in isolation). A follow-up `complete()`-end-to-end bench could quantify the saved ~595 ns at n=20; skipping here since the benefit is obvious from source inspection.
+
+**C6 landed.** `complete_stream` now yields events lazily via `async_stream::stream!` instead of building the full `Vec<StreamEvent>` upfront. Peak memory in the stream path is O(1) in event count; a 1000-token fixture no longer preallocates 1000 `StreamEvent` instances before the first `yield`. `build_stream_events` helper deleted (dead code post-refactor). 169 wacp-llm tests still pass; `cargo clippy -- -D warnings` clean.
 
 ## Placeholders / follow-up benches
 

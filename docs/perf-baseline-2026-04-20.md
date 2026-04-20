@@ -44,11 +44,20 @@ Scenario: serialize a conversation into a stable matcher string. Current `StubAd
 
 **C6 landed.** `complete_stream` now yields events lazily via `async_stream::stream!` instead of building the full `Vec<StreamEvent>` upfront. Peak memory in the stream path is O(1) in event count; a 1000-token fixture no longer preallocates 1000 `StreamEvent` instances before the first `yield`. `build_stream_events` helper deleted (dead code post-refactor). 169 wacp-llm tests still pass; `cargo clippy -- -D warnings` clean.
 
+## console-db migration (`console-db::migration_bench`)
+
+Scenario: single call to `create_test_pool()` — opens an in-memory SQLite DB, runs all 9 migrations.
+
+| Path | Mean time | Threshold | Status |
+|---|---:|---:|---|
+| `create_test_pool` | 5.78 ms | 10 ms | ✅ under threshold |
+
+**Interpretation.** Per HEALTH-LOG §9.3 the threshold for amortizing this via a `lazy_static!` migrated-template + `ATTACH DATABASE` clone pattern was >10 ms mean. At 5.78 ms we're under — the 9-migration replay per test is fast enough that the optimization's complexity cost exceeds its walltime benefit. **Regression tripwire:** a jump above 15 ms means either a migration got heavier or `sqlx` setup got slower; revisit then.
+
 ## Placeholders / follow-up benches
 
 - **`session_launcher_bench`** — placeholder only. A real benchmark of SubmitGoal → Decompose(N) → Dispatch(N) needs the `InjectableCoordinator` mock from `wacp-console/integration` (currently not a dev-dep chain available from `console-core`). Either (a) move the mock to `console-test-support` or (b) duplicate a minimal stub inline. Either is ~30–60 min; deferred.
-- **`stub_bench.rs` streaming path** — C6 wants a memory-peak bench on the 1000-event fixture. `criterion` doesn't give peak-RSS natively; either wire a minimal `peak-alloc`-style allocator counter or use `dhat` with a profile option. Deferred to C6 follow-up.
-- **`console-db` migration amortization** (§9.3 / C7) — one-off measurement with `std::time::Instant` around `create_test_pool()`. Defer to C7.
+- **`stub_bench.rs` streaming path** — a memory-peak bench on the 1000-event fixture. `criterion` doesn't give peak-RSS natively; either wire a minimal `peak-alloc`-style allocator counter or use `dhat` with a profile option. Deferred — C6 architectural change was verified via source inspection + existing stream tests.
 
 ## How to regenerate
 

@@ -16,3 +16,8 @@ tracing = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "migration_bench"
+harness = false

@@ -99,15 +99,19 @@ const fieldGroup: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const badge = (disabled: boolean): React.CSSProperties => ({
+// HEALTH-LOG §3.2 / frontend-perf-plan F2 — module-scope record over functional helper.
+const BADGE_BASE: React.CSSProperties = {
   display: "inline-block",
   padding: "2px 8px",
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 600,
-  background: disabled ? "var(--color-danger)" : "var(--color-accent)",
   color: "#fff",
-});
+};
+const BADGE_STYLE: Record<"active" | "disabled", React.CSSProperties> = {
+  active: { ...BADGE_BASE, background: "var(--color-accent)" },
+  disabled: { ...BADGE_BASE, background: "var(--color-danger)" },
+};
 
 // --- Types ---
 
@@ -242,7 +246,7 @@ export function UsersPage() {
                   )}
                 </td>
                 <td style={td}>
-                  <span style={badge(u.disabled)}>{u.disabled ? "Disabled" : "Active"}</span>
+                  <span style={BADGE_STYLE[u.disabled ? "disabled" : "active"]}>{u.disabled ? "Disabled" : "Active"}</span>
                 </td>
                 <td style={td}>{u.created_at}</td>
                 <td style={td}>

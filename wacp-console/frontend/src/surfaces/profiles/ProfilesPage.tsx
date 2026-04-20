@@ -44,13 +44,17 @@ const listContainer: React.CSSProperties = {
   overflowY: "auto",
 };
 
-const listItem = (selected: boolean): React.CSSProperties => ({
+// HEALTH-LOG §3.2 / frontend-perf-plan F2 — module-scope record over functional
+// helper. Eliminates per-render CSSProperties allocation; lookups are by-value.
+const LIST_ITEM_BASE: React.CSSProperties = {
   padding: "12px 16px",
   cursor: "pointer",
   borderBottom: "1px solid var(--color-border)",
-  background: selected ? "var(--color-accent)" : "transparent",
-  color: selected ? "#fff" : "var(--color-text)",
-});
+};
+const LIST_ITEM_STYLE: Record<"selected" | "unselected", React.CSSProperties> = {
+  selected: { ...LIST_ITEM_BASE, background: "var(--color-accent)", color: "#fff" },
+  unselected: { ...LIST_ITEM_BASE, background: "transparent", color: "var(--color-text)" },
+};
 
 const badge: React.CSSProperties = {
   display: "inline-block",
@@ -332,7 +336,7 @@ export function ProfilesPage() {
           {profiles.map((p) => (
             <div
               key={p.id}
-              style={listItem(selectedId === p.id)}
+              style={LIST_ITEM_STYLE[selectedId === p.id ? "selected" : "unselected"]}
               onClick={() => handleSelect(p.id)}
             >
               <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>

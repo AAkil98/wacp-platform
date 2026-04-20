@@ -90,26 +90,37 @@ const stepBar: React.CSSProperties = {
   background: "var(--color-bg-secondary)",
 };
 
-const stepItem = (state: "completed" | "active" | "pending"): React.CSSProperties => ({
+// HEALTH-LOG §3.2 / frontend-perf-plan F2 — module-scope record over functional helper.
+const STEP_ITEM_BASE: React.CSSProperties = {
   flex: 1,
   textAlign: "center",
   padding: "8px 4px",
   fontSize: 13,
-  fontWeight: state === "active" ? 700 : 400,
-  color:
-    state === "completed"
-      ? "var(--color-accent)"
-      : state === "active"
-        ? "var(--color-text)"
-        : "var(--color-text-secondary)",
-  borderBottom:
-    state === "active"
-      ? "2px solid var(--color-accent)"
-      : state === "completed"
-        ? "2px solid var(--color-accent)"
-        : "2px solid transparent",
-  opacity: state === "pending" ? 0.5 : 1,
-});
+};
+type StepState = "completed" | "active" | "pending";
+const STEP_ITEM_STYLE: Record<StepState, React.CSSProperties> = {
+  completed: {
+    ...STEP_ITEM_BASE,
+    fontWeight: 400,
+    color: "var(--color-accent)",
+    borderBottom: "2px solid var(--color-accent)",
+    opacity: 1,
+  },
+  active: {
+    ...STEP_ITEM_BASE,
+    fontWeight: 700,
+    color: "var(--color-text)",
+    borderBottom: "2px solid var(--color-accent)",
+    opacity: 1,
+  },
+  pending: {
+    ...STEP_ITEM_BASE,
+    fontWeight: 400,
+    color: "var(--color-text-secondary)",
+    borderBottom: "2px solid transparent",
+    opacity: 0.5,
+  },
+};
 
 const body: React.CSSProperties = {
   flex: 1,
@@ -153,14 +164,25 @@ const cardGrid: React.CSSProperties = {
   gap: 16,
 };
 
-const card = (selected: boolean): React.CSSProperties => ({
+// HEALTH-LOG §3.2 / frontend-perf-plan F2 — module-scope record over functional helper.
+const CARD_BASE: React.CSSProperties = {
   padding: 16,
-  border: selected ? "2px solid var(--color-accent)" : "1px solid var(--color-border)",
   borderRadius: 8,
-  background: selected ? "var(--color-bg-secondary)" : "var(--color-bg)",
   cursor: "pointer",
   transition: "border-color 0.15s",
-});
+};
+const CARD_STYLE: Record<"selected" | "unselected", React.CSSProperties> = {
+  selected: {
+    ...CARD_BASE,
+    border: "2px solid var(--color-accent)",
+    background: "var(--color-bg-secondary)",
+  },
+  unselected: {
+    ...CARD_BASE,
+    border: "1px solid var(--color-border)",
+    background: "var(--color-bg)",
+  },
+};
 
 const cardTitle: React.CSSProperties = {
   fontSize: 15,
@@ -422,7 +444,7 @@ export function Wizard({ onClose }: WizardProps) {
           {verticals.map((v) => (
             <div
               key={v.id}
-              style={card(selectedVertical === v.id)}
+              style={CARD_STYLE[selectedVertical === v.id ? "selected" : "unselected"]}
               onClick={() => setSelectedVertical(v.id)}
             >
               <div style={cardTitle}>{v.name}</div>
@@ -454,7 +476,7 @@ export function Wizard({ onClose }: WizardProps) {
           {workflows.map((w) => (
             <div
               key={w.id}
-              style={card(selectedWorkflow === w.id)}
+              style={CARD_STYLE[selectedWorkflow === w.id ? "selected" : "unselected"]}
               onClick={() => setSelectedWorkflow(w.id)}
             >
               <div style={cardTitle}>{w.name}</div>
@@ -686,7 +708,7 @@ export function Wizard({ onClose }: WizardProps) {
       {/* Step indicator bar */}
       <div style={stepBar}>
         {STEPS.map((label, i) => (
-          <div key={label} style={stepItem(stepState(i))}>
+          <div key={label} style={STEP_ITEM_STYLE[stepState(i)]}>
             {i + 1}. {label}
           </div>
         ))}

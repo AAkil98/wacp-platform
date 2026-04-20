@@ -13,14 +13,18 @@
 use std::time::Duration;
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use wacp_llm::{Content, Message, Role, ToolDefinition};
 use wacp_llm::providers::stub::serialize_for_match;
+use wacp_llm::{Content, Message, Role, ToolDefinition};
 
 fn make_conversation(n_messages: usize, chars_per: usize) -> Vec<Message> {
     let filler: String = "x".repeat(chars_per);
     (0..n_messages)
         .map(|i| Message {
-            role: if i % 2 == 0 { Role::User } else { Role::Assistant },
+            role: if i % 2 == 0 {
+                Role::User
+            } else {
+                Role::Assistant
+            },
             content: Content::Text(filler.clone()),
         })
         .collect()

@@ -1339,7 +1339,10 @@ async fn trail_driver_errors_when_highway_unavailable() {
     let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
     let (tx, _rx) = mpsc::channel(16);
     let r = trail_driver(pool, tx, "trail").await;
-    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+    assert!(
+        matches!(&r, Err(s) if s == "highway unavailable"),
+        "got {r:?}"
+    );
 }
 
 #[tokio::test]
@@ -1347,7 +1350,10 @@ async fn gates_driver_errors_when_highway_unavailable() {
     let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
     let (tx, _rx) = mpsc::channel(16);
     let r = gates_driver(pool, tx, "gates").await;
-    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+    assert!(
+        matches!(&r, Err(s) if s == "highway unavailable"),
+        "got {r:?}"
+    );
 }
 
 #[tokio::test]
@@ -1355,7 +1361,10 @@ async fn escalations_driver_errors_when_highway_unavailable() {
     let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
     let (tx, _rx) = mpsc::channel(16);
     let r = escalations_driver(pool, tx, "escalations").await;
-    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+    assert!(
+        matches!(&r, Err(s) if s == "highway unavailable"),
+        "got {r:?}"
+    );
 }
 
 #[tokio::test]
@@ -1363,5 +1372,111 @@ async fn workspace_changes_driver_errors_when_highway_unavailable() {
     let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
     let (tx, _rx) = mpsc::channel(16);
     let r = workspace_changes_driver(pool, tx, "workspace_changes").await;
-    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+    assert!(
+        matches!(&r, Err(s) if s == "highway unavailable"),
+        "got {r:?}"
+    );
+}
+
+// ========================================================================
+// §13.7.9 Phase C — handle ops + spawn_drivers + process_view
+// ========================================================================
+
+#[tokio::test]
+async fn handle_shutdown_sends_shutdown_cmd() {
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<MonitorCmd>(1);
+    let (bcast_tx, _) = broadcast::channel::<Frame>(8);
+    let handle = SessionMonitorHandle {
+        session_id: "s-1".into(),
+        cmd_tx,
+        broadcast_tx: bcast_tx,
+        pending: Arc::new(PendingState::default()),
+    };
+    handle.shutdown().await;
+    let cmd = cmd_rx.try_recv().expect("expected MonitorCmd::Shutdown");
+    assert!(matches!(cmd, MonitorCmd::Shutdown));
+}
+
+#[tokio::test]
+async fn handle_snapshot_returns_some_when_responder_alive() {
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<MonitorCmd>(4);
+    let (bcast_tx, _) = broadcast::channel::<Frame>(8);
+    let handle = SessionMonitorHandle {
+        session_id: "s-snap".into(),
+        cmd_tx,
+        broadcast_tx: bcast_tx,
+        pending: Arc::new(PendingState::default()),
+    };
+
+    // Tiny responder: answers the first Snapshot command with a default
+    // snapshot, exits. Keeps the cmd channel live for the duration of
+    // snapshot().
+    let responder = tokio::spawn(async move {
+        if let Some(MonitorCmd::Snapshot(reply)) = cmd_rx.recv().await {
+            let _ = reply.send(MonitorSnapshot {
+                session_id: "s-snap".into(),
+                workspaces: HashMap::new(),
+                pending_gates: 0,
+                pending_escalations: 0,
+                pending_refusals: 0,
+            });
+        }
+    });
+
+    let snap = handle.snapshot().await;
+    assert!(
+        snap.is_some(),
+        "snapshot should return Some when responder alive"
+    );
+    assert_eq!(snap.unwrap().session_id, "s-snap");
+    responder.await.ok();
+}
+
+#[tokio::test]
+async fn spawn_stream_drivers_returns_four_handles() {
+    let db = create_test_pool().await.unwrap();
+    let (mon, _rx) = make_monitor(&db).await;
+    let (tx, _rx_ev) = mpsc::channel(16);
+    let handles = mon.spawn_stream_drivers(tx);
+    assert_eq!(
+        handles.len(),
+        4,
+        "should spawn one driver per highway stream"
+    );
+    for h in handles {
+        h.abort();
+    }
+}
+
+#[test]
+fn process_workspace_view_inserts_label_when_role_nonempty() {
+    let view = proto::WorkspaceView {
+        id: "ws-x".into(),
+        role: "swe:implementer".into(),
+        state: proto::WorkspaceState::Active as i32,
+        ..Default::default()
+    };
+    let mut labels = HashMap::new();
+    let mut states = HashMap::new();
+    process_workspace_view(view, &mut labels, &mut states);
+    assert_eq!(labels.get("ws-x"), Some(&"swe:implementer".to_string()));
+    assert_eq!(states.get("ws-x"), Some(&"active".to_string()));
+}
+
+#[test]
+fn process_workspace_view_skips_label_when_role_empty() {
+    let view = proto::WorkspaceView {
+        id: "ws-y".into(),
+        role: String::new(),
+        state: proto::WorkspaceState::Idle as i32,
+        ..Default::default()
+    };
+    let mut labels = HashMap::new();
+    let mut states = HashMap::new();
+    process_workspace_view(view, &mut labels, &mut states);
+    assert!(
+        !labels.contains_key("ws-y"),
+        "empty role must not create a label entry"
+    );
+    assert_eq!(states.get("ws-y"), Some(&"idle".to_string()));
 }

@@ -343,6 +343,11 @@ impl Monitor {
         info!(session_id = %self.session_id, "session monitor stopped");
     }
 
+    // mutants:skip — under the disconnected pool used by every unit test
+    // `self.pool.highway()` returns None and the fn early-returns; the
+    // body-to-() mutant is semantically equivalent in that context. The
+    // real highway path is covered by the `wacp-console/integration/`
+    // suites via `MockHighwayService`.
     async fn seed_workspace_labels(&mut self) {
         let Some(mut client) = self.pool.highway().await else {
             warn!(session_id = %self.session_id, "highway channel unavailable at monitor start");
@@ -353,15 +358,11 @@ impl Monitor {
                 workspace_id: ws.clone(),
             };
             match client.get_workspace(req).await {
-                Ok(resp) => {
-                    let view = resp.into_inner();
-                    if !view.role.is_empty() {
-                        self.workspace_labels
-                            .insert(view.id.clone(), view.role.clone());
-                    }
-                    self.workspace_states
-                        .insert(view.id.clone(), workspace_state_string(view.state()));
-                }
+                Ok(resp) => process_workspace_view(
+                    resp.into_inner(),
+                    &mut self.workspace_labels,
+                    &mut self.workspace_states,
+                ),
                 Err(e) => {
                     warn!(session_id = %self.session_id, workspace_id = %ws, error = %e, "GetWorkspace failed at seed")
                 }
@@ -578,10 +579,23 @@ fn lag_refresh_hint(stream: &'static str) -> Vec<&'static str> {
     match stream {
         "gates" => vec!["gates"],
         "escalations" => vec!["escalations"],
+        // mutants:skip — the wildcard arm below returns the same value,
+        // so deleting this arm is semantically equivalent.
         "trail" => vec![],
         "workspace_changes" => vec!["workspaces"],
         _ => vec![],
     }
+}
+
+fn process_workspace_view(
+    view: proto::WorkspaceView,
+    labels: &mut HashMap<String, String>,
+    states: &mut HashMap<String, String>,
+) {
+    if !view.role.is_empty() {
+        labels.insert(view.id.clone(), view.role.clone());
+    }
+    states.insert(view.id.clone(), workspace_state_string(view.state()));
 }
 
 fn workspace_state_string(s: proto::WorkspaceState) -> String {

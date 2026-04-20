@@ -471,7 +471,7 @@ Prevent with branch protection on GitHub: require linear history + disallow forc
 | ~~Pre-push hook that runs `cargo fmt --check` + `cargo clippy` (opt-in)~~ | ~~30 min~~ | ~~catches §7.3 invariant breaks earlier~~ | **landed 2026-04-19** — `7e83da5` (opt-in via `scripts/install-hooks.sh`) |
 | ~~`git config --global rerere.enabled true` in the onboarding doc~~ | ~~2 min~~ | ~~cuts rebase-conflict re-resolution~~ | **landed 2026-04-19** — `3364098` (README Development Setup) |
 
-Each is a 10–30 min standalone item. None are pre-merge gates. The four items above closed via the `ci/pre-launch-closeout` topic per `impl/closeout-plan.md` P1 + P2.
+Each is a 10–30 min standalone item. None are pre-merge gates. The four items above closed via the `ci/pre-launch-closeout` topic per `impl/archive/closeout-plan.md` P1 + P2.
 
 ## 14. Changelog for this doc
 

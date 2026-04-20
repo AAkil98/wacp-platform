@@ -1,6 +1,6 @@
 # WACP Implementation: Highway UI
 
-> **Superseded 2026-04-19** by the `wacp-console` oversight dashboard (W4, per `wcon-vision`). The standalone highway-ui TypeScript SPA was retired and its subtree deleted; the console's oversight surface now covers trail, gates, escalations, refusals, workspace tree, and directive injection across 7 WebSocket channels. Rationale + decision captured in `tech-debt-2026-04-18.md` §3.1 A.2 and `impl/closeout-plan.md` §3.1 P1.2.
+> **Superseded 2026-04-19** by the `wacp-console` oversight dashboard (W4, per `wcon-vision`). The standalone highway-ui TypeScript SPA was retired and its subtree deleted; the console's oversight surface now covers trail, gates, escalations, refusals, workspace tree, and directive injection across 7 WebSocket channels. Rationale + decision captured in `tech-debt-2026-04-18.md` §3.1 A.2 and `impl/archive/closeout-plan.md` §3.1 P1.2.
 >
 > This spec is preserved for historical reference — its design of connect-web + gRPC-Web + protobuf-over-http transport informed the console's REST+WS translation layer.
 

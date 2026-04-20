@@ -52,21 +52,39 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 
 ### B.3 — `wacp-console/crates/console-core/src/session_launcher.rs` (1877 lines)
 
-Split by launch stage per tech-debt §3.2: `submit.rs` + `decompose.rs` + `dispatch.rs` + `rollback.rs` + `launcher.rs`.
+**Deviation from tech-debt §3.2 letter.** File was 1877 lines; 1308 in a single `#[cfg(test)] mod tests { ... }` block. Production-only is 568 lines — already cohesive and under threshold. Extracting to `submit/decompose/dispatch/rollback/launcher` siblings as the plan proposed would have required widening 30+ internal helpers from `fn` to `pub(crate) fn` + refactoring private state access. The stage orchestration flow reads top-to-bottom naturally today, so keeping it unified preserves that anchor.
 
-**Status:** pending.
+**What landed:** test module extracted via `#[path]` pattern. Production file 1877 → 572 lines.
+
+**Status:** landed 2026-04-20 (commit `747a991`). 179 console-core tests still pass.
 
 ### B.4 — `wacp-console/crates/console-api/src/routes/highway.rs` (1832 lines)
 
-Split by REST resource per tech-debt §3.2: `routes/highway/gates.rs` + `escalations.rs` + `envelopes.rs` + `pending.rs` + `mod.rs`.
+**Partial deviation.** The plan proposed splitting into `gates.rs` / `escalations.rs` / `envelopes.rs` / `pending.rs` / `mod.rs`. The `pending` submodule **already exists** at line 503 (`pub(crate) mod pending { ... }`) — so the pending→mod split is essentially already done. What's left is the outer file containing gate + escalation + envelope handlers plus shared helpers.
 
-**Status:** pending.
+**What landed in this session:** top-level `#[cfg(test)] mod tests` (line 1301, 530 lines) extracted to a sibling via `#[path]`. The nested `#[cfg(test)] mod tests` inside `pub(crate) mod pending` at line 753 stays in place — scoped to that submodule and not reachable with the same outer `#[path]` trick.
+
+**What's still pending:** production split of routes/highway.rs (still 1302 lines, over warn threshold). Natural cut points: `gates.rs` (gate-resolve handler + helpers), `escalations.rs` (escalation-respond), `envelopes.rs` (envelope-inject + send-envelope). Estimated 2–3 h. Tracked as follow-up in the allowlist comment; non-blocking since the file is under the 1500-line fail threshold.
+
+**Status:** partially landed 2026-04-20 (commit `8b9df1f`). 143 console-api tests still pass; full production split deferred.
 
 ### B.5 — `config.rs` / `recovery.rs` / `rest_gateway.rs` / `routes/sessions.rs` / `tools/execution.rs`
 
-Each splits along natural internal boundaries. Target no file >800 lines.
+**Same test-extraction pattern for all five.** Each splits the inline `#[cfg(test)] mod tests` to a sibling `*_tests.rs` via `#[path]`. Effect per file:
 
-**Status:** pending.
+| File | Before | After | Test file | Allowlist |
+|---|---:|---:|---|---|
+| `recovery.rs` | 1485 | 251 | `recovery_tests.rs` (1234) | production removed; test monolith added |
+| `rest_gateway.rs` | 1202 | 772 | `rest_gateway_tests.rs` (429) | production removed; test file under 1000, no entry |
+| `routes/sessions.rs` | 1181 | 851 | `sessions_tests.rs` (331) | production removed; test file under 1000, no entry |
+| `execution.rs` | 1137 | 165 | `execution_tests.rs` (970) | production removed; test file under 1000, no entry |
+| `config.rs` | 1748 | 1038 | `config_tests.rs` (710) | production moved "oversized" → "warn-only"; test file under 1000, no entry |
+
+**config.rs extraction quirk.** First attempt corrupted the YAML fragments inside `r#"..."#` raw strings — the naïve `sed 's/^    //'` de-indent (applied per-line before rustfmt) stripped 4 spaces from each line, including the ones inside YAML literals, breaking the `parse_full_config` test. Fixed by extracting *without* de-indent and letting rustfmt re-indent the Rust code on AST lines (it doesn't touch string-literal contents). Lesson captured in the B.5e commit message.
+
+**Follow-up still pending for config.rs.** 1038 lines is over the 1000-line warn threshold. Natural split: `config/server.rs` (listen addresses, TLS) + `config/storage.rs` (trail, checkpoints) + `config/resources.rs` (default_budget, warning_threshold) + `config/mod.rs` (top-level RuntimeConfig + parse entry point). Estimated 2–3 h. Tracked as follow-up in the allowlist comment.
+
+**Status:** landed 2026-04-20 (commits `34f29c0`, `b045e60`, `e2d5e42`, `4d5e348`, `0e286e3`). Test counts: 179 console-core + 209 wacp-transport + 143 console-api + 135 wacp-tools + 109 wacp-runtime — all green.
 
 ## Execution log
 
@@ -77,7 +95,15 @@ Each splits along natural internal boundaries. Target no file >800 lines.
 | B.1b agent_service | `c5199dd` | 2026-04-20 | extract handle_agent_request; visibility widened; init.rs 1974 → 1640 |
 | B.1c highway_service | `dc4b5f5` | 2026-04-20 | extract handle_highway_request; init.rs 1640 → 1231 |
 | B.1d coordinator_service | `61afe2b` | 2026-04-20 | extract handle_coordinator_request; init.rs 1231 → 819; allowlist entry removed |
-| B.2 test-extraction | _(this commit)_ | 2026-04-20 | inline `mod tests` → sibling `session_monitor_tests.rs` via `#[path]`; production file 2120 → 779; allowlist entry removed |
+| B.2 test-extraction | `a6af818` | 2026-04-20 | inline `mod tests` → sibling `session_monitor_tests.rs` via `#[path]`; production file 2120 → 779; allowlist entry removed |
+| B.3 test-extraction | `747a991` | 2026-04-20 | session_launcher test monolith → sibling file; 1877 → 572 |
+| B.5a recovery | `34f29c0` | 2026-04-20 | recovery test monolith → sibling; 1485 → 251 |
+| B.5b rest_gateway | `b045e60` | 2026-04-20 | rest_gateway test monolith → sibling (`pub(crate)` preserved); 1202 → 772 |
+| B.5c routes/sessions | `e2d5e42` | 2026-04-20 | cancel_tests module → sibling; 1181 → 851 |
+| B.5d execution | `4d5e348` | 2026-04-20 | execution test monolith → sibling; 1137 → 165 |
+| B.4 routes/highway | `8b9df1f` | 2026-04-20 | top-level tests → sibling; nested `pending::tests` left in place; 1832 → 1302 (still warn-only) |
+| B.5e config | `0e286e3` | 2026-04-20 | config test monolith → sibling (YAML-in-raw-string preserved by skipping sed de-indent); 1748 → 1038 (still warn-only) |
+| closeout + fmt | _(this commit)_ | 2026-04-20 | bucket-b plan refresh + rustfmt cleanup of config_tests.rs; 12 commits total on `refactor/file-splits`, 1939 workspace tests green |
 
 ## Invariants
 

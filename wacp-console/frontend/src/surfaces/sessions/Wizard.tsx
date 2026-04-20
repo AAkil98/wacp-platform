@@ -419,281 +419,70 @@ export function Wizard({ onClose }: WizardProps) {
   }
 
   // --- Step renderers ---
+  //
+  // HEALTH-LOG §3.1 / frontend-perf-plan F3 — the six step components are now
+  // module-scope (see below the Wizard body). Previously they were nested
+  // function declarations inside Wizard, which meant every Wizard re-render
+  // created fresh function identities and React's reconciler unmounted + remounted
+  // the active step instead of updating it in place.
 
   function renderStepContent(): React.ReactNode {
     switch (step) {
-      case 0: return <SelectVerticalStep />;
-      case 1: return <SelectWorkflowStep />;
-      case 2: return <AssignProfilesStep />;
-      case 3: return <ContextStep />;
-      case 4: return <BudgetOverridesStep />;
-      case 5: return <ReviewLaunchStep />;
-      default: return null;
+      case 0:
+        return (
+          <SelectVerticalStep
+            isLoading={verticalsQuery.isLoading}
+            verticals={verticals}
+            selectedVertical={selectedVertical}
+            onSelect={setSelectedVertical}
+          />
+        );
+      case 1:
+        return (
+          <SelectWorkflowStep
+            isLoading={verticalQuery.isLoading}
+            workflows={verticalDetail?.workflows ?? []}
+            selectedWorkflow={selectedWorkflow}
+            onSelect={setSelectedWorkflow}
+          />
+        );
+      case 2:
+        return (
+          <AssignProfilesStep
+            roles={verticalDetail?.roles ?? []}
+            assignments={assignments}
+            setAssignments={setAssignments}
+          />
+        );
+      case 3:
+        return (
+          <ContextStep
+            contextSchema={contextSchema}
+            contextValues={contextValues}
+            setContextValues={setContextValues}
+          />
+        );
+      case 4:
+        return <BudgetOverridesStep budgets={budgets} setBudgets={setBudgets} />;
+      case 5:
+        return (
+          <ReviewLaunchStep
+            verticalDetail={verticalDetail}
+            selectedVertical={selectedVertical}
+            selectedWorkflow={selectedWorkflow}
+            assignments={assignments}
+            contextValues={contextValues}
+            budgets={budgets}
+            sessionName={sessionName}
+            setSessionName={setSessionName}
+            launching={launching}
+            launchError={launchError}
+            onLaunch={() => void handleLaunch()}
+          />
+        );
+      default:
+        return null;
     }
-  }
-
-  function SelectVerticalStep() {
-    if (verticalsQuery.isLoading) {
-      return <p style={{ color: "var(--color-text-secondary)" }}>Loading verticals...</p>;
-    }
-
-    return (
-      <div>
-        <h2 style={sectionHeading}>Select a Vertical</h2>
-        <div style={cardGrid}>
-          {verticals.map((v) => (
-            <div
-              key={v.id}
-              style={CARD_STYLE[selectedVertical === v.id ? "selected" : "unselected"]}
-              onClick={() => setSelectedVertical(v.id)}
-            >
-              <div style={cardTitle}>{v.name}</div>
-              <div style={cardDesc}>{v.defining_constraint}</div>
-              <div style={{ ...cardMeta, marginTop: 8 }}>
-                {v.role_count} roles / {v.workflow_count} workflows / {v.tool_count} tools
-              </div>
-            </div>
-          ))}
-        </div>
-        {verticals.length === 0 && !verticalsQuery.isLoading && (
-          <p style={{ color: "var(--color-text-secondary)" }}>No verticals available.</p>
-        )}
-      </div>
-    );
-  }
-
-  function SelectWorkflowStep() {
-    if (verticalQuery.isLoading) {
-      return <p style={{ color: "var(--color-text-secondary)" }}>Loading workflows...</p>;
-    }
-
-    const workflows = verticalDetail?.workflows ?? [];
-
-    return (
-      <div>
-        <h2 style={sectionHeading}>Select a Workflow</h2>
-        <div style={cardGrid}>
-          {workflows.map((w) => (
-            <div
-              key={w.id}
-              style={CARD_STYLE[selectedWorkflow === w.id ? "selected" : "unselected"]}
-              onClick={() => setSelectedWorkflow(w.id)}
-            >
-              <div style={cardTitle}>{w.name}</div>
-              <div style={cardDesc}>{w.description}</div>
-              <div style={{ ...cardMeta, marginTop: 8 }}>
-                {w.stage_count} stages ({w.gated_stage_count} gated)
-              </div>
-            </div>
-          ))}
-        </div>
-        {workflows.length === 0 && (
-          <p style={{ color: "var(--color-text-secondary)" }}>No workflows available for this vertical.</p>
-        )}
-      </div>
-    );
-  }
-
-  function AssignProfilesStep() {
-    const roles = verticalDetail?.roles ?? [];
-
-    return (
-      <div>
-        <h2 style={sectionHeading}>Assign Profiles to Roles</h2>
-        {roles.map((role) => {
-          const assignment = assignments.find((a) => a.role_ref === role.id);
-          return (
-            <RoleSlot
-              key={role.id}
-              roleId={role.id}
-              roleName={role.name}
-              selectedProfileId={assignment?.profile_id ?? ""}
-              onSelect={(profileId) => {
-                setAssignments((prev) =>
-                  prev.map((a) =>
-                    a.role_ref === role.id ? { ...a, profile_id: profileId } : a,
-                  ),
-                );
-              }}
-            />
-          );
-        })}
-        {roles.length === 0 && (
-          <p style={{ color: "var(--color-text-secondary)" }}>No roles defined for this vertical.</p>
-        )}
-      </div>
-    );
-  }
-
-  function ContextStep() {
-    return (
-      <div>
-        <h2 style={sectionHeading}>Session Context</h2>
-        <ContextForm
-          schema={contextSchema}
-          values={contextValues}
-          onChange={setContextValues}
-        />
-      </div>
-    );
-  }
-
-  function BudgetOverridesStep() {
-    return (
-      <div>
-        <h2 style={sectionHeading}>Budget Overrides (Optional)</h2>
-        <p style={{ color: "var(--color-text-secondary)", marginBottom: 16, fontSize: 13 }}>
-          Leave blank to use the default budget from the vertical definition.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
-          <div>
-            <label style={fieldLabel} htmlFor="budget-max-cost">Max Cost (micros)</label>
-            <input
-              id="budget-max-cost"
-              type="number"
-              style={inputStyle}
-              placeholder="e.g. 5000000"
-              value={budgets.max_cost_micros ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setBudgets((b) => ({
-                  ...b,
-                  max_cost_micros: v === "" ? null : parseInt(v, 10),
-                }));
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={fieldLabel} htmlFor="budget-max-tokens">Max Tokens</label>
-            <input
-              id="budget-max-tokens"
-              type="number"
-              style={inputStyle}
-              placeholder="e.g. 100000"
-              value={budgets.max_tokens ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setBudgets((b) => ({
-                  ...b,
-                  max_tokens: v === "" ? null : parseInt(v, 10),
-                }));
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={fieldLabel} htmlFor="budget-max-wall-time">Max Wall Time (ms)</label>
-            <input
-              id="budget-max-wall-time"
-              type="number"
-              style={inputStyle}
-              placeholder="e.g. 3600000"
-              value={budgets.max_wall_time_ms ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                setBudgets((b) => ({
-                  ...b,
-                  max_wall_time_ms: v === "" ? null : parseInt(v, 10),
-                }));
-              }}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function ReviewLaunchStep() {
-    const workflows = verticalDetail?.workflows ?? [];
-    const wf = workflows.find((w) => w.id === selectedWorkflow);
-    const roles = verticalDetail?.roles ?? [];
-
-    return (
-      <div>
-        <h2 style={sectionHeading}>Review & Launch</h2>
-
-        <div style={{ maxWidth: 560, border: "1px solid var(--color-border)", borderRadius: 8, padding: 20, background: "var(--color-bg-secondary)" }}>
-          <div style={summaryRow}>
-            <span style={summaryLabel}>Vertical</span>
-            <span>{verticalDetail?.name ?? selectedVertical}</span>
-          </div>
-          <div style={summaryRow}>
-            <span style={summaryLabel}>Workflow</span>
-            <span>{wf?.name ?? selectedWorkflow}</span>
-          </div>
-
-          <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
-            <span style={summaryLabel}>Assignments</span>
-            {assignments.map((a) => {
-              const role = roles.find((r) => r.id === a.role_ref);
-              return (
-                <div key={a.role_ref} style={{ fontSize: 13, paddingLeft: 8 }}>
-                  {role?.name ?? a.role_ref} → <ProfileNameLabel profileId={a.profile_id} />
-                </div>
-              );
-            })}
-          </div>
-
-          {Object.keys(contextValues).length > 0 && (
-            <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
-              <span style={summaryLabel}>Context</span>
-              {Object.entries(contextValues).map(([k, v]) => (
-                <div key={k} style={{ fontSize: 13, paddingLeft: 8 }}>
-                  {k}: {String(v)}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {(budgets.max_cost_micros != null || budgets.max_tokens != null || budgets.max_wall_time_ms != null) && (
-            <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
-              <span style={summaryLabel}>Budget Overrides</span>
-              {budgets.max_cost_micros != null && (
-                <div style={{ fontSize: 13, paddingLeft: 8 }}>Max Cost: {budgets.max_cost_micros} micros</div>
-              )}
-              {budgets.max_tokens != null && (
-                <div style={{ fontSize: 13, paddingLeft: 8 }}>Max Tokens: {budgets.max_tokens}</div>
-              )}
-              {budgets.max_wall_time_ms != null && (
-                <div style={{ fontSize: 13, paddingLeft: 8 }}>Max Wall Time: {budgets.max_wall_time_ms} ms</div>
-              )}
-            </div>
-          )}
-
-          <div style={{ marginTop: 16 }}>
-            <label style={fieldLabel} htmlFor="session-name">Session Name (optional)</label>
-            <input
-              id="session-name"
-              type="text"
-              style={inputStyle}
-              placeholder="My session"
-              value={sessionName}
-              onChange={(e) => setSessionName(e.target.value)}
-            />
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <button
-              style={{ ...btnPrimary, width: "100%", padding: "10px 16px", fontSize: 15 }}
-              onClick={() => void handleLaunch()}
-              disabled={launching}
-            >
-              {launching ? "Launching..." : "Launch Session"}
-            </button>
-          </div>
-
-          {launchError && (
-            <div style={errorBox}>
-              {launchError.split("\n").map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
   }
 
   // Step indicator state
@@ -744,6 +533,337 @@ export function Wizard({ onClose }: WizardProps) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Step components (module-scope per F3) ---
+
+function SelectVerticalStep({
+  isLoading,
+  verticals,
+  selectedVertical,
+  onSelect,
+}: {
+  isLoading: boolean;
+  verticals: VerticalSummary[];
+  selectedVertical: string;
+  onSelect: (id: string) => void;
+}) {
+  if (isLoading) {
+    return <p style={{ color: "var(--color-text-secondary)" }}>Loading verticals...</p>;
+  }
+  return (
+    <div>
+      <h2 style={sectionHeading}>Select a Vertical</h2>
+      <div style={cardGrid}>
+        {verticals.map((v) => (
+          <div
+            key={v.id}
+            style={CARD_STYLE[selectedVertical === v.id ? "selected" : "unselected"]}
+            onClick={() => onSelect(v.id)}
+          >
+            <div style={cardTitle}>{v.name}</div>
+            <div style={cardDesc}>{v.defining_constraint}</div>
+            <div style={{ ...cardMeta, marginTop: 8 }}>
+              {v.role_count} roles / {v.workflow_count} workflows / {v.tool_count} tools
+            </div>
+          </div>
+        ))}
+      </div>
+      {verticals.length === 0 && !isLoading && (
+        <p style={{ color: "var(--color-text-secondary)" }}>No verticals available.</p>
+      )}
+    </div>
+  );
+}
+
+function SelectWorkflowStep({
+  isLoading,
+  workflows,
+  selectedWorkflow,
+  onSelect,
+}: {
+  isLoading: boolean;
+  workflows: WorkflowSummary[];
+  selectedWorkflow: string;
+  onSelect: (id: string) => void;
+}) {
+  if (isLoading) {
+    return <p style={{ color: "var(--color-text-secondary)" }}>Loading workflows...</p>;
+  }
+  return (
+    <div>
+      <h2 style={sectionHeading}>Select a Workflow</h2>
+      <div style={cardGrid}>
+        {workflows.map((w) => (
+          <div
+            key={w.id}
+            style={CARD_STYLE[selectedWorkflow === w.id ? "selected" : "unselected"]}
+            onClick={() => onSelect(w.id)}
+          >
+            <div style={cardTitle}>{w.name}</div>
+            <div style={cardDesc}>{w.description}</div>
+            <div style={{ ...cardMeta, marginTop: 8 }}>
+              {w.stage_count} stages ({w.gated_stage_count} gated)
+            </div>
+          </div>
+        ))}
+      </div>
+      {workflows.length === 0 && (
+        <p style={{ color: "var(--color-text-secondary)" }}>
+          No workflows available for this vertical.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AssignProfilesStep({
+  roles,
+  assignments,
+  setAssignments,
+}: {
+  roles: RoleSummary[];
+  assignments: Assignment[];
+  setAssignments: React.Dispatch<React.SetStateAction<Assignment[]>>;
+}) {
+  return (
+    <div>
+      <h2 style={sectionHeading}>Assign Profiles to Roles</h2>
+      {roles.map((role) => {
+        const assignment = assignments.find((a) => a.role_ref === role.id);
+        return (
+          <RoleSlot
+            key={role.id}
+            roleId={role.id}
+            roleName={role.name}
+            selectedProfileId={assignment?.profile_id ?? ""}
+            onSelect={(profileId) => {
+              setAssignments((prev) =>
+                prev.map((a) =>
+                  a.role_ref === role.id ? { ...a, profile_id: profileId } : a,
+                ),
+              );
+            }}
+          />
+        );
+      })}
+      {roles.length === 0 && (
+        <p style={{ color: "var(--color-text-secondary)" }}>
+          No roles defined for this vertical.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ContextStep({
+  contextSchema,
+  contextValues,
+  setContextValues,
+}: {
+  contextSchema: Record<string, FieldSchema>;
+  contextValues: Record<string, unknown>;
+  setContextValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+}) {
+  return (
+    <div>
+      <h2 style={sectionHeading}>Session Context</h2>
+      <ContextForm schema={contextSchema} values={contextValues} onChange={setContextValues} />
+    </div>
+  );
+}
+
+function BudgetOverridesStep({
+  budgets,
+  setBudgets,
+}: {
+  budgets: BudgetOverrides;
+  setBudgets: React.Dispatch<React.SetStateAction<BudgetOverrides>>;
+}) {
+  return (
+    <div>
+      <h2 style={sectionHeading}>Budget Overrides (Optional)</h2>
+      <p style={{ color: "var(--color-text-secondary)", marginBottom: 16, fontSize: 13 }}>
+        Leave blank to use the default budget from the vertical definition.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
+        <div>
+          <label style={fieldLabel} htmlFor="budget-max-cost">Max Cost (micros)</label>
+          <input
+            id="budget-max-cost"
+            type="number"
+            style={inputStyle}
+            placeholder="e.g. 5000000"
+            value={budgets.max_cost_micros ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setBudgets((b) => ({ ...b, max_cost_micros: v === "" ? null : parseInt(v, 10) }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabel} htmlFor="budget-max-tokens">Max Tokens</label>
+          <input
+            id="budget-max-tokens"
+            type="number"
+            style={inputStyle}
+            placeholder="e.g. 100000"
+            value={budgets.max_tokens ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setBudgets((b) => ({ ...b, max_tokens: v === "" ? null : parseInt(v, 10) }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabel} htmlFor="budget-max-wall-time">Max Wall Time (ms)</label>
+          <input
+            id="budget-max-wall-time"
+            type="number"
+            style={inputStyle}
+            placeholder="e.g. 3600000"
+            value={budgets.max_wall_time_ms ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setBudgets((b) => ({ ...b, max_wall_time_ms: v === "" ? null : parseInt(v, 10) }));
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewLaunchStep({
+  verticalDetail,
+  selectedVertical,
+  selectedWorkflow,
+  assignments,
+  contextValues,
+  budgets,
+  sessionName,
+  setSessionName,
+  launching,
+  launchError,
+  onLaunch,
+}: {
+  verticalDetail: VerticalDetail | undefined;
+  selectedVertical: string;
+  selectedWorkflow: string;
+  assignments: Assignment[];
+  contextValues: Record<string, unknown>;
+  budgets: BudgetOverrides;
+  sessionName: string;
+  setSessionName: React.Dispatch<React.SetStateAction<string>>;
+  launching: boolean;
+  launchError: string | null;
+  onLaunch: () => void;
+}) {
+  const workflows = verticalDetail?.workflows ?? [];
+  const wf = workflows.find((w) => w.id === selectedWorkflow);
+  const roles = verticalDetail?.roles ?? [];
+
+  return (
+    <div>
+      <h2 style={sectionHeading}>Review & Launch</h2>
+
+      <div
+        style={{
+          maxWidth: 560,
+          border: "1px solid var(--color-border)",
+          borderRadius: 8,
+          padding: 20,
+          background: "var(--color-bg-secondary)",
+        }}
+      >
+        <div style={summaryRow}>
+          <span style={summaryLabel}>Vertical</span>
+          <span>{verticalDetail?.name ?? selectedVertical}</span>
+        </div>
+        <div style={summaryRow}>
+          <span style={summaryLabel}>Workflow</span>
+          <span>{wf?.name ?? selectedWorkflow}</span>
+        </div>
+
+        <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
+          <span style={summaryLabel}>Assignments</span>
+          {assignments.map((a) => {
+            const role = roles.find((r) => r.id === a.role_ref);
+            return (
+              <div key={a.role_ref} style={{ fontSize: 13, paddingLeft: 8 }}>
+                {role?.name ?? a.role_ref} → <ProfileNameLabel profileId={a.profile_id} />
+              </div>
+            );
+          })}
+        </div>
+
+        {Object.keys(contextValues).length > 0 && (
+          <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
+            <span style={summaryLabel}>Context</span>
+            {Object.entries(contextValues).map(([k, v]) => (
+              <div key={k} style={{ fontSize: 13, paddingLeft: 8 }}>
+                {k}: {String(v)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(budgets.max_cost_micros != null ||
+          budgets.max_tokens != null ||
+          budgets.max_wall_time_ms != null) && (
+          <div style={{ ...summaryRow, flexDirection: "column", gap: 4 }}>
+            <span style={summaryLabel}>Budget Overrides</span>
+            {budgets.max_cost_micros != null && (
+              <div style={{ fontSize: 13, paddingLeft: 8 }}>
+                Max Cost: {budgets.max_cost_micros} micros
+              </div>
+            )}
+            {budgets.max_tokens != null && (
+              <div style={{ fontSize: 13, paddingLeft: 8 }}>Max Tokens: {budgets.max_tokens}</div>
+            )}
+            {budgets.max_wall_time_ms != null && (
+              <div style={{ fontSize: 13, paddingLeft: 8 }}>
+                Max Wall Time: {budgets.max_wall_time_ms} ms
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16 }}>
+          <label style={fieldLabel} htmlFor="session-name">Session Name (optional)</label>
+          <input
+            id="session-name"
+            type="text"
+            style={inputStyle}
+            placeholder="My session"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+          />
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <button
+            style={{ ...btnPrimary, width: "100%", padding: "10px 16px", fontSize: 15 }}
+            onClick={onLaunch}
+            disabled={launching}
+          >
+            {launching ? "Launching..." : "Launch Session"}
+          </button>
+        </div>
+
+        {launchError && (
+          <div style={errorBox}>
+            {launchError.split("\n").map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

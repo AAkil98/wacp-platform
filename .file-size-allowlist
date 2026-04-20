@@ -21,7 +21,7 @@ wacp-console/crates/console-api/src/routes/highway.rs
 
 # Rust production — moderately oversized (1000–1500); warn-only
 # (recovery.rs removed 2026-04-20 after B.5 test-extraction: 1485 → 251 lines)
-wacp/crates/wacp-transport/src/rest_gateway.rs
+# (rest_gateway.rs removed 2026-04-20 after B.5 test-extraction: 1202 → 772 lines)
 wacp-console/crates/console-api/src/routes/sessions.rs
 wacp/crates/wacp-tools/src/execution.rs
 

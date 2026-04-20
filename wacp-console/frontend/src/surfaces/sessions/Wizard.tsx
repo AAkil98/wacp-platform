@@ -52,6 +52,11 @@ interface ProfileSummary {
   role_ref: string;
 }
 
+// Stable empty-array ref for React-Query fallback. Using `?? []` inline creates
+// a fresh [] per render, which made the `useEffect([profiles, ...])` in
+// `RoleSlot` fire every render during query loading. HEALTH-LOG §3.3.
+const EMPTY_PROFILES: readonly ProfileSummary[] = [];
+
 interface Assignment {
   role_ref: string;
   profile_id: string;
@@ -736,17 +741,19 @@ function RoleSlot({
   onSelect: (profileId: string) => void;
 }) {
   const profilesQuery = useProfiles({ role_ref: roleId });
-  const profiles = (profilesQuery.data ?? []) as ProfileSummary[];
+  const profiles = (profilesQuery.data ?? EMPTY_PROFILES) as ProfileSummary[];
 
-  // Auto-select first match when profiles load
+  // Auto-select first match when profiles load. Dep'd on the first profile's
+  // id (primitive) + selectedProfileId — not on `profiles` (array identity) or
+  // `onSelect` (caller-owned closure). HEALTH-LOG §3.3 recommendation 3:
+  // value-compare-via-key over object/callback identity.
+  const firstProfileId = profiles[0]?.id;
   useEffect(() => {
-    if (profiles.length > 0 && !selectedProfileId) {
-      const first = profiles[0];
-      if (first) {
-        onSelect(first.id);
-      }
+    if (firstProfileId && !selectedProfileId) {
+      onSelect(firstProfileId);
     }
-  }, [profiles, selectedProfileId, onSelect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstProfileId, selectedProfileId]);
 
   const slotStyle: React.CSSProperties = {
     display: "flex",

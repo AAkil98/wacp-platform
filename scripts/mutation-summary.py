@@ -16,6 +16,16 @@ import sys
 from pathlib import Path
 
 
+# cargo-mutants v27 renamed `Caught`/`Missed` to `CaughtMutant`/`MissedMutant`
+# in `outcomes.json::summary`; baseline scenarios report `Success`. Normalize
+# here so the rest of the script stays version-agnostic.
+STATUS_ALIASES: dict[str, str] = {
+    "CaughtMutant": "Caught",
+    "MissedMutant": "Missed",
+    "TimedOut": "Timeout",
+}
+
+
 def collect(target_dir: Path) -> tuple[dict[str, int], list[str]]:
     """Return (counts, survivors) for one target's outcomes.json."""
     path = target_dir / "outcomes.json"
@@ -26,14 +36,21 @@ def collect(target_dir: Path) -> tuple[dict[str, int], list[str]]:
     counts: dict[str, int] = {}
     survs: list[str] = []
     for outcome in data.get("outcomes", []):
-        status = outcome.get("summary") or outcome.get("outcome") or "Unknown"
+        raw = outcome.get("summary") or outcome.get("outcome") or "Unknown"
+        status = STATUS_ALIASES.get(raw, raw)
+        if status == "Success":
+            continue
         counts[status] = counts.get(status, 0) + 1
         if status == "Missed":
-            scenario = outcome.get("scenario") or {}
-            mutant = scenario.get("mutant") or {}
-            file = mutant.get("file") or scenario.get("file") or "<file?>"
-            line = mutant.get("line") or scenario.get("line") or "?"
-            mut = mutant.get("genre") or mutant.get("replacement") or scenario.get("name") or "<mutation?>"
+            scenario = outcome.get("scenario")
+            if not isinstance(scenario, dict):
+                continue
+            mutant = scenario.get("Mutant") or scenario.get("mutant") or {}
+            file = mutant.get("file") or "<file?>"
+            span = mutant.get("span") or {}
+            start = span.get("start") or {}
+            line = start.get("line") or mutant.get("line") or "?"
+            mut = mutant.get("name") or mutant.get("replacement") or mutant.get("genre") or "<mutation?>"
             survs.append(f"{file}:{line} — {mut}")
     return counts, survs
 

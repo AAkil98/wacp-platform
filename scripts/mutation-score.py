@@ -25,14 +25,24 @@ import sys
 from pathlib import Path
 
 
+# cargo-mutants v27 emits `CaughtMutant` / `MissedMutant` in the summary
+# field; earlier versions used `Caught` / `Missed`. Normalize to the short
+# names at parse time so the rest of the script can stay version-agnostic.
+# `Success` flags the baseline run (not a mutant outcome) — skip it.
+STATUS_ALIASES: dict[str, str] = {
+    "CaughtMutant": "Caught",
+    "MissedMutant": "Missed",
+    "TimedOut": "Timeout",
+}
+
+
 def parse_outcomes(out_dir: Path) -> dict[str, int]:
     """Read cargo-mutants outcomes and return a per-status histogram.
 
     cargo-mutants writes `outcomes.json` with shape `{ "outcomes": [...] }`.
     Each outcome's status appears in the `summary` field as one of
-    "Caught", "Missed", "Timeout", "Unviable", "Failed". An older
-    cargo-mutants version uses different keys; this script tolerates
-    either by checking common aliases.
+    "Caught", "Missed", "Timeout", "Unviable", "Failed" (legacy) or
+    "CaughtMutant", "MissedMutant", ... (v27+).
     """
     path = out_dir / "outcomes.json"
     if not path.exists():
@@ -45,10 +55,11 @@ def parse_outcomes(out_dir: Path) -> dict[str, int]:
         data = json.load(f)
     counts: dict[str, int] = {}
     for outcome in data.get("outcomes", []):
-        # Tolerate both "summary" (legacy) and "outcome" (newer) field
-        # names. If both are present, prefer "summary" to keep the
-        # behaviour stable across the cargo-mutants pin updates.
-        status = outcome.get("summary") or outcome.get("outcome") or "Unknown"
+        raw = outcome.get("summary") or outcome.get("outcome") or "Unknown"
+        status = STATUS_ALIASES.get(raw, raw)
+        if status == "Success":
+            # Baseline run — not a mutant outcome.
+            continue
         counts[status] = counts.get(status, 0) + 1
     return counts
 
@@ -77,15 +88,22 @@ def survivors(out_dir: Path) -> list[str]:
         data = json.load(f)
     out: list[str] = []
     for outcome in data.get("outcomes", []):
-        status = outcome.get("summary") or outcome.get("outcome")
+        raw = outcome.get("summary") or outcome.get("outcome")
+        status = STATUS_ALIASES.get(raw, raw)
         if status != "Missed":
             continue
-        scenario = outcome.get("scenario") or {}
-        mutant = scenario.get("mutant") or {}
-        file = mutant.get("file") or scenario.get("file") or "<file?>"
-        line = mutant.get("line") or scenario.get("line") or "?"
-        replaced = mutant.get("genre") or mutant.get("replacement") or scenario.get("name") or "<mutation?>"
-        out.append(f"{file}:{line} — {replaced}")
+        # v27 wraps the mutant in {"Mutant": {...}} with line under span.start;
+        # the baseline scenario is the literal string "Baseline" — skip that.
+        scenario = outcome.get("scenario")
+        if not isinstance(scenario, dict):
+            continue
+        mutant = scenario.get("Mutant") or scenario.get("mutant") or {}
+        file = mutant.get("file") or "<file?>"
+        span = mutant.get("span") or {}
+        start = span.get("start") or {}
+        line = start.get("line") or mutant.get("line") or "?"
+        description = mutant.get("name") or mutant.get("replacement") or mutant.get("genre") or "<mutation?>"
+        out.append(f"{file}:{line} — {description}")
     return out
 
 

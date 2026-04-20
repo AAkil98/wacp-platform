@@ -573,6 +573,33 @@ More broadly: the mutation spec (`wcon-mutation-testing.md`) was written in the 
 
 **Cross-refs.** AUDIT §13.7.9 (mutation-testing pipeline), spec `wcon-mutation-testing` §3.3 + §4.1–§4.4 + §7, `scripts/mutation-score.py`, `scripts/mutation-summary.py`. Unrelated to §14 port flake (different class of CI issue).
 
+### 15.2 `scripts/mutation-score.py` + `scripts/mutation-summary.py` — parser mismatched cargo-mutants v27 output shape
+
+Surfaced during the same first-run investigation (2026-04-20). After the §15.1 workflow path fix, cargo-mutants v27.0.0 actually generated and tested mutants, but `mutation-score.py` still reported `0.0 % (0/0) [Caught=0 Missed=0 Unviable=<N> ...]` for every target. Artifact inspection revealed real numbers: 67, 12, 25, 70 mutants generated across the four targets.
+
+**Observation.** cargo-mutants v27 writes `outcomes.json::outcomes[*].summary` as one of `CaughtMutant`, `MissedMutant`, `Unviable`, `Success` (baseline), `TimedOut`, `Failed`. Both scripts looked for the legacy names `Caught` / `Missed`. The `Unviable` / `Failed` names are unchanged, which is why those counts showed through. The `survivors()` helper had a second mismatch: it read `scenario.mutant.file` / `scenario.mutant.line`, but v27 wraps the mutant object as `scenario.Mutant` (capital M) with `line` under `span.start.line`. Baseline scenarios are the literal string `"Baseline"` (not a dict), which would crash `scenario.get(...)` if the script reached them — it didn't because the baseline's `Success` summary wasn't classified as `Missed`. Fixed at `scripts/mutation-score.py:28–57` + `scripts/mutation-summary.py:19–55`.
+
+Fix introduces a `STATUS_ALIASES` map (`CaughtMutant → Caught`, `MissedMutant → Missed`, `TimedOut → Timeout`) applied during parse, and skips outcomes whose normalized status is `Success` (the baseline). The survivor extraction now looks at `scenario["Mutant"]` with `span.start.line` fallback.
+
+**Why it matters.** Had this bug landed on main without §15.1 hiding it, every target's `Missed=N ≠ 0` would have been *invisible*. The aggregator summary would have shown `0.0 %` for every green target and silently passed the threshold check when `testable == 0` (at `mutation-score.py:66–67` the `testable <= 0` short-circuit returns `0.0` without calling it a failure — but `main()` later compares `0.0 < 85.0` and returns exit-1, so the *job* fails, but for the wrong reason). Net: the two bugs compound — §15.1 stops mutants from running; §15.2 makes the score unreadable even when they do. Both must be fixed for the pipeline to deliver signal.
+
+**Post-fix real numbers** (verified against the 2026-04-20 13:37 UTC artifacts):
+
+| Target | Score | Caught/Testable | Survivors |
+|---|---|---|---|
+| `wacp-transport` (auth) | 92.3 % ✅ | 48/52 | 4 boundary-operator mutants (`<` → `<=`, `>` → `>=`) in `AuthRateLimiter::check`, `OAuthAuthenticator::validate_jwt`, `SessionTokenAuthenticator::validate_session` / `cleanup_expired` |
+| `wacp-tools` (execution) | 91.7 % ✅ | 11/12 | 1 (`> → >=` at `execution.rs:126` in `invoke_with_timeout`) |
+| `console-core` (session_launcher) | 92.9 % ✅ | 13/14 | 1 (`== → !=` at `session_launcher.rs:496` in `build_directive`) |
+| `console-core` (session_monitor) | **72.7 % ❌** | 40/55 | 15 — shutdown/snapshot no-ops, `seed_workspace_labels` / `spawn_stream_drivers` silencing, match-arm deletes in `lag_refresh_hint`, arithmetic flips in `run_stream_driver` and `event_enricher_util::timestamp_rfc3339` |
+
+**Status.** Resolved in the same `fix/ci-mutation-paths` branch that fixed §15.1.
+
+**Follow-up (separate work, first-run triage).** `session_monitor`'s 72.7 % is a real coverage gap — 15 actionable survivors. Per spec §7, the triage loop is: classify each as real-gap (write killer test) or equivalent (mark `// mutants:skip`). Most of the 15 are "replace fn body with no-op" mutations on driver and handle methods, which usually indicate a missing assertion in tests rather than equivalence. Estimated ~3–5 h of triage work. Three other targets each have 1–4 survivors worth the same loop. None are blocking — the pipeline now delivers signal and the Monday cron will keep surfacing regressions.
+
+**Prevention.** Pin `cargo-mutants` to a specific major version via the install step or set up schema-snapshot tests against a checked-in `outcomes.json` sample. Right now both scripts silently tolerate any shape change. A one-line test (`python3 scripts/mutation-score.py --target X fixtures/mutants.out/`) with a committed fixture would have caught the field-name drift in a pre-merge CI step instead of a scheduled cron.
+
+**Cross-refs.** §15.1 (companion bug, same session). Spec `wcon-mutation-testing` §5 (score formula), §6 (aggregator), §7 (triage loop).
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

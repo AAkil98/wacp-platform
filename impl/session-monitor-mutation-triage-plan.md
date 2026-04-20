@@ -37,65 +37,115 @@ Scope-wise, `session_monitor.rs` is the most consequential file in the console f
 
 ### 3.1 Phase A — Classify
 
-Output: expand the table below to one row per mutant. Format per row: "gap | equivalent | observability-only", test sketch (one line), estimated difficulty (easy / medium / hard). Land as a commit on the topic branch that touches only this plan doc.
+Classification complete 2026-04-20. Two mutants are **equivalent** and get `// mutants:skip`; 13 are real gaps. Noteworthy shift: the four stream-driver mutants can be killed with direct `driver(pool, tx, name)` calls against a disconnected `GrpcPool`, which is much simpler than the envisioned mock-upstream / broadcast-subscribe pattern in the original Phase B sketch — Phase B revised below accordingly. L358's `!` deletion needs a small production refactor (extract `process_workspace_view` helper) so the branch is unit-reachable.
 
 | Line | Mutation | Classification | Test sketch | Difficulty |
 |---|---|---|---|---|
-| 70 | `SessionMonitorHandle::shutdown with ()` | TBD | assert shutdown channel receives `()` after call | easy |
-| 74 | `SessionMonitorHandle::snapshot -> Option<MonitorSnapshot> with None` | TBD | after drivers produce events, snapshot returns `Some(s)` with non-empty state | easy |
-| 347 | `Monitor::seed_workspace_labels with ()` | TBD | after construct, assert `workspace_labels` map populated | easy |
-| 358 | `delete ! in Monitor::seed_workspace_labels` | TBD | test with a specific input that the `!` inverts (likely a short-circuit / guard) | medium |
-| 373 | `Monitor::spawn_stream_drivers -> Vec<JoinHandle<()>> with vec![]` | TBD | assert returned vec has 4 handles (one per driver) | easy |
-| 581 | `delete match arm "trail" in lag_refresh_hint` | TBD | feed a lag signal on trail channel, assert refresh hint distinct from gates/escalations/workspace | medium |
-| 648 | `replace += with *= in run_stream_driver` | TBD | counter arithmetic — probably a lag / retry counter; test with a scenario where 2×2 ≠ 2+2 (i.e. ≥2 increments) | easy |
-| 659 | `replace * with / in run_stream_driver` | TBD | likely delay / backoff multiplier; assert next-iteration delay equals expected product | medium |
-| 669 | `trail_driver -> Result<(), String> with Ok(())` | gap (likely) | spawn monitor, feed a `TrailFrame`, subscribe to `trail` channel, assert received event has driver-side enrichment | medium |
-| 695 | `gates_driver -> Result<(), String> with Ok(())` | gap (likely) | same shape — gates channel | medium |
-| 717 | `escalations_driver -> Result<(), String> with Ok(())` | gap (likely) | same — escalations | medium |
-| 741 | `workspace_changes_driver -> Result<(), String> with Ok(())` | gap (likely) | same — workspace_changes | medium |
-| 768 | `replace * with + in event_enricher_util::timestamp_rfc3339` | TBD | timestamp math — may need `(secs=2, nanos=3)` where `2*1e9+3 ≠ 2+3` | medium |
-| 768 | `replace * with / in event_enricher_util::timestamp_rfc3339` | TBD | same — assert timestamp with secs≥1 and nanos<secs | medium |
-| 770 | `replace match guard ts.logical == 0 with false in event_enricher_util::timestamp_rfc3339` | TBD | test with `ts.logical == 0` and `ts.logical != 0` separately, assert they produce distinct output | medium |
+| 70 | `SessionMonitorHandle::shutdown with ()` | gap | construct handle with explicit `(cmd_tx, cmd_rx)`; call `handle.shutdown().await`; `cmd_rx.try_recv()` returns `MonitorCmd::Shutdown` | easy |
+| 74 | `snapshot -> Option<MonitorSnapshot> with None` | gap | spawn a tiny tokio task that drains `cmd_rx` and answers `MonitorCmd::Snapshot(reply)` with a default `MonitorSnapshot`; `handle.snapshot().await` returns `Some(..)` | medium |
+| 347 | `Monitor::seed_workspace_labels with ()` | **equivalent at unit level** | fn early-returns under the disconnected pool used by all unit tests (`pool.highway()` → None); body-to-`()` is semantically identical. Real path covered by `wacp-console/integration/` suites via `MockHighwayService`. | skip w/ justification |
+| 358 | `delete ! in seed_workspace_labels` | gap (requires refactor) | extract pure helper `process_workspace_view(view, labels, states)`; unit-test both empty-role + non-empty-role views; assert label insertion only when role non-empty | medium (refactor + test) |
+| 373 | `spawn_stream_drivers -> Vec<JoinHandle<()>> with vec![]` | gap | construct `Monitor` via `make_monitor`; call `spawn_stream_drivers(tx)`; assert returned `Vec.len() == 4`; abort handles | easy |
+| 581 | `delete match arm "trail" in lag_refresh_hint` | **genuinely equivalent** | the wildcard arm `_ => vec![]` produces identical output to `"trail" => vec![]`; no observable difference regardless of inputs | skip w/ justification |
+| 648 | `replace += with *= in run_stream_driver` | gap | call `run_stream_driver` directly with an always-erroring mock driver + `reconnect_failure_cap=2`; assert `StreamEvent::Fatal` arrives within bounded time. With `*=`, `failures` stays at `0`, Fatal never fires, test would time out. | medium |
+| 659 | `replace * with / in run_stream_driver` | gap | same harness as L648, larger initial backoff (~100ms); assert observed wall time ≥ `initial + 2·initial`. With `/`, backoff shrinks each iteration, wall time drops below threshold. | medium |
+| 669 | `trail_driver -> Result<(), String> with Ok(())` | gap | call `trail_driver(disconnected_pool, tx, "trail").await`; assert `Err("highway unavailable")`. Mutant returns `Ok(())` → different | easy |
+| 695 | `gates_driver -> Result<(), String> with Ok(())` | gap | same for `gates_driver` | easy |
+| 717 | `escalations_driver -> Result<(), String> with Ok(())` | gap | same for `escalations_driver` | easy |
+| 741 | `workspace_changes_driver -> Result<(), String> with Ok(())` | gap | same for `workspace_changes_driver` | easy |
+| 768 | `* → + in timestamp_rfc3339` | gap | the existing `timestamp_rfc3339_handles_none_and_logical` test uses `physical_us = 1_700_000_000_000_000` where `physical_us % 1_000_000 == 0` — so `0 * 1000 == 0 + 1000 == 0 / 1000` all normalize to the same chrono nanos, coincidentally-green. Add a test with `physical_us = 1_700_000_000_123_456` and assert the rfc3339 string contains `.123456` (or the chrono-emitted fractional-seconds suffix). | medium |
+| 768 | `* → / in timestamp_rfc3339` | gap | same fix catches both operator mutants once the fractional-nanos path is tested | medium |
+| 770 | match guard `ts.logical == 0 with false` | gap | existing test with `logical = 0` only asserts `contains("2023")` — both branches contain `"2023"`. Add `assert!(!timestamp_rfc3339(&ts).contains("#"))` for the `logical = 0` case to assert the suffix-less branch | easy |
 
-### 3.2 Phase B — Stream-driver killer tests
+### 3.2 Phase B — Stream-driver killer tests (revised after classification)
 
-Add to `wacp-console/crates/console-core/src/session_monitor_tests.rs`. Four tests of similar shape; each:
-1. Spins up a `Monitor` with a mock upstream stream pushing one frame.
-2. Subscribes to the matching broadcast channel (`trail` / `gates` / `escalations` / `workspace_changes`).
-3. Awaits one message with timeout.
-4. Asserts the message carries a field that is populated *by the driver*, not passed through untouched — e.g., the `session_id` field, the enriched timestamp, or the queue-position annotation.
+Simplified from the original sketch: since each driver function independently calls `pool.highway().await.ok_or_else(|| "highway unavailable")?` as its first real statement, calling the driver directly against a disconnected pool produces an observable `Err` that the `Ok(())` mutant can't produce.
 
-Check whether `session_monitor_tests.rs` already has a driver-level test fixture. If not, bring in `tokio::sync::broadcast::channel` + a `tokio::time::timeout` wrapper.
+Add four tests to `session_monitor_tests.rs`, one per driver:
 
-Land as one commit: `test(console-core): §13.7.9 B — stream-driver killer tests (L669/695/717/741)`.
+```rust
+#[tokio::test]
+async fn trail_driver_errors_when_highway_unavailable() {
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let (tx, _rx) = mpsc::channel(16);
+    let r = trail_driver(pool, tx, "trail").await;
+    assert!(matches!(r, Err(ref s) if s == "highway unavailable"));
+}
+```
 
-### 3.3 Phase C — Handle + init observability
+Repeat for `gates_driver`, `escalations_driver`, `workspace_changes_driver`.
 
-Tests for `SessionMonitorHandle::shutdown` / `snapshot`, `Monitor::seed_workspace_labels`, `Monitor::spawn_stream_drivers`, and `lag_refresh_hint`:
+Land as one commit: `test(console-core): §13.7.9 B — driver `highway unavailable` coverage (L669/695/717/741)`.
 
-- **shutdown:** construct handle with `tokio::sync::watch::channel`; call `shutdown()`; assert receiver sees `true` / sent.
-- **snapshot:** feed drivers with at least one frame per channel; call `snapshot()`; assert `Some(s)` with `s.trail_len > 0` etc.
-- **seed_workspace_labels:** construct monitor with a seed input containing two workspace IDs; assert `workspace_labels` has both keys with expected values.
-- **seed_workspace_labels negation (L358):** identify what the `!` guards — likely a presence check. Add a test that would pass with `!x` but fail with `x`.
-- **spawn_stream_drivers:** call the method, assert returned `Vec<JoinHandle<()>>.len() == 4`.
-- **lag_refresh_hint "trail" arm:** match on `("trail", n)` vs `("gates", n)` etc. — assert the four arms produce distinguishable hints (e.g., different prefix, different ratio).
+### 3.3 Phase C — Handle + init observability (revised)
 
-Land as one commit: `test(console-core): §13.7.9 C — handle + init observability (L70/74/347/358/373/581)`.
+Five things to land here:
 
-### 3.4 Phase D — Arithmetic boundary
+- **shutdown (L70)** — `let (cmd_tx, mut cmd_rx) = mpsc::channel::<MonitorCmd>(1); let (bcast_tx, _) = broadcast::channel(8); let handle = SessionMonitorHandle { ... }; handle.shutdown().await; assert!(matches!(cmd_rx.try_recv(), Ok(MonitorCmd::Shutdown)));`.
+- **snapshot (L74)** — same handle plus a `tokio::spawn` that loops `cmd_rx.recv()` and answers `MonitorCmd::Snapshot(reply) → reply.send(MonitorSnapshot { default })`; then `assert!(handle.snapshot().await.is_some());`.
+- **spawn_stream_drivers (L373)** — construct a Monitor via `make_monitor`, call `mon.spawn_stream_drivers(tx)`, assert `out.len() == 4`, abort handles.
+- **process_workspace_view helper (L358)** — refactor: extract the `match client.get_workspace(req).await` Ok-arm body into `fn process_workspace_view(view, labels_map, states_map)`. Tests: `empty role → not inserted in labels`; `non-empty role → inserted`. State map always updated.
+- **L347 + L581 skips** — add `// mutants:skip` annotations with one-line justification directly above the respective lines.
 
-Two sub-problems:
+Land as one commit: `test(console-core): §13.7.9 C — handle ops + spawn_drivers + process_view helper (L70/74/373/358) + mutants:skip L347/L581`.
 
-**run_stream_driver counter + arithmetic (L648, L659).** Read lines 640–670 to identify what the counter represents (lag count, retry count, chunk size?). Write a test that exercises ≥2 iterations with inputs where `+=` and `*=` diverge (trivially: any counter where the second iteration adds 1, so `n=1 → 2` (correct) vs `n=1 → 1` (`*=1` mutant) or `n=2 → 4` (`*=`). Similarly for `*` vs `/` at L659.
+### 3.4 Phase D — Arithmetic boundary (revised after reading code)
 
-**event_enricher_util::timestamp_rfc3339 nanosecond math (L768 ×2, L770).** Read the helper. Three mutants here:
-- L768 `*` → `+`: probably `secs * 1_000_000_000 + nanos`. Test with `secs=1, nanos=0` where `1_000_000_000 ≠ 1`.
-- L768 `*` → `/`: same, `1_000_000_000 ≠ 0` (since 1/1_000_000_000 == 0 in integer arithmetic).
-- L770 match guard `ts.logical == 0`: a fast-path for the zero-logical-clock case. Test two vectors: `(secs=1, logical=0)` and `(secs=1, logical=5)` — assert different output.
+Code locations confirmed: `run_stream_driver` at L615–661. L648 is `failures += 1`; L659 is `backoff = (backoff * 2).min(cfg.reconnect_max)`. `event_enricher_util::timestamp_rfc3339` at L763–774.
 
-If the helper isn't `pub(crate)`, either widen visibility for test-only access or add a doctest-style invocation path via a public caller. Prefer widening — doctest paths fragilize faster.
+**`run_stream_driver` counter + backoff (L648, L659).** Write one driver-level test that calls `run_stream_driver` directly with an always-erroring mock driver:
 
-Land as one commit: `test(console-core): §13.7.9 D — arithmetic + timestamp killers (L648/659/768×2/770)`.
+```rust
+#[tokio::test]
+async fn run_stream_driver_emits_fatal_after_failure_cap() {
+    let (tx, mut rx) = mpsc::channel::<StreamEvent>(16);
+    let cfg = MonitorConfig {
+        broadcast_capacity: 8,
+        reconnect_initial: Duration::from_millis(10),
+        reconnect_max: Duration::from_millis(20),
+        reconnect_failure_cap: 3,
+    };
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let start = std::time::Instant::now();
+    run_stream_driver("trail", pool, cfg, tx, |_pool, _tx, _name| async { Err("boom".to_string()) }).await;
+    let elapsed = start.elapsed();
+
+    // Expect 3 Lag events + 1 Fatal event
+    let mut lags = 0;
+    let mut fatals = 0;
+    while let Ok(ev) = rx.try_recv() {
+        match ev {
+            StreamEvent::Lag { .. } => lags += 1,
+            StreamEvent::Fatal { .. } => fatals += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(lags, 3, "3 Lag events for 3 failures");
+    assert_eq!(fatals, 1, "1 Fatal after cap");
+    // Backoff doubles: 10ms + 20ms = 30ms (capped). With `/`, backoff would be 10 + 5 = 15ms.
+    assert!(elapsed.as_millis() >= 25, "backoff math must have doubled: {elapsed:?}");
+}
+```
+
+This one test kills both L648 (without `+=`, Fatal never fires, test fails) and L659 (without `*2`, elapsed time drops below threshold, assertion fails).
+
+**`timestamp_rfc3339` nanos + guard (L768×2, L770).** The existing test uses `physical_us = 1_700_000_000_000_000` where `physical_us % 1_000_000 == 0` — all three mutants (`* → +`, `* → /`, guard → false) produce visibly-identical output for `logical=0` input. Fix: add two assertions to `timestamp_rfc3339_handles_none_and_logical` (or a new sibling test):
+
+```rust
+let ts = Some(proto::Timestamp { physical_us: 1_700_000_000_000_000, logical: 0 });
+let out = timestamp_rfc3339(&ts);
+assert!(out.contains("2023"));
+assert!(!out.contains("#"), "logical=0 branch should not append #<n>");  // kills L770
+
+let ts_frac = Some(proto::Timestamp { physical_us: 1_700_000_000_123_456, logical: 0 });
+let out_frac = timestamp_rfc3339(&ts_frac);
+// Real: (123_456) * 1000 = 123_456_000 nanos = 0.123456 s
+// `+`: 123_456 + 1000 = 124_456 nanos = microseconds
+// `/`: 123_456 / 1000 = 123 nanos
+assert!(out_frac.contains(".123456"), "fractional seconds must reflect real nanos: {out_frac}");  // kills both L768 mutants
+```
+
+Land as one commit: `test(console-core): §13.7.9 D — run_stream_driver Fatal + fractional-second timestamp (L648/659/768×2/770)`.
 
 ### 3.5 Phase E — Verify + close
 
@@ -139,10 +189,10 @@ Land as one commit: `test(console-core): §13.7.9 D — arithmetic + timestamp k
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| A | TBD | — | Classify each of 15 mutants; update §3.1 table in place |
-| B | TBD | — | Stream-driver killers |
-| C | TBD | — | Handle + init observability |
-| D | TBD | — | Arithmetic + timestamp |
+| A | this commit | 2026-04-20 | Classification complete; 2 equivalent (L347 unit-level, L581 genuinely), 13 real gaps. §3.2/§3.3/§3.4 simplified after reading code — driver tests use direct calls against disconnected pool; `process_workspace_view` refactor planned for L358; one run_stream_driver test kills both L648 + L659. |
+| B | TBD | — | Stream-driver killers (L669/695/717/741) |
+| C | TBD | — | Handle ops + spawn_drivers + process_view (L70/74/373/358) + skips |
+| D | TBD | — | run_stream_driver Fatal + fractional-seconds timestamp (L648/659/768×2/770) |
 | E | TBD | — | Verify + archive |
 
 ---

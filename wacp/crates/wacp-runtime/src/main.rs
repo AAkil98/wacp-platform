@@ -1,6 +1,7 @@
 mod agent;
 mod channel_backend;
 pub mod config;
+mod conversions;
 pub mod health;
 mod init;
 pub mod logging;

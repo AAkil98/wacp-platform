@@ -1,8 +1,15 @@
 import type React from "react";
 import { useState } from "react";
+import { TableVirtuoso } from "react-virtuoso";
 import { useUsers, useCreateUser } from "../../api/hooks/index";
 import { api } from "../../api/client";
 import { useQueryClient } from "@tanstack/react-query";
+
+// HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
+// Below the threshold, render a plain <table>; above, TableVirtuoso. Wired now
+// so tenant-scale deployments (hundreds of users per `wcon-vision`) scale
+// without a rewrite.
+const VIRTUOSO_THRESHOLD = 50;
 
 // --- Styles ---
 
@@ -193,6 +200,82 @@ export function UsersPage() {
     }
   }
 
+  // Shared row cells — used by both the plain-table branch (inside `<tr>`)
+  // and the TableVirtuoso branch (returns cells inline; Virtuoso wraps them
+  // in its own `<tr>`). Keeps role-editing + action buttons identical across
+  // both render paths.
+  function renderUserRowCells(u: UserEntry) {
+    return (
+      <>
+        <td style={td}>{u.username}</td>
+        <td style={td}>{u.display_name || "--"}</td>
+        <td style={td}>
+          {changingRole === u.user_id ? (
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <select
+                style={{ ...inputStyle, width: "auto" }}
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value)}
+              >
+                <option value="">--</option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <button style={btnSecondary} onClick={() => void changeRole(u.user_id)}>
+                OK
+              </button>
+              <button
+                style={btnSecondary}
+                onClick={() => {
+                  setChangingRole(null);
+                  setNewRole("");
+                }}
+              >
+                X
+              </button>
+            </div>
+          ) : (
+            u.console_role
+          )}
+        </td>
+        <td style={td}>
+          <span style={BADGE_STYLE[u.disabled ? "disabled" : "active"]}>
+            {u.disabled ? "Disabled" : "Active"}
+          </span>
+        </td>
+        <td style={td}>{u.created_at}</td>
+        <td style={td}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <button
+              style={u.disabled ? btnSecondary : btnDanger}
+              onClick={() => void toggleDisable(u)}
+            >
+              {u.disabled ? "Enable" : "Disable"}
+            </button>
+            <button
+              style={btnSecondary}
+              onClick={() => {
+                setChangingRole(u.user_id);
+                setNewRole(u.console_role);
+              }}
+            >
+              Change Role
+            </button>
+            <button style={btnSecondary} onClick={() => void resetPassword(u.user_id)}>
+              Reset Password
+            </button>
+            <button style={btnSecondary} onClick={() => void unlockUser(u.user_id)}>
+              Unlock
+            </button>
+          </div>
+        </td>
+      </>
+    );
+  }
+
   return (
     <div style={page}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -208,6 +291,22 @@ export function UsersPage() {
 
       {usersQuery.isLoading ? (
         <p style={{ color: "var(--color-text-secondary)" }}>Loading users...</p>
+      ) : users.length > VIRTUOSO_THRESHOLD ? (
+        <TableVirtuoso
+          style={{ height: "70vh" }}
+          data={users}
+          fixedHeaderContent={() => (
+            <tr>
+              <th style={th}>Username</th>
+              <th style={th}>Display Name</th>
+              <th style={th}>Role</th>
+              <th style={th}>Status</th>
+              <th style={th}>Created</th>
+              <th style={th}>Actions</th>
+            </tr>
+          )}
+          itemContent={(_, u) => renderUserRowCells(u)}
+        />
       ) : (
         <table style={table}>
           <thead>
@@ -222,46 +321,7 @@ export function UsersPage() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.user_id}>
-                <td style={td}>{u.username}</td>
-                <td style={td}>{u.display_name || "--"}</td>
-                <td style={td}>
-                  {changingRole === u.user_id ? (
-                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                      <select
-                        style={{ ...inputStyle, width: "auto" }}
-                        value={newRole}
-                        onChange={(e) => setNewRole(e.target.value)}
-                      >
-                        <option value="">--</option>
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                      <button style={btnSecondary} onClick={() => void changeRole(u.user_id)}>OK</button>
-                      <button style={btnSecondary} onClick={() => { setChangingRole(null); setNewRole(""); }}>X</button>
-                    </div>
-                  ) : (
-                    u.console_role
-                  )}
-                </td>
-                <td style={td}>
-                  <span style={BADGE_STYLE[u.disabled ? "disabled" : "active"]}>{u.disabled ? "Disabled" : "Active"}</span>
-                </td>
-                <td style={td}>{u.created_at}</td>
-                <td style={td}>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    <button style={u.disabled ? btnSecondary : btnDanger} onClick={() => void toggleDisable(u)}>
-                      {u.disabled ? "Enable" : "Disable"}
-                    </button>
-                    <button style={btnSecondary} onClick={() => { setChangingRole(u.user_id); setNewRole(u.console_role); }}>
-                      Change Role
-                    </button>
-                    <button style={btnSecondary} onClick={() => void resetPassword(u.user_id)}>Reset Password</button>
-                    <button style={btnSecondary} onClick={() => void unlockUser(u.user_id)}>Unlock</button>
-                  </div>
-                </td>
-              </tr>
+              <tr key={u.user_id}>{renderUserRowCells(u)}</tr>
             ))}
           </tbody>
         </table>

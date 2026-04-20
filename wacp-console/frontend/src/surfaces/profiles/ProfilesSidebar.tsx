@@ -1,3 +1,4 @@
+import { Virtuoso } from "react-virtuoso";
 import type { ProfileSummary } from "./ProfilesPage.types";
 import {
   sidebar,
@@ -10,6 +11,12 @@ import {
   LIST_ITEM_STYLE,
 } from "./ProfilesPage.styles";
 
+// Virtualize only when the list exceeds this threshold. Below it, react-virtuoso's
+// setup overhead (mounting the inner scroller, measuring) exceeds the gain.
+// HEALTH-LOG §4 item 7 — "currently not needed" (dozen-count lists) but wire
+// it in so the list scales to tenant-sized data (hundreds) without a rewrite.
+const VIRTUOSO_THRESHOLD = 50;
+
 interface ProfilesSidebarProps {
   profiles: ProfileSummary[];
   isLoading: boolean;
@@ -19,6 +26,47 @@ interface ProfilesSidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onImportClick: () => void;
+}
+
+function ProfileRow({
+  profile,
+  selected,
+  onSelect,
+}: {
+  profile: ProfileSummary;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div
+      style={LIST_ITEM_STYLE[selected ? "selected" : "unselected"]}
+      onClick={() => onSelect(profile.id)}
+    >
+      <div style={{ fontWeight: 600, fontSize: 14 }}>{profile.name}</div>
+      <div
+        style={{
+          fontSize: 12,
+          color: selected ? "rgba(255,255,255,0.8)" : "var(--color-text-secondary)",
+          marginTop: 2,
+        }}
+      >
+        {profile.role_ref}
+        <span style={badge}>{profile.autonomy}</span>
+        <span
+          style={{
+            ...badge,
+            background:
+              profile.visibility === "shared"
+                ? "var(--color-accent)"
+                : "var(--color-border)",
+            color: profile.visibility === "shared" ? "#fff" : "var(--color-text-secondary)",
+          }}
+        >
+          {profile.visibility}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function ProfilesSidebar({
@@ -55,47 +103,34 @@ export function ProfilesSidebar({
         {isLoading && (
           <div style={{ padding: 16, color: "var(--color-text-secondary)" }}>Loading...</div>
         )}
-        {profiles.map((p) => {
-          const selected = selectedId === p.id;
-          return (
-            <div
-              key={p.id}
-              style={LIST_ITEM_STYLE[selected ? "selected" : "unselected"]}
-              onClick={() => onSelect(p.id)}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: selected
-                    ? "rgba(255,255,255,0.8)"
-                    : "var(--color-text-secondary)",
-                  marginTop: 2,
-                }}
-              >
-                {p.role_ref}
-                <span style={badge}>{p.autonomy}</span>
-                <span
-                  style={{
-                    ...badge,
-                    background:
-                      p.visibility === "shared"
-                        ? "var(--color-accent)"
-                        : "var(--color-border)",
-                    color: p.visibility === "shared" ? "#fff" : "var(--color-text-secondary)",
-                  }}
-                >
-                  {p.visibility}
-                </span>
-              </div>
-            </div>
-          );
-        })}
         {!isLoading && profiles.length === 0 && (
           <div style={{ padding: 16, color: "var(--color-text-secondary)" }}>
             No profiles found.
           </div>
         )}
+        {profiles.length > 0 &&
+          (profiles.length > VIRTUOSO_THRESHOLD ? (
+            <Virtuoso
+              style={{ height: "100%" }}
+              data={profiles}
+              itemContent={(_, p) => (
+                <ProfileRow
+                  profile={p}
+                  selected={selectedId === p.id}
+                  onSelect={onSelect}
+                />
+              )}
+            />
+          ) : (
+            profiles.map((p) => (
+              <ProfileRow
+                key={p.id}
+                profile={p}
+                selected={selectedId === p.id}
+                onSelect={onSelect}
+              />
+            ))
+          ))}
       </div>
     </div>
   );

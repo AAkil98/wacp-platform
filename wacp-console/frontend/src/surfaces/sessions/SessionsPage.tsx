@@ -1,8 +1,12 @@
 import type React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { TableVirtuoso } from "react-virtuoso";
 import { useSessions } from "../../api/hooks/index";
 import { Wizard } from "./Wizard";
+
+// HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
+const VIRTUOSO_THRESHOLD = 50;
 
 // --- Types ---
 
@@ -154,42 +158,69 @@ export function SessionsPage() {
           </div>
         )}
 
-        {sessions.length > 0 && (
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Name</th>
-                <th style={th}>State</th>
-                <th style={th}>Created</th>
-                <th style={th}>Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => (
-                <tr
-                  key={s.id}
-                  style={row}
-                  onClick={() => handleRowClick(s.id)}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-bg-secondary)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <td style={td}>
-                    {s.name || `${s.vertical}/${s.workflow}`}
-                  </td>
+        {sessions.length > 0 &&
+          (sessions.length > VIRTUOSO_THRESHOLD ? (
+            <TableVirtuoso
+              style={{ height: "70vh" }}
+              data={sessions}
+              fixedHeaderContent={() => (
+                <tr>
+                  <th style={th}>Name</th>
+                  <th style={th}>State</th>
+                  <th style={th}>Created</th>
+                  <th style={th}>Owner</th>
+                </tr>
+              )}
+              itemContent={(_, s) => (
+                <>
+                  <td style={td}>{s.name || `${s.vertical}/${s.workflow}`}</td>
                   <td style={td}>
                     <span style={stateBadge(s.state)}>{s.state}</span>
                   </td>
                   <td style={{ ...td, color: "var(--color-text-secondary)" }}>
                     {formatDate(s.created_at)}
                   </td>
-                  <td style={{ ...td, color: "var(--color-text-secondary)" }}>
-                    {s.owner}
-                  </td>
+                  <td style={{ ...td, color: "var(--color-text-secondary)" }}>{s.owner}</td>
+                </>
+              )}
+            />
+          ) : (
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Name</th>
+                  <th style={th}>State</th>
+                  <th style={th}>Created</th>
+                  <th style={th}>Owner</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr
+                    key={s.id}
+                    style={row}
+                    onClick={() => handleRowClick(s.id)}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background =
+                        "var(--color-bg-secondary)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                    }}
+                  >
+                    <td style={td}>{s.name || `${s.vertical}/${s.workflow}`}</td>
+                    <td style={td}>
+                      <span style={stateBadge(s.state)}>{s.state}</span>
+                    </td>
+                    <td style={{ ...td, color: "var(--color-text-secondary)" }}>
+                      {formatDate(s.created_at)}
+                    </td>
+                    <td style={{ ...td, color: "var(--color-text-secondary)" }}>{s.owner}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
       </div>
     </div>
   );

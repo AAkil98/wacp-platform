@@ -40,7 +40,7 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 
 **Deviation from tech-debt §3.2 letter**: the plan calls the surviving lifecycle module `runtime.rs`, but renaming `init.rs → runtime.rs` inside a crate named `wacp-runtime` creates `wacp_runtime::runtime::Runtime` which is awkward. Keeping `init.rs` means zero churn to `main.rs` / `tests.rs` re-exports and preserves module-level blame. The *structural* goal — one module per handler — is unchanged.
 
-**Status:** in progress (2026-04-20).
+**Status:** landed 2026-04-20. init.rs 2139 → 819 lines (under warn threshold; removed from `.file-size-allowlist`). Test baseline holds: 109 wacp-runtime tests still pass across all four incremental commits.
 
 ### B.2 — `wacp-console/crates/console-core/src/session_monitor.rs` (2120 lines)
 
@@ -71,6 +71,10 @@ Each splits along natural internal boundaries. Target no file >800 lines.
 | Phase | Commit | Date | Note |
 |---|---|---|---|
 | (plan scaffold) | — | 2026-04-20 | direct to `refactor/file-splits` branch |
+| B.1a conversions | `b9b9eb6` | 2026-04-20 | extract 11 proto-conversion helpers; init.rs 2139 → 1974 |
+| B.1b agent_service | `c5199dd` | 2026-04-20 | extract handle_agent_request; visibility widened; init.rs 1974 → 1640 |
+| B.1c highway_service | `dc4b5f5` | 2026-04-20 | extract handle_highway_request; init.rs 1640 → 1231 |
+| B.1d coordinator_service | _(this commit)_ | 2026-04-20 | extract handle_coordinator_request; init.rs 1231 → 819; allowlist entry removed |
 
 ## Invariants
 

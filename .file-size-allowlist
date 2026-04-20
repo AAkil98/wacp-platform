@@ -13,7 +13,7 @@
 # signal.
 
 # Rust production — oversized; refactor targets per tech-debt §3.2 Bucket B
-wacp/crates/wacp-runtime/src/init.rs
+# (init.rs removed 2026-04-20 after B.1 split: 2139 → 819 lines)
 wacp/crates/wacp-runtime/src/config.rs
 wacp-console/crates/console-core/src/session_monitor.rs
 wacp-console/crates/console-core/src/session_launcher.rs

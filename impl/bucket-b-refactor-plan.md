@@ -64,9 +64,9 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 
 **What landed in this session:** top-level `#[cfg(test)] mod tests` (line 1301, 530 lines) extracted to a sibling via `#[path]`. The nested `#[cfg(test)] mod tests` inside `pub(crate) mod pending` at line 753 stays in place — scoped to that submodule and not reachable with the same outer `#[path]` trick.
 
-**What's still pending:** production split of routes/highway.rs (still 1302 lines, over warn threshold). Natural cut points: `gates.rs` (gate-resolve handler + helpers), `escalations.rs` (escalation-respond), `envelopes.rs` (envelope-inject + send-envelope). Estimated 2–3 h. Tracked as follow-up in the allowlist comment; non-blocking since the file is under the 1500-line fail threshold.
+**What still landed as a follow-up on `refactor/config-highway-splits`:** the `pub(crate) mod pending` inline submodule (769 lines — ~60% of the file) extracted to a sibling `routes/highway_pending.rs` via `#[path = "highway_pending.rs"] pub(crate) mod pending;`. `pending` was already a cohesive submodule with its own `use super::*;` prelude, so extraction was mechanical — zero logic change, no visibility widening needed (pending's contents were always `pub(super)` within the mod; the new file keeps that semantics since `use super::*;` resolves against `routes/highway`). The other three proposed modules (gates / escalations / envelopes) are 90–110 line handlers each and don't warrant their own files now that the big pending block is gone.
 
-**Status:** partially landed 2026-04-20 (commit `8b9df1f`). 143 console-api tests still pass; full production split deferred.
+**Status:** fully landed 2026-04-20 (B.4 initial test-extract `8b9df1f`; pending-submodule extract `27789ff..`). 143 console-api tests still pass; fmt + clippy clean. `routes/highway.rs` final: 536 lines. `routes/highway_pending.rs`: 765 lines. Entry removed from `.file-size-allowlist`.
 
 ### B.5 — `config.rs` / `recovery.rs` / `rest_gateway.rs` / `routes/sessions.rs` / `tools/execution.rs`
 
@@ -82,9 +82,9 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 
 **config.rs extraction quirk.** First attempt corrupted the YAML fragments inside `r#"..."#` raw strings — the naïve `sed 's/^    //'` de-indent (applied per-line before rustfmt) stripped 4 spaces from each line, including the ones inside YAML literals, breaking the `parse_full_config` test. Fixed by extracting *without* de-indent and letting rustfmt re-indent the Rust code on AST lines (it doesn't touch string-literal contents). Lesson captured in the B.5e commit message.
 
-**Follow-up still pending for config.rs.** 1038 lines is over the 1000-line warn threshold. Natural split: `config/server.rs` (listen addresses, TLS) + `config/storage.rs` (trail, checkpoints) + `config/resources.rs` (default_budget, warning_threshold) + `config/mod.rs` (top-level RuntimeConfig + parse entry point). Estimated 2–3 h. Tracked as follow-up in the allowlist comment.
+**config.rs follow-up landed.** Rather than a four-way `server/storage/resources/mod` split, the pragmatic cut was extracting the `WACP_*` env-variable override block — `apply_env_overrides`, `apply_overrides_from`, `apply_single_override`, `parse_{bool,u32,u64,f32}_env` — to a sibling `config_env.rs`. `config.rs` re-exports `apply_env_overrides` (pub) and `apply_overrides_from` (pub(crate) #[cfg(test)]) so existing callers and the inline test module's `use super::*;` resolve without modification. Final: config.rs 860 lines; config_env.rs 193 lines. Both under the 1000-line warn threshold. The four-way struct-grouped split wasn't needed once env-overrides moved out.
 
-**Status:** landed 2026-04-20 (commits `34f29c0`, `b045e60`, `e2d5e42`, `4d5e348`, `0e286e3`). Test counts: 179 console-core + 209 wacp-transport + 143 console-api + 135 wacp-tools + 109 wacp-runtime — all green.
+**Status:** landed 2026-04-20 (commits `34f29c0`, `b045e60`, `e2d5e42`, `4d5e348`, `0e286e3` for B.5a–d + test-extract on config; `27789ff` for the env-override follow-up). Test counts: 179 console-core + 209 wacp-transport + 143 console-api + 135 wacp-tools + 109 wacp-runtime — all green.
 
 ## Execution log
 
@@ -103,7 +103,9 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 | B.5d execution | `4d5e348` | 2026-04-20 | execution test monolith → sibling; 1137 → 165 |
 | B.4 routes/highway | `8b9df1f` | 2026-04-20 | top-level tests → sibling; nested `pending::tests` left in place; 1832 → 1302 (still warn-only) |
 | B.5e config | `0e286e3` | 2026-04-20 | config test monolith → sibling (YAML-in-raw-string preserved by skipping sed de-indent); 1748 → 1038 (still warn-only) |
-| closeout + fmt | _(this commit)_ | 2026-04-20 | bucket-b plan refresh + rustfmt cleanup of config_tests.rs; 12 commits total on `refactor/file-splits`, 1939 workspace tests green |
+| closeout + fmt | `55c29ab` | 2026-04-20 | bucket-b plan refresh + rustfmt cleanup of config_tests.rs; 12 commits total on `refactor/file-splits`, 1939 workspace tests green |
+| B.5e follow-up config_env | `27789ff` | 2026-04-20 | on `refactor/config-highway-splits`; config.rs 1038 → 860 via env-override extract; allowlist entry removed |
+| B.4 follow-up highway_pending | _(this commit)_ | 2026-04-20 | on `refactor/config-highway-splits`; routes/highway.rs 1302 → 536 via `pending` submodule extract; allowlist entry removed. `.file-size-allowlist` Rust production section now empty. |
 
 ## Invariants
 

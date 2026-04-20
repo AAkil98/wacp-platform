@@ -45,10 +45,18 @@ test.describe("Golden path — observable portion", () => {
     await expect(page.getByRole("button", { name: /create new/i })).toBeVisible();
     await expect(page.getByText("No profiles found.")).toBeVisible();
 
-    // NOTE: the Create New → form-flip interaction is known to crash the SPA
-    // today (React unmounts; page content collapses to ~395 bytes of HTML
-    // shell). Pre-existing; unrelated to §13.7.7. Tracked in perf-opt §12.3
-    // (pending file). Re-enable once the crash lands a fix.
+    // Create New → form renders. §12.5 root cause fixed in closeout-plan P5:
+    // `/api/roles` returns `PaginatedResponse<T>` (`{items, cursor, has_more}`),
+    // but the frontend cast `rolesQuery.data as RoleSummary[]` and later called
+    // `roles.map` inside the form's `<select>` render. The crash deferred until
+    // Create-New flipped `creating` to true and the form mounted for the first
+    // time. Fix: unwrap `.items` before mapping.
+    await page.getByRole("button", { name: /create new/i }).click();
+    await expect(
+      page.getByRole("heading", { level: 2, name: /new profile/i }),
+    ).toBeVisible();
+    await expect(page.getByLabel(/^name$/i)).toBeVisible();
+    await expect(page.getByLabel(/^role$/i)).toBeVisible();
   });
 });
 

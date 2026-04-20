@@ -375,7 +375,7 @@ This bug has shipped unexecuted for the entire forced-change path's lifetime. Th
 
 Mirror of §11.1 (Rust↔proto enum-offset): a surface that looked "tested enough" from unit tests but had a structural latent bug that required an integration-level caller to surface. Adds to the pattern library: **"if a library function is supposed to be idempotent under a specific state, and only one composition path reaches it in that state, test from that composition path — not just the library entry point."**
 
-### 12.5 ProfilesPage — `Create New` click unmounts React (deferred)
+### 12.5 ProfilesPage — `Create New` click unmounts React (RESOLVED 2026-04-20)
 
 Surfaced while writing the golden-path E2E spec. The test landed on `/profiles`, asserted the sidebar rendered, clicked the `Create New` button (which is the only UI affordance to open the new-profile form), and the test's post-click h2 assertion timed out. Diagnostic capture showed:
 
@@ -384,10 +384,18 @@ Surfaced while writing the golden-path E2E spec. The test landed on `/profiles`,
 
 The click's handler (`ProfilesPage.tsx::handleNew`) is pure state mutation — `setSelectedId(null) + setCreating(true) + setForm(EMPTY_FORM) + setShowDelete(false) + setShowVersions(false)` — and shouldn't throw on its own. The unmount implies a render-path exception that React 19 surfaces by blanking the root. No ErrorBoundary is installed, so the exception's origin is invisible from outside; inspecting browser console logs during a `--headed` Playwright run would localise it.
 
-**Not fixed in D2.** Scope stays on the §13.7.7 deliverable; the spec works around it by asserting only the pre-click state (Profiles h2, Create New button visible, "No profiles found." empty-state text). Unskipping the Create New → form-render path needs a bisect pass:
+**Root cause (closeout-plan P5, 2026-04-20).** Candidate (b) from the list above was correct. `/api/roles` returns `PaginatedResponse<RoleEntry>` = `{items, cursor, has_more}` (see `wacp-console/crates/console-api/src/pagination.rs:37`), but `ProfilesPage.tsx:200` cast `rolesQuery.data as RoleSummary[]` and later did `{roles.map((r) => ...)}` inside the `<select>` at `:400`. The crash *only* fired when the form actually rendered — which is conditional on `selectedId || creating` — so the initial landing state (both false → empty-state div shown) looked healthy, but the Create New click flipped `creating` to true and the first mount of the form triggered `roles.map is not a function` → React 19 unmounted the whole tree.
 
-1. Run `pnpm dev` locally + open the profiles page + click Create New + watch the DevTools console for the uncaught exception.
-2. Likely candidates: (a) one of the `useEffect` hooks at `ProfilesPage.tsx:205` firing with unstable deps (symmetrical to §3.3's anticipation); (b) a render-path cast like `profilesQuery.data as ProfileSummary[]` hitting an unexpected shape from a query that returns `{items: [...]}` vs `[...]`; (c) one of the form-field inputs at `:380-:466` reading an undefined value from `form` — none obvious from the static code, all plausible at runtime. 30–60 min investigation.
+**Fix.** Unwrap `.items` before mapping, with a defensive `Array.isArray` branch so any future endpoint shape change doesn't relapse the same crash:
+
+```tsx
+const rolesRaw = rolesQuery.data as { items?: RoleSummary[] } | RoleSummary[] | undefined;
+const roles: RoleSummary[] = Array.isArray(rolesRaw) ? rolesRaw : (rolesRaw?.items ?? []);
+```
+
+**Verification.** Golden-path Playwright spec updated to click Create New and assert `heading[level=2, name=/new profile/i]` + form labels render — the assertion that used to time out now passes in 968 ms (from `pnpm test:e2e golden-path` output). 49 ProfilesPage RTL tests still pass; typecheck clean.
+
+**Why the RTL suite didn't catch this.** ProfilesPage RTL tests mock `useRoles` to return `defaultQueryResult(SAMPLE_ROLES)` with `SAMPLE_ROLES` being a bare array — the exact shape the frontend *assumed* but the real endpoint *did not* return. The mock matched the consumer's assumption, not the producer's contract. This is the schema-vs-type-drift pattern documented at §9 (console-db `Option<String>` vs `NOT NULL`) and §11 (runtime enum-offset) — same shape of bug, different surface. Preventive: next time a paginated endpoint is added, grep for `as .*\[\]` casts against that endpoint's hook and fix them proactively.
 
 This drift is the fifth F-series–shaped signal after §2.5 F8 (RefusalPanel / InjectionBar), F10 (Notifications stub), §9 (console-db schema-type mismatch), §11 (runtime enum-offset), and the D2 auth deadlock — continuing to support the claim that **writing cross-layer tests is the forcing function for finding latent bugs** in surfaces that have never had an end-to-end user flow exercised against them.
 

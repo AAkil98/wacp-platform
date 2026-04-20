@@ -197,7 +197,15 @@ export function ProfilesPage() {
   const importMut = useImportProfile();
 
   const profiles = (profilesQuery.data ?? []) as ProfileSummary[];
-  const roles = (rolesQuery.data ?? []) as RoleSummary[];
+  // `/api/roles` returns PaginatedResponse<RoleEntry> = `{items, cursor, has_more}`,
+  // not a bare array. Accessing `.map` on the object later (inside the form's
+  // `<select>` render) was the §12.5 unmount trigger — the form only renders
+  // after Create New click, so the crash deferred until that moment.
+  const rolesRaw = rolesQuery.data as
+    | { items?: RoleSummary[] }
+    | RoleSummary[]
+    | undefined;
+  const roles: RoleSummary[] = Array.isArray(rolesRaw) ? rolesRaw : (rolesRaw?.items ?? []);
   const versions = (versionsQuery.data ?? []) as VersionEntry[];
 
   // Sync form from loaded profile

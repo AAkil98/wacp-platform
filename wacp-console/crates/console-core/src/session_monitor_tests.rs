@@ -1324,3 +1324,44 @@ async fn lag_event_for_each_stream_carries_correct_hints() {
         }
     }
 }
+
+// ========================================================================
+// §13.7.9 Phase B — per-driver `highway unavailable` coverage
+// ========================================================================
+// Each driver starts by dialing `pool.highway().await`; a disconnected
+// pool makes that return None, which the `?` propagates as
+// `Err("highway unavailable")`. The mutants that replace the whole driver
+// body with `Ok(())` skip the dial entirely, so this assertion
+// distinguishes real from mutant without any upstream-stream mocking.
+
+#[tokio::test]
+async fn trail_driver_errors_when_highway_unavailable() {
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let (tx, _rx) = mpsc::channel(16);
+    let r = trail_driver(pool, tx, "trail").await;
+    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+}
+
+#[tokio::test]
+async fn gates_driver_errors_when_highway_unavailable() {
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let (tx, _rx) = mpsc::channel(16);
+    let r = gates_driver(pool, tx, "gates").await;
+    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+}
+
+#[tokio::test]
+async fn escalations_driver_errors_when_highway_unavailable() {
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let (tx, _rx) = mpsc::channel(16);
+    let r = escalations_driver(pool, tx, "escalations").await;
+    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+}
+
+#[tokio::test]
+async fn workspace_changes_driver_errors_when_highway_unavailable() {
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+    let (tx, _rx) = mpsc::channel(16);
+    let r = workspace_changes_driver(pool, tx, "workspace_changes").await;
+    assert!(matches!(&r, Err(s) if s == "highway unavailable"), "got {r:?}");
+}

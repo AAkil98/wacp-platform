@@ -23,7 +23,7 @@ wacp-console/crates/console-api/src/routes/highway.rs
 # (recovery.rs removed 2026-04-20 after B.5 test-extraction: 1485 → 251 lines)
 # (rest_gateway.rs removed 2026-04-20 after B.5 test-extraction: 1202 → 772 lines)
 # (routes/sessions.rs removed 2026-04-20 after B.5 test-extraction: 1181 → 851 lines)
-wacp/crates/wacp-tools/src/execution.rs
+# (execution.rs removed 2026-04-20 after B.5 test-extraction: 1137 → 165 lines)
 
 # TS test monoliths — one test module per API surface is conventional;
 # splitting the generated-hook coverage would just scatter the matrix.

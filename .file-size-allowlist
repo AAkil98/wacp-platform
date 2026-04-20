@@ -17,7 +17,7 @@
 # (session_monitor.rs removed 2026-04-20 after B.2 test-extraction: 2120 → 779 lines)
 # (session_launcher.rs removed 2026-04-20 after B.3 test-extraction: 1877 → 572 lines)
 # (routes/highway.rs moved to warn-only after B.4 test-extraction: 1832 → 1302 lines; follow-up production split tracked in bucket-b-refactor-plan.md §B.4)
-wacp/crates/wacp-runtime/src/config.rs
+# (config.rs moved to warn-only after B.5e test-extraction: 1748 → 1038 lines; follow-up production split tracked in bucket-b-refactor-plan.md §B.5e)
 
 # Rust production — moderately oversized (1000–1500); warn-only
 # (recovery.rs removed 2026-04-20 after B.5 test-extraction: 1485 → 251 lines)
@@ -25,6 +25,7 @@ wacp/crates/wacp-runtime/src/config.rs
 # (routes/sessions.rs removed 2026-04-20 after B.5 test-extraction: 1181 → 851 lines)
 # (execution.rs removed 2026-04-20 after B.5 test-extraction: 1137 → 165 lines)
 wacp-console/crates/console-api/src/routes/highway.rs
+wacp/crates/wacp-runtime/src/config.rs
 
 # TS test monoliths — one test module per API surface is conventional;
 # splitting the generated-hook coverage would just scatter the matrix.

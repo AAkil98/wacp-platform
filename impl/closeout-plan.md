@@ -207,7 +207,7 @@ Per HEALTH-LOG §12.5. Orthogonal to all other phases.
 | P1.6 docs + seed | `c07af7f` | 2026-04-19 | tech-debt §7 answered, git-strategy §13 struck, SEED 15th-pass manual refresh (pre-ff) |
 | P1 topic → dev ff | `c07af7f` on dev | 2026-04-19 | clean ff of 6 topic commits; topic branch deleted locally, `aakil98/ci/pre-launch-closeout` retained |
 | (post-ff SEED 16th pass + seed-refresh SKILL.md invariants) | direct-to-dev | 2026-04-19 | — |
-| P2 branch protection | — | — | repo admin, no commit |
+| P2 branch protection | (repo admin) | 2026-04-20 | `gh api PUT` on `main` + `dev`: linear history on, force-push off, deletion off, `enforce_admins=false` |
 | P3 ff dev→main | — | — | uses `ff-main` skill |
 | P4 Bucket B refactor | — | — | per tech-debt §3.2; may spawn its own sub-plan |
 | P5 §12.5 bisect | — | — | update HEALTH-LOG.md with outcome |

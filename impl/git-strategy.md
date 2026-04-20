@@ -453,7 +453,7 @@ This is the "oh no" scenario. Recovery:
 2. `git push aakil98 main --force-with-lease` from the authoritative copy.
 3. Post-mortem in this doc § 14.
 
-Prevent with branch protection on GitHub: require linear history + disallow force-pushes on `main` and `dev` via GitHub repo settings. **Not currently configured** — flag for pre-launch.
+Prevent with branch protection on GitHub: require linear history + disallow force-pushes on `main` and `dev` via GitHub repo settings. **Configured 2026-04-20** via `gh api PUT repos/AAkil98/wacp-platform/branches/{main,dev}/protection` — `required_linear_history=true`, `allow_force_pushes=false`, `allow_deletions=false`. `enforce_admins=false` retained so the sole maintainer can bypass in emergencies (e.g., recovering from §11.5 itself); tighten to `true` when a second maintainer lands.
 
 ## 12. Relationship to other planning docs
 
@@ -466,7 +466,7 @@ Prevent with branch protection on GitHub: require linear history + disallow forc
 
 | Item | Effort | Payoff | Status |
 |---|---|---|---|
-| GitHub branch protection on `main` + `dev` (block force-push, require linear history) | 10 min in repo settings | eliminates §11.5 risk class | pending — `closeout-plan.md` §3.2 P2 |
+| ~~GitHub branch protection on `main` + `dev` (block force-push, require linear history)~~ | ~~10 min in repo settings~~ | ~~eliminates §11.5 risk class~~ | **landed 2026-04-20** — via `gh api` (see §11.5) |
 | ~~`.gitmessage` template with the co-author trailer + spec-scope placeholder~~ | ~~15 min~~ | ~~cuts message-format errors~~ | **landed 2026-04-19** — `3364098` |
 | ~~Pre-push hook that runs `cargo fmt --check` + `cargo clippy` (opt-in)~~ | ~~30 min~~ | ~~catches §7.3 invariant breaks earlier~~ | **landed 2026-04-19** — `7e83da5` (opt-in via `scripts/install-hooks.sh`) |
 | ~~`git config --global rerere.enabled true` in the onboarding doc~~ | ~~2 min~~ | ~~cuts rebase-conflict re-resolution~~ | **landed 2026-04-19** — `3364098` (README Development Setup) |
@@ -479,6 +479,7 @@ Each is a 10–30 min standalone item. None are pre-merge gates. The four items 
 |---|---|
 | 2026-04-18 | Initial draft. Codifies the pattern observed from M0 through §11.4. |
 | 2026-04-19 | §13 — three of four tooling items landed on `ci/pre-launch-closeout` topic (`3364098` + `7e83da5`). Branch protection (§11.5) still pending per `closeout-plan.md` §3.2 P2. |
+| 2026-04-20 | §13 — branch protection (§11.5) configured on `main` + `dev` via `gh api`; closeout-plan P2 closed. `enforce_admins=false` — admin bypass retained pending second maintainer. |
 
 ---
 

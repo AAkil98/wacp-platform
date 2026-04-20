@@ -2,6 +2,7 @@ mod agent;
 mod agent_service;
 mod channel_backend;
 pub mod config;
+mod config_env;
 mod conversions;
 mod coordinator_service;
 pub mod health;

@@ -14,8 +14,8 @@
 
 # Rust production — oversized; refactor targets per tech-debt §3.2 Bucket B
 # (init.rs removed 2026-04-20 after B.1 split: 2139 → 819 lines)
+# (session_monitor.rs removed 2026-04-20 after B.2 test-extraction: 2120 → 779 lines)
 wacp/crates/wacp-runtime/src/config.rs
-wacp-console/crates/console-core/src/session_monitor.rs
 wacp-console/crates/console-core/src/session_launcher.rs
 wacp-console/crates/console-api/src/routes/highway.rs
 
@@ -31,6 +31,7 @@ wacp-console/frontend/src/api/hooks/index.test.ts
 
 # Rust test monoliths — intentional: one test module per crate is
 # conventional + searchable. Scrolling tests is a non-event.
+wacp-console/crates/console-core/src/session_monitor_tests.rs
 wacp/crates/wacp-coordinator/src/tests.rs
 wacp/crates/wacp-workspace/src/tests.rs
 wacp/crates/wacp-fsm/src/tests.rs

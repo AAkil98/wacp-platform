@@ -44,9 +44,11 @@ depends_on: [tech-debt-2026-04-18, wacp-closeout-plan]
 
 ### B.2 — `wacp-console/crates/console-core/src/session_monitor.rs` (2120 lines)
 
-Split by stream driver per tech-debt §3.2: `trail_driver.rs` + `gate_driver.rs` + `escalation_driver.rs` + `workspace_driver.rs` + `monitor.rs`.
+**Deviation from tech-debt §3.2 letter.** The file's production code is only ~787 lines; the remaining 1328 lines are a single `#[cfg(test)] mod tests { ... }` block. tech-debt §3.2 proposed a 5-way split (`trail_driver.rs` / `gate_driver.rs` / `escalation_driver.rs` / `workspace_driver.rs` / `monitor.rs`), but each driver function is only 22–42 lines — extraction would produce 25-line sibling files for each, which has little navigability payoff. The real cohesive block is `impl Monitor` (297 lines), already cohesive inside the main file.
 
-**Status:** pending.
+**What landed:** the inline test module was extracted to a sibling `session_monitor_tests.rs` via `#[cfg(test)] #[path = "session_monitor_tests.rs"] mod tests;`. Same test-coverage, same visibility rules (`use super::*` resolves against `session_monitor`), one file-boundary. Production file drops from 2120 → 779 lines (under warn threshold; removed from `.file-size-allowlist`). Test monolith added to the test-file allowlist per the convention documented in the allowlist header.
+
+**Status:** landed 2026-04-20. 179 console-core tests still pass; fmt + clippy clean.
 
 ### B.3 — `wacp-console/crates/console-core/src/session_launcher.rs` (1877 lines)
 
@@ -74,7 +76,8 @@ Each splits along natural internal boundaries. Target no file >800 lines.
 | B.1a conversions | `b9b9eb6` | 2026-04-20 | extract 11 proto-conversion helpers; init.rs 2139 → 1974 |
 | B.1b agent_service | `c5199dd` | 2026-04-20 | extract handle_agent_request; visibility widened; init.rs 1974 → 1640 |
 | B.1c highway_service | `dc4b5f5` | 2026-04-20 | extract handle_highway_request; init.rs 1640 → 1231 |
-| B.1d coordinator_service | _(this commit)_ | 2026-04-20 | extract handle_coordinator_request; init.rs 1231 → 819; allowlist entry removed |
+| B.1d coordinator_service | `61afe2b` | 2026-04-20 | extract handle_coordinator_request; init.rs 1231 → 819; allowlist entry removed |
+| B.2 test-extraction | _(this commit)_ | 2026-04-20 | inline `mod tests` → sibling `session_monitor_tests.rs` via `#[path]`; production file 2120 → 779; allowlist entry removed |
 
 ## Invariants
 

@@ -1480,3 +1480,103 @@ fn process_workspace_view_skips_label_when_role_empty() {
     );
     assert_eq!(states.get("ws-y"), Some(&"idle".to_string()));
 }
+
+// ========================================================================
+// §13.7.9 Phase D — run_stream_driver Fatal + fractional-second timestamp
+// ========================================================================
+
+/// Kills two mutants in `run_stream_driver`:
+/// * L648 `failures += 1` → `*=`: without the increment, failures stays
+///   at 0 and the reconnect cap never trips, so Fatal is never emitted.
+///   This test's final `assert_eq!(fatals, 1)` catches that.
+/// * L659 `backoff * 2` → `/` / `+`: with `/`, the backoff shrinks each
+///   iteration and the observed wall time drops well below the sum of
+///   the first two doubled intervals. The elapsed-time lower bound
+///   catches any non-doubling mutation.
+#[tokio::test]
+async fn run_stream_driver_emits_fatal_after_failure_cap() {
+    let (tx, mut rx) = mpsc::channel::<StreamEvent>(16);
+    let cfg = MonitorConfig {
+        broadcast_capacity: 8,
+        reconnect_initial: Duration::from_millis(10),
+        reconnect_max: Duration::from_millis(40),
+        reconnect_failure_cap: 3,
+    };
+    let pool = GrpcPool::new("[::1]:1", "[::1]:1", "[::1]:1");
+
+    let start = std::time::Instant::now();
+    run_stream_driver("trail", pool, cfg, tx, |_pool, _tx, _name| async {
+        Err("boom".to_string())
+    })
+    .await;
+    let elapsed = start.elapsed();
+
+    let mut lags = 0;
+    let mut fatals = 0;
+    while let Ok(ev) = rx.try_recv() {
+        match ev {
+            StreamEvent::Lag { .. } => lags += 1,
+            StreamEvent::Fatal { .. } => fatals += 1,
+            _ => {}
+        }
+    }
+    assert_eq!(lags, 3, "expected 3 Lag events for 3 failures; got {lags}");
+    assert_eq!(
+        fatals, 1,
+        "expected 1 Fatal after cap; got {fatals} (failures never incremented?)"
+    );
+    // First sleep = 10ms, second sleep = 20ms (backoff doubled), third
+    // iteration ends without a sleep. Real total ≥ ~30ms. With `/`,
+    // backoff would be 10 + 5 = 15ms; with `+ 2`, 10 + 12 = 22ms. Pick a
+    // threshold that separates real from both arithmetic mutants while
+    // leaving slack for CI jitter.
+    assert!(
+        elapsed.as_millis() >= 25,
+        "backoff should have doubled: {elapsed:?}"
+    );
+}
+
+/// Kills three mutants in `event_enricher_util::timestamp_rfc3339`:
+/// * L768 `*` → `+` in the nanos computation
+/// * L768 `*` → `/` in the same expression
+/// * L770 match guard `ts.logical == 0` → `false`
+///
+/// The pre-existing `timestamp_rfc3339_handles_none_and_logical` test
+/// used `physical_us = 1_700_000_000_000_000` where `physical_us %
+/// 1_000_000 == 0`, so the nanos computation folds to `0` under both
+/// real and mutant arithmetic. Here we use `physical_us` with non-zero
+/// microsecond remainder, assert the fractional-seconds suffix reflects
+/// real-mul behavior, and separately assert the logical=0 branch
+/// produces no `#` suffix.
+#[test]
+fn timestamp_rfc3339_distinguishes_nanos_and_logical_zero_branch() {
+    use event_enricher_util::timestamp_rfc3339;
+
+    // Case 1: logical=0 → branch that omits the `#<n>` suffix.
+    let ts_zero = Some(proto::Timestamp {
+        physical_us: 1_700_000_000_000_000,
+        logical: 0,
+    });
+    let out_zero = timestamp_rfc3339(&ts_zero);
+    assert!(out_zero.contains("2023"), "got {out_zero}");
+    assert!(
+        !out_zero.contains('#'),
+        "logical=0 branch should NOT append #<n>; got {out_zero}"
+    );
+
+    // Case 2: non-zero microsecond remainder → fractional seconds must
+    // reflect `remainder * 1_000` (nanos), not `+ 1_000` or `/ 1_000`.
+    let ts_frac = Some(proto::Timestamp {
+        physical_us: 1_700_000_000_123_456,
+        logical: 0,
+    });
+    let out_frac = timestamp_rfc3339(&ts_frac);
+    // chrono emits fractional seconds as `.NNNNNNNNN` up to nanoseconds.
+    // Real:  (123_456) * 1_000 = 123_456_000 nanos → ".123456"
+    // `+`:   (123_456) + 1_000 = 124_456 nanos     → ".000124" or similar
+    // `/`:   (123_456) / 1_000 = 123 nanos         → ".000000123"
+    assert!(
+        out_frac.contains(".123456"),
+        "fractional seconds must reflect real nanos multiplication; got {out_frac}"
+    );
+}

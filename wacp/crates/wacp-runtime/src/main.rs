@@ -4,6 +4,7 @@ mod channel_backend;
 pub mod config;
 mod conversions;
 pub mod health;
+mod highway_service;
 mod init;
 pub mod logging;
 pub mod metrics;

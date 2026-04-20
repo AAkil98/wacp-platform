@@ -159,14 +159,14 @@ Land as one commit: `test(console-core): §13.7.9 D — run_stream_driver Fatal 
 
 ## 4. Acceptance Criteria
 
-- [ ] `cargo mutants -p console-core --file wacp-console/crates/console-core/src/session_monitor.rs --no-shuffle` returns ≥ 85 % score.
-- [ ] Any remaining `Missed` mutants carry a `// mutants:skip` annotation with one-line justification.
-- [ ] `cargo test -p console-core` green (no regression from new test additions).
-- [ ] `cargo clippy -p console-core --all-targets -- -D warnings` clean.
-- [ ] CI `ci-mutation` `Mutants — console-core (session_monitor)` job returns `success` on scheduled Monday cron or manual `workflow_dispatch`.
-- [ ] AUDIT-2026-04-15.md §13.7.9 table shows session_monitor row updated with new score + commit link.
-- [ ] HEALTH-LOG.md §15.2 follow-up line struck through (not the finding itself — just the triage follow-up).
-- [ ] Plan doc moved to `impl/archive/session-monitor-mutation-triage-plan.md` via `archive-plan` skill.
+- [x] `cargo mutants -p console-core --file wacp-console/crates/console-core/src/session_monitor.rs --no-shuffle` returns ≥ 85 % score. **→ 98.2 %** (54/55 killed; 1 documented-equivalent at L356).
+- [x] Any remaining `Missed` mutants carry an explanatory comment. **→ L356 `seed_workspace_labels → ()`** has an in-file comment block explaining why it is equivalent at the unit level (disconnected pool → early return) and pointing at the integration-test coverage. The `// mutants:skip` comment form is not honoured by cargo-mutants (see cargo-mutants/book/src/attrs.md — only `#[mutants::skip]` works); since adding the `mutants` crate just to skip one mutant on a threshold-passing target isn't worth it, we let L356 surface on each run with the explanatory comment.
+- [x] `cargo test -p console-core` green. **→ 66 session_monitor tests pass; full console-core suite unchanged.**
+- [x] `cargo clippy -p console-core --all-targets -- -D warnings` clean.
+- [x] CI `ci-mutation` `Mutants — console-core (session_monitor)` job returns `success`. **→ run `24674588762` all 5 jobs `success`.**
+- [x] AUDIT-2026-04-15.md §13.7.9 table shows session_monitor row updated. **→ done in this commit.**
+- [x] HEALTH-LOG.md §15.2 follow-up line struck through. **→ done in this commit.**
+- [ ] Plan doc moved to `impl/archive/session-monitor-mutation-triage-plan.md` via `archive-plan` skill. **→ next commit, after this closeout lands.**
 
 ## 5. Risks / Open Questions
 
@@ -189,11 +189,12 @@ Land as one commit: `test(console-core): §13.7.9 D — run_stream_driver Fatal 
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| A | this commit | 2026-04-20 | Classification complete; 2 equivalent (L347 unit-level, L581 genuinely), 13 real gaps. §3.2/§3.3/§3.4 simplified after reading code — driver tests use direct calls against disconnected pool; `process_workspace_view` refactor planned for L358; one run_stream_driver test kills both L648 + L659. |
-| B | TBD | — | Stream-driver killers (L669/695/717/741) |
-| C | TBD | — | Handle ops + spawn_drivers + process_view (L70/74/373/358) + skips |
-| D | TBD | — | run_stream_driver Fatal + fractional-seconds timestamp (L648/659/768×2/770) |
-| E | TBD | — | Verify + archive |
+| A | `c960741` | 2026-04-20 | Classification complete; 2 equivalent (L347 unit-level, L581 genuinely), 13 real gaps. §3.2/§3.3/§3.4 simplified after reading code — driver tests use direct calls against disconnected pool; `process_workspace_view` refactor for L358; one run_stream_driver test targets L648 + L659. |
+| B | `4ecb946` | 2026-04-20 | Stream-driver killers (L669/695/717/741) — 4 tests passing; all drivers verified to emit `Err("highway unavailable")` against a disconnected pool. |
+| C | `aa3c279` | 2026-04-20 | Handle ops (shutdown+snapshot), spawn_drivers Vec::len assertion, `process_workspace_view` extracted with branch tests. `// mutants:skip` comments added (later discovered these don't work; replaced with explanatory prose in fixup commit). |
+| D | `5e280d3` | 2026-04-20 | `run_stream_driver_emits_fatal_after_failure_cap` test + fractional-second timestamp assertions. First CI run showed 94.6 % (3 missed): 1 real gap (attempts counter) + 2 equivalent (trail arm + seed_workspace_labels body). |
+| D+ | `deefc6c` | 2026-04-20 | Fixup: extended Phase D test to assert `lag_attempts == vec![0, 1, 2]` (kills L662 attempts counter); deleted redundant `"trail" => vec![]` match arm (kills L584 equivalent mutant by simplification); replaced non-functional `// mutants:skip` comment on seed_workspace_labels with explanatory note. Second CI run scored 98.2 % (54/55). |
+| E | this commit | 2026-04-20 | AUDIT + HEALTH-LOG closeout + acceptance boxes ticked; ready for archive. |
 
 ---
 

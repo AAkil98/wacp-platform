@@ -119,6 +119,10 @@ rstest = "0.25"
 insta = { version = "1", features = ["yaml"] }
 tempfile = "3"
 
+# Bench harness (per v0.1.0-readiness-plan Track C → backend-perf-baseline-plan)
+criterion = { version = "0.5", default-features = false, features = ["html_reports"] }
+async-stream = "0.3"
+
 # WSL2 memory-pressure profiles (mirrors both source workspaces — identical blocks).
 [profile.dev]
 codegen-units = 512

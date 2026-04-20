@@ -32,3 +32,12 @@ insta = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 wacp-proto = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "session_monitor_bench"
+harness = false
+
+[[bench]]
+name = "session_launcher_bench"
+harness = false

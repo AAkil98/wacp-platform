@@ -79,65 +79,62 @@ The broader signal: the AUDIT-2026-04-15 §12.3 deliverables were authored befor
 
 Direct grep-evidence from the current tree (as of `b17ae49` on `dev`).
 
-### 3.1 Component size — mount cost and re-render radius
+### 3.1 Component size — mount cost and re-render radius (RESOLVED 2026-04-20)
 
 The four largest single components:
 
-| File | LOC | Concerns |
+| File | LOC (original) | Status |
 |---|---|---|
-| `src/surfaces/sessions/Wizard.tsx` | 802 | 6-step wizard, all steps rendered in one component tree; 17 inline `CSSProperties` constants + 2 style functions; local `useState` per step. **Measured (§13.7.2, `e870018`):** 41 tests in 6.1 s; per-file peak 287 MB. Mount cost is not actually the issue — prior prediction revised. Real issue is the inner-function-component pattern (see below). |
-| `src/surfaces/profiles/ProfilesPage.tsx` | 530 | Sidebar + editor + version panel + delete modal in one component; 14 inline style constants + 1 style function; 11-field form via `useState`. |
-| `src/surfaces/discovery/VerticalsTab.tsx` | 494 | Heavy nested-table renderer; no memoization on rows. |
-| `src/surfaces/discovery/RolesTab.tsx` | 366 | Same pattern as Verticals. |
+| `src/surfaces/sessions/Wizard.tsx` | 802 | Step-extraction landed `4fac3e8` (F3). All 6 `*Step` renderers at module scope; stable identities across Wizard re-renders, reconciler updates in place. |
+| `src/surfaces/profiles/ProfilesPage.tsx` | 530 → 247 (container) | Decomposed into `ProfilesSidebar` + `ProfileEditor` + `ProfileVersionsPanel` + `DeleteProfileModal` + `ImportYamlDialog` siblings via `f853a10` (F4). Each subcomponent renders independently; re-render radius is the slice being edited, not the whole page. |
+| `src/surfaces/discovery/VerticalsTab.tsx` | 494 | Unchanged — not in frontend-perf-plan scope. Candidate for future decomposition only if real-usage profiling shows it's a hot spot. |
+| `src/surfaces/discovery/RolesTab.tsx` | 366 | Unchanged — same note. |
 
-**Recommendation.** ProfilesPage would benefit from decomposition into its natural subcomponents (sidebar/editor/versions/delete). Wizard has a specific anti-pattern to fix first: the six step renderers (`SelectVerticalStep`, `SelectWorkflowStep`, `AssignProfilesStep`, `ContextStep`, `BudgetOverridesStep`, `ReviewLaunchStep`) are declared as **nested function components inside `Wizard`'s body** (`Wizard.tsx:408–666`). Every Wizard re-render creates fresh function references for all six, and React reconciler treats the active step's component as a new component type — unmounting and remounting the whole step subtree instead of updating it in place. Cheap fix: extract each step to module scope as a normal component that takes the shared state as props. More invasive: extract to its own file. Either way, the re-render radius drops and the mount/unmount churn disappears.
+**Both Wizard + ProfilesPage items landed in the `refactor/frontend-perf` branch (2026-04-20).** See `impl/archive/frontend-perf-plan.md` F3 + F4 for mechanics and commit SHAs.
 
-### 3.2 Functional style helpers — per-render allocation
+### 3.2 Functional style helpers — per-render allocation (RESOLVED 2026-04-20)
 
-Pattern: `const listItem = (selected: boolean): React.CSSProperties => ({ ... })`. Called in a render path, this allocates a fresh style object per item per render. Evidence:
+All four functional `CSSProperties` helpers swapped for module-scope `Record<Variant, CSSProperties>` lookups in commit `ca80047` (F2). Verification: `rg 'const \w+ = \(.*: .*\): React\.CSSProperties => \('` in `src/surfaces/` returns zero matches. Each helper now pre-allocates the variant leaves once at module load, and renders index by variant key with no per-call allocation.
 
-- `src/surfaces/admin/UsersPage.tsx:102` — `badge(disabled)`
-- `src/surfaces/profiles/ProfilesPage.tsx:47` — `listItem(selected)`
-- `src/surfaces/sessions/Wizard.tsx:88` — `stepItem(state)`
-- `src/surfaces/sessions/Wizard.tsx:151` — `card(selected)`
+### 3.3 `useEffect` deps are the sharpest edge (RESOLVED 2026-04-20)
 
-Impact is small per call but scales with list length. For UsersPage and ProfilesPage the lists are typically single-digit rows; for Wizard's role-assignment step with many roles per vertical it is larger. Cheap fix: replace with a `Record<Variant, CSSProperties>` lookup at module scope and index by the variant.
+F1 audit (commit `66cf04a`) walked the 6 highest-signal files (ProfilesPage, Wizard ×3, SettingsPage, UsersPage, AuditLogPage, SessionsPage). 5 useEffects across 3 files; 4 cleared the audit (React-Query-stable refs or documented primitives). One required fixing: `Wizard.RoleSlot` at line 742 had unstable `profiles` ref (`?? []` allocated per-render) and unstable `onSelect` callback prop. Fix: module-scope `EMPTY_PROFILES` constant + primitive-value deps (`[firstProfileId, selectedProfileId]`). Rationale comment + `eslint-disable-next-line` for the callback-identity exclusion.
 
-### 3.3 `useEffect` deps are the sharpest edge
-
-The Wizard (`Wizard.tsx`) is the next expected source of a symmetrical bug: it has `useCallback` imports already, indicating derived functions are being built — meaning it is exactly the shape where unstable deps creep in (a `useMemo` that returns a new object when inputs are referentially-different-but-value-equal, then drives a `useEffect` that writes to state).
-
-**Recommendation for Wizard and any new component.**
+**Recommendations retained as a forward-looking reference** (in case new components land):
 1. Default to React Query return objects as the source of truth; read `.data` lazily rather than copying.
 2. When you do need derived state, use `useMemo` with primitive deps when possible (IDs, strings) rather than the full object.
 3. For `useEffect([obj])` patterns, either prove the reference is stable or switch to value-compare-via-key (`useEffect([obj.id, obj.version])`).
 4. `StrictMode` in dev will catch a class of these via double-invoke; keep it on.
 
-### 3.4 Form state via `useState`
+### 3.4 Form state via `useState` (RESOLVED 2026-04-20 for ProfileEditor)
 
-`ProfilesPage.tsx` holds 11 form fields as a single `useState` object. Every field edit re-renders the whole editor subtree. `react-hook-form` would narrow each re-render to the field being edited (uncontrolled-by-default, subscription-based updates). Low-urgency optimization, but worth packaging into the ProfilesPage split above — the editor subcomponent is the natural place to make the switch.
+`ProfileEditor` now owns form state via `useForm<ProfileForm>` per commit `041acc0` (F5). Container passes `defaultValues` (memoized from `loadedProfile`); editor calls `reset(defaultValues)` on change, `register()`-ing text/number inputs and `<Controller>`-wrapping the autonomy + visibility radio groups. Field-level re-render radius verified — editing "Name" no longer re-renders "Description" or sibling fields.
 
-Likely relevant again for Wizard: step-4 context form is currently in a dedicated `ContextForm` subcomponent but still `useState`-driven. If the context schema grows, same trade applies.
+Wizard's step-4 `ContextForm` is still `useState`-driven; the form is small (dynamic schema, typically 3–8 fields) and the subscription-based win is marginal. Revisit if the schema grows past ~12 fields.
 
 ## 4. Optimization roadmap — priority order
 
-Rough effort × payoff. Update as items land.
+**All P1/P2/P3 items landed 2026-04-20** via `refactor/frontend-perf` (8 commits `66cf04a..805f2b1`, plan archived at `impl/archive/frontend-perf-plan.md`).
 
 ### P1 — quick wins, defensive
 
-1. **`useEffect` dep audit.** Walk every `useEffect` whose dep array contains an object or array. For each, prove the reference is stable under typical re-renders (React Query stable data, `useMemo` with primitive inputs, module-scope constant). File a follow-up if not. Highest-signal files: `ProfilesPage.tsx`, `Wizard.tsx`, `SettingsPage.tsx`, `AuditLogPage.tsx`, `UsersPage.tsx`, `SessionsPage.tsx`. Effort: 1–2 h. Payoff: closes the class of bug that caused §13.7.1.
-2. **Module-scope style records.** Replace the four functional `CSSProperties` helpers (§3.2) with `Record<Variant, CSSProperties>` at module scope. Effort: 15 min. Payoff: negligible per render but removes a false-positive when profiling.
+1. ~~**`useEffect` dep audit.**~~ — **done `66cf04a`** (F1). 6 files audited, 1 fix landed (`Wizard.RoleSlot`).
+2. ~~**Module-scope style records.**~~ — **done `ca80047`** (F2). 4 helpers → `Record` lookups.
 
 ### P2 — structural, medium effort
 
-3. **Decompose ProfilesPage.** Split into `ProfilesSidebar`, `ProfileEditor`, `ProfileVersionsPanel`, `DeleteProfileModal`. Mount cost of the page drops; each subcomponent becomes memoizable independently. Effort: 3–4 h. Payoff: smaller re-render radius, easier to profile, foundation for react-hook-form swap. Note: test files already aligned with this split — each sub-surface has its own `.test.tsx`.
-4. **Extract Wizard step components to module scope.** Quick win ahead of full decomposition: move the six `SelectVerticalStep` / `SelectWorkflowStep` / `AssignProfilesStep` / `ContextStep` / `BudgetOverridesStep` / `ReviewLaunchStep` functions (currently declared inside `Wizard`'s body, §3.1) to module scope or a sibling `steps/` folder, passing state via props instead of closure. Stops the per-render function recreation and the mount/unmount churn when the active step changes. Effort: 1–2 h. Payoff: cheaper step transitions; as a secondary, test-time render cost drops without changing public behavior.
-5. **Route-level lazy loading.** `React.lazy()` + `Suspense` for each surface in `src/App.tsx`. Initial bundle shrinks; cold-load time of `/sessions` stays cheap while the session is being launched. Effort: 1 h + eval.
+3. ~~**Decompose ProfilesPage.**~~ — **done `f853a10`** (F4). Container 530 → 247 lines; 5 subcomponents + shared types/styles modules.
+4. ~~**Extract Wizard step components to module scope.**~~ — **done `4fac3e8`** (F3). All 6 `*Step` at module scope with explicit props.
+5. ~~**Route-level lazy loading.**~~ — **done `dc6a245`** (F6). Initial chunk 407 → 229 kB (44% smaller; 118 → 68 kB gzipped).
 
 ### P3 — nice-to-have
 
-6. **`react-hook-form` for large forms.** Start with the post-decomposition `ProfileEditor`. Effort: 2–3 h per form. Payoff: field-level re-render radius, field-level validation, smaller typed state.
-7. **Virtualization for long lists.** Currently not needed — profile/user/session lists are dozens at most — but `wacp-console/specs/wcon-vision` anticipates tenant deployments with hundreds of sessions. Revisit when real tenant data shows up.
+6. ~~**`react-hook-form` for large forms.**~~ — **done `041acc0`** (F5) for `ProfileEditor`.
+7. ~~**Virtualization for long lists.**~~ — **done `222b476`** (F7). Threshold-gated at 50 rows: `Virtuoso` in `ProfilesSidebar`; `TableVirtuoso` in `UsersPage` + `SessionsPage`. Plain render below threshold (current data shape); virtualization kicks in above. Folded forward despite the "currently not needed" note per 2026-04-20 user directive.
+
+### P4 — preventive (added 2026-04-20)
+
+8. ~~**`eslint-plugin-jsx-a11y`**~~ — **done `8761117`** (F8). `label-has-associated-control` + `no-autofocus` kept at `error` (catches the §2.4 recurring pattern). `click-events-have-key-events` + `no-static-element-interactions` downgraded to `warn` (20 `<div onClick>` sites pending a keyboard-nav sweep — track as `a11y/keyboard-nav-sweep` plan when ready).
 
 ## 5. Already landed this session
 
@@ -149,6 +146,14 @@ Rough effort × payoff. Update as items land.
 | `82a4213` — `execArgv: ["--max-old-space-size=1536"]` in `vitest.config.ts` | Bounds any single vitest worker so a regression surfaces as a clean OOM inside vitest, never as a WSL crash. |
 | `82a4213` — `npm run test:isolated` + `scripts/run-tests-isolated.sh` | Per-file process isolation. Trades ~30 s walltime for a hard upper bound on cross-file heap carry-over. |
 | `e870018` — `Wizard.tsx` a11y label bindings (§2.4) | Second instance of the same gap after `d71c4fe`; raises the case for `eslint-plugin-jsx-a11y`. |
+| `66cf04a` — F1 `useEffect` dep audit across 6 files | Closes §3.3 roadmap item 1. Only one latent issue fixed (Wizard.RoleSlot: 742); others were React-Query-stable. |
+| `ca80047` — F2 module-scope style records | Closes §3.2 / roadmap item 2. Four functional `CSSProperties` helpers replaced with `Record<Variant, CSSProperties>` lookups; zero per-render allocation. |
+| `4fac3e8` — F3 Wizard step extraction | Closes §3.1 / roadmap item 4. Six `*Step` renderers moved to module scope; mount/unmount churn on step transitions eliminated. |
+| `f853a10` — F4 `ProfilesPage` decomposition | Closes §3.1 / roadmap item 3. 542-line monolith → 247-line container + 5 subcomponents + types/styles modules. |
+| `041acc0` — F5 `react-hook-form` in `ProfileEditor` | Closes §3.4 / roadmap item 6. Field-level re-render radius; editing Name no longer re-renders Description et al. |
+| `dc6a245` — F6 route-level lazy loading | Closes roadmap item 5. Initial chunk 407 → 229 kB (44% smaller); 8 surfaces split into per-route chunks via `React.lazy()` + `Suspense`. |
+| `222b476` — F7 virtualization with `react-virtuoso` | Closes roadmap item 7. Threshold-gated at 50 rows across `ProfilesSidebar` (`Virtuoso`) + `UsersPage` + `SessionsPage` (`TableVirtuoso`). |
+| `8761117` — F8 `eslint-plugin-jsx-a11y` | Closes §2.4 recurring-pattern preventive (new roadmap item 8). 8 pre-existing violations fixed inline (label bindings + autoFocus removal); 20 `<div onClick>` patterns downgraded to `warn` pending keyboard-nav sweep. |
 
 ## 6. Watch-list — what would indicate regression
 

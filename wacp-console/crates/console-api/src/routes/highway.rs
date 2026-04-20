@@ -499,7 +499,7 @@ async fn pending_refusals(
 // Walks `AppState.active_sessions`, collects each monitor's `PendingState`
 // for stable cursor-based pagination, and returns the page envelope.
 // Implementation lives in sibling `highway_pending.rs` per
-// `impl/bucket-b-refactor-plan.md` §B.4 follow-up.
+// `impl/archive/bucket-b-refactor-plan.md` §B.4 follow-up.
 // ---------------------------------------------------------------------------
 #[path = "highway_pending.rs"]
 pub(crate) mod pending;

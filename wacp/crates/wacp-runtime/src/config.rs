@@ -848,7 +848,7 @@ impl RuntimeConfig {
 // ── Environment variable overrides ─────────────────────────────────────────
 //
 // Implementation lives in the sibling `config_env.rs` module per
-// `impl/bucket-b-refactor-plan.md` §B.5e follow-up. Re-exported here so
+// `impl/archive/bucket-b-refactor-plan.md` §B.5e follow-up. Re-exported here so
 // existing `crate::config::apply_env_overrides` callers and the inline test
 // module's `use super::*;` resolve without modification.
 pub use crate::config_env::apply_env_overrides;

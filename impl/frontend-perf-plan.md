@@ -1,7 +1,7 @@
 ---
 id: wacp-frontend-perf
 type: impl
-status: draft
+status: final
 created: 2026-04-20T04:00:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, frontend, refactor, performance, react]
@@ -268,15 +268,15 @@ Per HEALTH-LOG §2.4 (recurring pattern signal). Preventive, parallel to any pha
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| (plan scaffold) | _(this commit)_ | 2026-04-20 | direct-to-dev before branch creation per git-strategy §3.1 |
-| F1 useEffect audit | — | — | 6 files, one commit each or skip if clean |
-| F2 style records | — | — | single commit across 4 call sites |
-| F3 Wizard step extraction | — | — | batched by default |
-| F4 ProfilesPage decomposition | — | — | 5 commits (4 subcomponents + cleanup) |
-| F5 react-hook-form ProfileEditor | — | — | |
-| F6 route-level lazy loading | — | — | after F3+F4 so chunk boundaries settle |
-| F7 virtualization | — | — | 3 commits (one per list surface) |
-| F8 eslint-plugin-jsx-a11y | — | — | parallel to any phase |
+| (plan scaffold) | `2cac739` | 2026-04-20 | direct-to-dev before branch creation per git-strategy §3.1 |
+| F1 useEffect audit | `66cf04a` | 2026-04-20 | 5 useEffects across 3 files audited; only `Wizard.RoleSlot:742` needed fixing (unstable `profiles` + `onSelect` refs → module-scope `EMPTY_PROFILES` + primitive deps) |
+| F2 style records | `ca80047` | 2026-04-20 | 4 functional helpers → module-scope `Record<Variant, CSSProperties>` lookups |
+| F3 Wizard step extraction | `4fac3e8` | 2026-04-20 | 6 nested `*Step` fn components → module-scope; props replace closure |
+| F4 ProfilesPage decomposition | `f853a10` | 2026-04-20 | 5 subcomponents extracted (Sidebar, Editor, VersionsPanel, DeleteModal, ImportYamlDialog) + shared types/styles modules. Container 542 → 247 lines (plan target <200; deviation noted) |
+| F5 react-hook-form | `041acc0` | 2026-04-20 | ProfileEditor owns form state via `useForm` + `Controller` radio wrappers; container passes `defaultValues` + `onSave(values)`. 2 RTL tests gained `waitFor` wrappers (handleSubmit is inherently async) |
+| F6 lazy loading | `dc6a245` | 2026-04-20 | every non-initial surface via `React.lazy()`. Initial chunk 407 → 229 kB (44% smaller; exceeds ≥20% target). 2 App tests added `waitFor` |
+| F7 virtualization | `222b476` | 2026-04-20 | `react-virtuoso` in ProfilesSidebar + TableVirtuoso in UsersPage + SessionsPage. Threshold-gated at 50 rows; plain render below, virtualized above |
+| F8 eslint-plugin-jsx-a11y | `8761117` | 2026-04-20 | 28 pre-existing violations surfaced; 8 fixed inline (label bindings + autoFocus removal); 20 `<div onClick>` warnings downgraded to `warn` with follow-up note. `label-has-associated-control` + `no-autofocus` kept at `error` (the §2.4 recurring-pattern targets) |
 
 ## 8. Sequencing notes
 

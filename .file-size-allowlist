@@ -20,7 +20,7 @@ wacp/crates/wacp-runtime/src/config.rs
 wacp-console/crates/console-api/src/routes/highway.rs
 
 # Rust production — moderately oversized (1000–1500); warn-only
-wacp-console/crates/console-core/src/recovery.rs
+# (recovery.rs removed 2026-04-20 after B.5 test-extraction: 1485 → 251 lines)
 wacp/crates/wacp-transport/src/rest_gateway.rs
 wacp-console/crates/console-api/src/routes/sessions.rs
 wacp/crates/wacp-tools/src/execution.rs
@@ -31,6 +31,7 @@ wacp-console/frontend/src/api/hooks/index.test.ts
 
 # Rust test monoliths — intentional: one test module per crate is
 # conventional + searchable. Scrolling tests is a non-event.
+wacp-console/crates/console-core/src/recovery_tests.rs
 wacp-console/crates/console-core/src/session_launcher_tests.rs
 wacp-console/crates/console-core/src/session_monitor_tests.rs
 wacp/crates/wacp-coordinator/src/tests.rs

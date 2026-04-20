@@ -94,7 +94,8 @@ describe("ProfilesPage — edit existing profile", () => {
     });
 
     fireEvent.click(screen.getByText("Save Changes"));
-    expect(updateMut.mutate).toHaveBeenCalled();
+    // react-hook-form's `handleSubmit` is async (validation → onValid).
+    await waitFor(() => expect(updateMut.mutate).toHaveBeenCalled());
   });
 
   it("shows action buttons for existing profile", async () => {

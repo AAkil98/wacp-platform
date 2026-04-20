@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProfilesPage } from "./ProfilesPage";
 import {
@@ -71,7 +71,7 @@ describe("ProfilesPage — create new profile", () => {
     expect(nameInput.value).toBe("");
   });
 
-  it("calls createProfile mutation on save", () => {
+  it("calls createProfile mutation on save", async () => {
     const createMut = makeMutationMock({ id: "p-new" });
     mockCreateProfile.mockReturnValue(createMut);
     render(<ProfilesPage />, { wrapper: queryWrapper() });
@@ -82,7 +82,8 @@ describe("ProfilesPage — create new profile", () => {
     fireEvent.change(nameInput, { target: { value: "New Test Profile" } });
 
     fireEvent.click(screen.getByText("Create Profile"));
-    expect(createMut.mutate).toHaveBeenCalled();
+    // react-hook-form's `handleSubmit` is async (validation → onValid).
+    await waitFor(() => expect(createMut.mutate).toHaveBeenCalled());
   });
 
   it("does not show Delete/Clone/Export buttons in create mode", () => {

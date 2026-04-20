@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSessionStore } from "../../store/session";
+import { ClickCard } from "../../components/ClickCard";
 
 function formatTimestamp(iso: string): string {
   try {
@@ -107,8 +108,9 @@ export function TrailStream() {
           const expanded = expandedId === entry.id;
 
           return (
-            <div
+            <ClickCard
               key={entry.id}
+              aria-label={expanded ? "Collapse trail entry" : "Expand trail entry"}
               style={{
                 padding: "8px 12px",
                 borderRadius: 6,
@@ -192,7 +194,7 @@ export function TrailStream() {
                   {JSON.stringify(entry, null, 2)}
                 </pre>
               )}
-            </div>
+            </ClickCard>
           );
         })}
       </div>

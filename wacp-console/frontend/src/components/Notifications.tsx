@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSessionStore } from "../store/session";
+import { ClickCard } from "./ClickCard";
 
 interface Toast {
   id: string;
@@ -47,8 +48,9 @@ export function Notifications() {
       maxWidth: 360,
     }}>
       {toasts.map((toast) => (
-        <div
+        <ClickCard
           key={toast.id}
+          aria-label="Dismiss notification"
           onClick={() => dismiss(toast.id)}
           style={{
             padding: "12px 16px",
@@ -62,7 +64,7 @@ export function Notifications() {
           }}
         >
           {toast.message}
-        </div>
+        </ClickCard>
       ))}
     </div>
   );

@@ -4,6 +4,7 @@ import { useVerticals, useVertical, useProfiles } from "../../api/hooks/index";
 import { api } from "../../api/client";
 import type { ApiError } from "../../api/client";
 import { ContextForm } from "./ContextForm";
+import { ClickCard } from "../../components/ClickCard";
 
 // --- Types ---
 
@@ -559,8 +560,9 @@ function SelectVerticalStep({
       <h2 style={sectionHeading}>Select a Vertical</h2>
       <div style={cardGrid}>
         {verticals.map((v) => (
-          <div
+          <ClickCard
             key={v.id}
+            aria-label={`Select vertical ${v.name}`}
             style={CARD_STYLE[selectedVertical === v.id ? "selected" : "unselected"]}
             onClick={() => onSelect(v.id)}
           >
@@ -569,7 +571,7 @@ function SelectVerticalStep({
             <div style={{ ...cardMeta, marginTop: 8 }}>
               {v.role_count} roles / {v.workflow_count} workflows / {v.tool_count} tools
             </div>
-          </div>
+          </ClickCard>
         ))}
       </div>
       {verticals.length === 0 && !isLoading && (
@@ -598,8 +600,9 @@ function SelectWorkflowStep({
       <h2 style={sectionHeading}>Select a Workflow</h2>
       <div style={cardGrid}>
         {workflows.map((w) => (
-          <div
+          <ClickCard
             key={w.id}
+            aria-label={`Select workflow ${w.name}`}
             style={CARD_STYLE[selectedWorkflow === w.id ? "selected" : "unselected"]}
             onClick={() => onSelect(w.id)}
           >
@@ -608,7 +611,7 @@ function SelectWorkflowStep({
             <div style={{ ...cardMeta, marginTop: 8 }}>
               {w.stage_count} stages ({w.gated_stage_count} gated)
             </div>
-          </div>
+          </ClickCard>
         ))}
       </div>
       {workflows.length === 0 && (

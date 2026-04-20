@@ -4,6 +4,7 @@ import { TableVirtuoso } from "react-virtuoso";
 import { useUsers, useCreateUser } from "../../api/hooks/index";
 import { api } from "../../api/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { ClickCard } from "../../components/ClickCard";
 
 // HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
 // Below the threshold, render a plain <table>; above, TableVirtuoso. Wired now
@@ -329,8 +330,20 @@ export function UsersPage() {
 
       {/* Create user dialog */}
       {showCreate && (
-        <div style={dialogOverlay} onClick={() => setShowCreate(false)}>
-          <div style={dialogBox} onClick={(e) => e.stopPropagation()}>
+        <ClickCard aria-label="Close dialog" style={dialogOverlay} onClick={() => setShowCreate(false)}>
+          {/* Inner dialog surface — stops propagation so clicks/keys inside
+              don't dismiss the modal via the outer ClickCard's handler.
+              eslint-disable: role="dialog" is correct; the stop-propagation
+              handlers are structural, not interactive affordances. */}
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+          <div
+            style={dialogBox}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create user"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
             <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700 }}>Create User</h2>
             <div style={fieldGroup}>
               <label htmlFor="cu-username" style={fieldLabel}>Username</label>
@@ -359,7 +372,7 @@ export function UsersPage() {
               <button style={{ ...btnSecondary }} onClick={() => setShowCreate(false)}>Cancel</button>
             </div>
           </div>
-        </div>
+        </ClickCard>
       )}
     </div>
   );

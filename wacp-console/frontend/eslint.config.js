@@ -34,14 +34,12 @@ export default tseslint.config(
       // incidents: d71c4fe + e870018) — the reason F8 exists.
       "jsx-a11y/label-has-associated-control": "error",
       "jsx-a11y/no-autofocus": "error",
-      // Downgraded from error to warn pending a keyboard-navigation sweep
-      // across the six `<div onClick>` card + row patterns (ProfilesSidebar
-      // row, Wizard vertical/workflow cards, EscalationInbox row,
-      // TrailStream row, LoginPage/ChangePasswordPage outer wrappers). Each
-      // needs role="button" + tabIndex + onKeyDown{Enter,Space} — tracked
-      // as frontend-perf-plan §8 follow-up.
-      "jsx-a11y/click-events-have-key-events": "warn",
-      "jsx-a11y/no-static-element-interactions": "warn",
+      // Keyboard-nav sweep closed 2026-04-20 via `refactor/v0.1.0-readiness`
+      // Track A. All `<div onClick>` sites now use `<ClickCard>` (role=button
+      // + Enter/Space) or a real `<button>`. Both rules promoted to `error`
+      // so new regressions fail CI.
+      "jsx-a11y/click-events-have-key-events": "error",
+      "jsx-a11y/no-static-element-interactions": "error",
     },
   },
 );

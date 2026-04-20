@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { useAuthStore } from "../../store/auth";
+import { ClickCard } from "../../components/ClickCard";
 
 export function ChangePasswordPage() {
   const { user, mustChangePassword, error, changePassword, clearError } = useAuthStore();
@@ -30,9 +31,9 @@ export function ChangePasswordPage() {
         </p>
 
         {error && (
-          <div className="mb-4 p-3 rounded text-sm" style={{ backgroundColor: "var(--color-danger)", color: "#fff" }} onClick={clearError}>
+          <ClickCard aria-label="Dismiss error" className="mb-4 p-3 rounded text-sm" style={{ backgroundColor: "var(--color-danger)", color: "#fff" }} onClick={clearError}>
             {error}
-          </div>
+          </ClickCard>
         )}
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">

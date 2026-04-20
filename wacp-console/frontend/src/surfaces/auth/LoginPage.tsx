@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { useAuthStore } from "../../store/auth";
+import { ClickCard } from "../../components/ClickCard";
 
 export function LoginPage() {
   const { user, error, loading, mustChangePassword, login, clearError } = useAuthStore();
@@ -30,13 +31,14 @@ export function LoginPage() {
         <h1 className="text-xl font-semibold mb-4 text-center">WACP Console</h1>
 
         {error && (
-          <div
+          <ClickCard
+            aria-label="Dismiss error"
             className="mb-4 p-3 rounded text-sm"
             style={{ backgroundColor: "var(--color-danger)", color: "#fff" }}
             onClick={clearError}
           >
             {error}
-          </div>
+          </ClickCard>
         )}
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">

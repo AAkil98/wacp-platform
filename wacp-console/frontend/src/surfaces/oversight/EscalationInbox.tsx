@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSessionStore } from "../../store/session";
 import { api } from "../../api/client";
+import { ClickCard } from "../../components/ClickCard";
 
 function timeAgo(timestamp: string | undefined): string {
   if (!timestamp) return "--";
@@ -71,7 +72,8 @@ export function EscalationInbox({ sessionId }: EscalationInboxProps) {
             }}
           >
             {/* Summary row */}
-            <div
+            <ClickCard
+              aria-label={expanded ? "Collapse escalation" : "Expand escalation"}
               style={{
                 padding: "12px 14px",
                 display: "flex",
@@ -105,7 +107,7 @@ export function EscalationInbox({ sessionId }: EscalationInboxProps) {
               <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                 {expanded ? "\u25B2" : "\u25BC"}
               </span>
-            </div>
+            </ClickCard>
 
             {/* Expanded detail */}
             {expanded && (

@@ -1,4 +1,5 @@
 import { Virtuoso } from "react-virtuoso";
+import { ClickCard } from "../../components/ClickCard";
 import type { ProfileSummary } from "./ProfilesPage.types";
 import {
   sidebar,
@@ -38,7 +39,8 @@ function ProfileRow({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div
+    <ClickCard
+      aria-label={`Select profile ${profile.name}`}
       style={LIST_ITEM_STYLE[selected ? "selected" : "unselected"]}
       onClick={() => onSelect(profile.id)}
     >
@@ -65,7 +67,7 @@ function ProfileRow({
           {profile.visibility}
         </span>
       </div>
-    </div>
+    </ClickCard>
   );
 }
 

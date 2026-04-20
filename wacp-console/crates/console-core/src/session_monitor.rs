@@ -343,11 +343,15 @@ impl Monitor {
         info!(session_id = %self.session_id, "session monitor stopped");
     }
 
-    // mutants:skip — under the disconnected pool used by every unit test
-    // `self.pool.highway()` returns None and the fn early-returns; the
-    // body-to-() mutant is semantically equivalent in that context. The
-    // real highway path is covered by the `wacp-console/integration/`
-    // suites via `MockHighwayService`.
+    // Note on mutation testing: cargo-mutants flags `body → ()` at this
+    // fn as a Missed mutant. That's expected — under the disconnected pool
+    // used by every unit test `self.pool.highway()` returns None and the
+    // fn early-returns, so body-to-() is semantically equivalent at the
+    // unit level. The real highway path is covered by the
+    // `wacp-console/integration/` suites via `MockHighwayService`. The
+    // perspective-split matters: the pure work that shapes labels +
+    // states moved into `process_workspace_view` so unit tests can still
+    // kill branch mutants in the hot path.
     async fn seed_workspace_labels(&mut self) {
         let Some(mut client) = self.pool.highway().await else {
             warn!(session_id = %self.session_id, "highway channel unavailable at monitor start");
@@ -579,10 +583,9 @@ fn lag_refresh_hint(stream: &'static str) -> Vec<&'static str> {
     match stream {
         "gates" => vec!["gates"],
         "escalations" => vec!["escalations"],
-        // mutants:skip — the wildcard arm below returns the same value,
-        // so deleting this arm is semantically equivalent.
-        "trail" => vec![],
         "workspace_changes" => vec!["workspaces"],
+        // trail + unknown streams fall through to the empty hint — nothing
+        // client-side needs re-fetching when the trail buffer lags.
         _ => vec![],
     }
 }

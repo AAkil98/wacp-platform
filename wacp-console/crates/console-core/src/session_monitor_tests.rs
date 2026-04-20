@@ -1485,11 +1485,14 @@ fn process_workspace_view_skips_label_when_role_empty() {
 // §13.7.9 Phase D — run_stream_driver Fatal + fractional-second timestamp
 // ========================================================================
 
-/// Kills two mutants in `run_stream_driver`:
-/// * L648 `failures += 1` → `*=`: without the increment, failures stays
+/// Kills three counter + backoff mutants in `run_stream_driver`:
+/// * `failures += 1` → `*=`: without the increment, failures stays
 ///   at 0 and the reconnect cap never trips, so Fatal is never emitted.
-///   This test's final `assert_eq!(fatals, 1)` catches that.
-/// * L659 `backoff * 2` → `/` / `+`: with `/`, the backoff shrinks each
+///   The `fatals == 1` assertion catches that.
+/// * `attempts += 1` → `*=`: the Lag event records the `attempt` count
+///   captured BEFORE the increment. Real: [0, 1, 2]. Mutant: [0, 0, 0].
+///   The `lag_attempts == vec![0, 1, 2]` assertion catches that.
+/// * `backoff * 2` → `/` / `+`: with `/`, the backoff shrinks each
 ///   iteration and the observed wall time drops well below the sum of
 ///   the first two doubled intervals. The elapsed-time lower bound
 ///   catches any non-doubling mutation.
@@ -1511,16 +1514,29 @@ async fn run_stream_driver_emits_fatal_after_failure_cap() {
     .await;
     let elapsed = start.elapsed();
 
-    let mut lags = 0;
+    let mut lag_attempts: Vec<u32> = Vec::new();
     let mut fatals = 0;
     while let Ok(ev) = rx.try_recv() {
         match ev {
-            StreamEvent::Lag { .. } => lags += 1,
+            StreamEvent::Lag { attempt, .. } => lag_attempts.push(attempt),
             StreamEvent::Fatal { .. } => fatals += 1,
             _ => {}
         }
     }
-    assert_eq!(lags, 3, "expected 3 Lag events for 3 failures; got {lags}");
+    assert_eq!(
+        lag_attempts.len(),
+        3,
+        "expected 3 Lag events for 3 failures; got {lag_attempts:?}"
+    );
+    // Each iteration captures `attempts` BEFORE `attempts += 1`, so the
+    // expected attempt values are 0, 1, 2. A mutant that turns
+    // `attempts += 1` into `attempts *= 1` leaves the counter at 0,
+    // making all Lag events carry attempt=0.
+    assert_eq!(
+        lag_attempts,
+        vec![0, 1, 2],
+        "Lag attempt counter must increment between iterations; got {lag_attempts:?}"
+    );
     assert_eq!(
         fatals, 1,
         "expected 1 Fatal after cap; got {fatals} (failures never incremented?)"

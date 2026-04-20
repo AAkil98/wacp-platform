@@ -1,7 +1,7 @@
 ---
 id: wacp-backend-perf-baseline
 type: impl
-status: draft
+status: final
 created: 2026-04-20T07:00:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, perf, baseline, benchmarks, v0.1.0]
@@ -83,14 +83,14 @@ Inherited from `v0.1.0-readiness-plan.md` §5 C-items (C1 harness choice criteri
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| (plan scaffold) | _(this commit)_ | 2026-04-20 | direct-to-dev; split from v0.1.0-readiness Track C |
-| C1 | — | — | |
-| C2 | — | — | |
-| C3 | — | — | |
-| C4 | — | — | |
-| C5 | — | — | |
-| C6 | — | — | |
-| C7 | — | — | |
+| (plan scaffold) | `c2e5df0` | 2026-04-20 | direct-to-dev; split from v0.1.0-readiness Track C |
+| C1 harness scaffold | `c5149af` | 2026-04-20 | criterion + 4 bench files across `console-core`/`console-api`/`wacp-llm` + `scripts/bench-baseline.sh` + baseline doc |
+| C2 session_monitor broadcast | _(landed with C1)_ | 2026-04-20 | measured @ 16 subs × 1000 frames: mean 987 µs (~1 ms/burst) |
+| C3 session_launcher sequence | _(placeholder)_ | 2026-04-20 | bench file scaffolded; real benchmark deferred pending `InjectableCoordinator` mock relocation from `wacp-console/integration` → `console-test-support`. Documented as follow-up in baseline doc. |
+| C4 console-api middleware | _(landed with C1)_ | 2026-04-20 | argon2_verify 28.8 ms (target <100 ms ✓); csrf_compare_32b 59.7 ns |
+| C5 stub single-call serialize | `4b735b0` | 2026-04-20 | `resolve_response` returns `(StubResponse, serialized_len)`; `complete()`/`complete_stream()` compute `input_tokens` from returned length. 169 wacp-llm tests pass. |
+| C6 stub lazy streaming | `4b735b0` | 2026-04-20 | `complete_stream` uses `async_stream::stream!` instead of eager `Vec<StreamEvent>`; peak memory now O(1) in event count. `build_stream_events` deleted. |
+| C7 console-db migration | `8e117e4` | 2026-04-20 | measured `create_test_pool()` at 5.78 ms mean — under the 10 ms threshold, amortization optimization not justified. Regression tripwire: 15 ms. |
 
 ---
 

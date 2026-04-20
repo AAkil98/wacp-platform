@@ -176,9 +176,21 @@ Sequenced steps that would have saved several hours on `ProfilesPage.actions.tes
 5. **Correlate with source code.** Once the offending test is identified, look at what mocks it sets up and compare to the passing tests. `mockImplementation` returning a fresh object is a near-certain smell whenever the consumer uses the result in a dep array.
 6. **Two successive `fireEvent.change` calls don't flush React state between them** (React 19, §13.7.2 evidence). If you need to test "type X, then clear to ''", inject a flush point: `fireEvent.change(input, {target:{value:"X"}}); await waitFor(() => expect(input.value).toBe("X")); fireEvent.change(input, {target:{value:""}});`. Without the `waitFor` the second event reads stale controlled-input state and the subsequent `setState` can appear to no-op. This burned a debug round in §13.7.2; now baked into the pattern library.
 
-## 8. Backend — not yet investigated
+## 8. Backend — initial baseline captured 2026-04-20
 
-Testing coverage for the Rust crates (`wacp-console/crates/*`) lives under §12.2 / §13.4 of the audit and has not produced runtime-performance signals in this session. The natural next pass (after §13.7 closes) is to run the T1–T10 coverage benchmarks under `cargo bench` for the hot paths — `console-core::session_monitor` (broadcast fan-out), `console-core::session_launcher` (coordinator sequence), `console-api::middleware` (per-request auth/CSRF). Any findings there should be captured back into this document under a new §9.
+Testing coverage for the Rust crates (`wacp-console/crates/*`) lives under §12.2 / §13.4 of the audit. The natural next pass was to run `cargo bench` for the hot paths — `console-core::session_monitor` (broadcast fan-out), `console-core::session_launcher` (coordinator sequence), `console-api::middleware` (per-request auth/CSRF).
+
+**Landed 2026-04-20 via `backend-perf-baseline-plan.md`:** criterion harness across 3 crates (commit `c5149af`), stub optimizations (`4b735b0`), console-db migration measurement (`8e117e4`). Initial numbers recorded in `docs/perf-baseline-2026-04-20.md`:
+
+- `session_monitor` broadcast @ 16 subs × 1000 frames: mean 987 µs (~1 ms/burst). Regression tripwire: 1.5 ms.
+- `middleware argon2_verify`: 28.8 ms (target <100 ms ✓). Tripwires: >200 ms (cost-factor increased) or <10 ms (security regression).
+- `middleware csrf_compare_32b`: 59.7 ns (target <100 µs ✓).
+- `stub_serialize_for_match` @ 20×500: 595 ns per call (now single-call per `complete()` via C5).
+- `console-db create_test_pool`: 5.78 ms (under 10 ms amortization threshold). Tripwire: 15 ms.
+
+Placeholder: `session_launcher_bench` needs `InjectableCoordinator` mock relocation from `wacp-console/integration` → `console-test-support` before the SubmitGoal → Decompose(N) → Dispatch(N) sweep can land. Follow-up tracked in baseline doc.
+
+Run `./scripts/bench-baseline.sh` to regenerate; not in CI (bench wallclocks too noisy without dedicated hardware).
 
 ## 9. console-db — spec-vs-schema drift from the §13.7.5 coverage sweep
 
@@ -220,7 +232,7 @@ I'd lean toward (1) — the caller is currently doing `unwrap_or(0) + 1` anyway,
 ### 9.3 Perf signals observed (or not)
 
 - **Test walltime.** 98 tests for `console-db` complete in 0.76 s on the dev box (single-threaded tokio, in-memory DB for happy paths, tempfile-backed DB for `FaultyDb`-driven BUSY tests). No hotspot visible; each test averages ~8 ms.
-- **sqlx migration cost.** Each `create_test_pool()` call re-runs all 9 migrations against a fresh in-memory DB (~3 ms per test). Not worth amortizing today at current test counts, but if the suite grows past ~500 tests, a `lazy_static!` migrated template + `ATTACH DATABASE` clone pattern would cut the setup cost. Note for future.
+- **sqlx migration cost.** Each `create_test_pool()` call re-runs all 9 migrations against a fresh in-memory DB. **Measured 2026-04-20 (backend-perf-baseline-plan C7, commit `8e117e4`):** 5.78 ms mean — under the 10 ms amortization threshold. Optimization (`lazy_static!` migrated template + `ATTACH DATABASE` clone pattern) not justified at current scale. Regression tripwire: 15 ms.
 - **`FaultyDb::hold_write_lock` — detach-before-begin.** First cut of the harness returned the `PoolConnection` from the companion pool holding a `BEGIN IMMEDIATE`; when dropped, the connection went back to the pool *with the transaction still open*, so the next test's writes against the main pool saw a phantom reserved lock. Fix was to `.detach()` the connection so Drop closes the underlying SQLite handle (which releases the lock at the OS level). Captured in `testing.rs` doc comment. This is the backend mirror of the §3.3 `useEffect`-with-unstable-deps trap: a cleanup that looks correct at the type level but leaks state because the runtime's cleanup contract is weaker than the type implies.
 
 ## 10. wacp-llm stub provider — observations from §13.7.6
@@ -231,13 +243,13 @@ Writing the deterministic `StubAdapter` (`wacp/crates/wacp-llm/src/providers/stu
 
 `serialize_for_match(messages, tools)` is called **twice** per `complete()` invocation today — once inside `resolve_response()` to find a fixture match, and again inside `complete()` / `complete_stream()` to compute `input_tokens` (`serialized.len() / 4`). Each call walks every message, allocates a new `String`, and writes role / content / block-variant formatting into it. For a typical coordinator turn (1–5 messages, ~500 chars) this is cheap (~μs), but for long conversations with tool-result blocks the cost scales with message history.
 
-**Fix when it matters.** Lift serialization to the caller; pass the serialized form plus its length into `resolve_response()`. One allocation per call instead of two. The current two-call shape was chosen for readability; revisit if `complete()` latency shows up in the integration-suite `tokio-console` trace.
+**Resolved 2026-04-20 (backend-perf-baseline-plan C5, commit `4b735b0`).** `resolve_response` now returns `(StubResponse, serialized_len)` so `complete()` and `complete_stream()` compute `input_tokens = serialized_len / 4` directly — one allocation per call instead of two. Bench data in `docs/perf-baseline-2026-04-20.md` anchors the regression check.
 
 ### 10.2 Streaming events materialized eagerly
 
 `StubAdapter::complete_stream` builds the entire `Vec<StreamEvent>` (one per character + tool calls + Usage + Done) **before** returning the `StreamHandle`. For a fixture with 10-char content and 2 tool calls the vec has ~15 events; for a fixture simulating a 1000-token response it would be ~1000+ events allocated up-front. Memory cost is bounded by the fixture size (not user-driven input), so it's a compile-time decision rather than a runtime unknown, but the pattern diverges from the real Anthropic / OpenAI providers which stream from SSE as bytes arrive.
 
-**Fix when it matters.** Replace `futures::stream::iter(events).then(delay)` with an `async_stream::stream! { … }` that yields events lazily. Keeps the same public shape, but peak memory tracks the widest fixture entry's content instead of its full event list. Noted — not prioritized. The unit test `stream_emits_content_then_usage_then_done` would need a small adjustment (the test currently collects all events at once, which still works).
+**Resolved 2026-04-20 (backend-perf-baseline-plan C6, commit `4b735b0`).** `complete_stream` now yields events lazily via `async_stream::stream! { … yield … }` instead of pre-building a `Vec<StreamEvent>`. Peak memory is O(1) in event count; a 1000-token fixture no longer preallocates 1000 `StreamEvent` instances. `build_stream_events` helper deleted as dead code post-refactor. All 169 wacp-llm tests still pass including the stream path.
 
 ### 10.3 `StubFixtures` sharing — Arc is the right call
 

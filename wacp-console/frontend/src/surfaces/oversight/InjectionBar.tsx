@@ -51,11 +51,13 @@ export function InjectionBar({ sessionId }: InjectionBarProps) {
       {/* Workspace selector */}
       <div style={{ marginBottom: 12 }}>
         <label
+          htmlFor="inj-workspace"
           style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4, color: "var(--color-text-secondary)" }}
         >
           Target workspace
         </label>
         <select
+          id="inj-workspace"
           value={workspaceId}
           onChange={(e) => setWorkspaceId(e.target.value)}
           style={{
@@ -83,11 +85,13 @@ export function InjectionBar({ sessionId }: InjectionBarProps) {
       {/* Payload */}
       <div style={{ marginBottom: 12 }}>
         <label
+          htmlFor="inj-payload"
           style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4, color: "var(--color-text-secondary)" }}
         >
           Directive payload
         </label>
         <textarea
+          id="inj-payload"
           placeholder="Enter directive text..."
           value={payload}
           onChange={(e) => setPayload(e.target.value)}

@@ -333,20 +333,20 @@ export function UsersPage() {
           <div style={dialogBox} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700 }}>Create User</h2>
             <div style={fieldGroup}>
-              <label style={fieldLabel}>Username</label>
-              <input style={inputStyle} value={createForm.username} onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))} />
+              <label htmlFor="cu-username" style={fieldLabel}>Username</label>
+              <input id="cu-username" style={inputStyle} value={createForm.username} onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))} />
             </div>
             <div style={fieldGroup}>
-              <label style={fieldLabel}>Display Name</label>
-              <input style={inputStyle} value={createForm.display_name} onChange={(e) => setCreateForm((f) => ({ ...f, display_name: e.target.value }))} />
+              <label htmlFor="cu-display-name" style={fieldLabel}>Display Name</label>
+              <input id="cu-display-name" style={inputStyle} value={createForm.display_name} onChange={(e) => setCreateForm((f) => ({ ...f, display_name: e.target.value }))} />
             </div>
             <div style={fieldGroup}>
-              <label style={fieldLabel}>Password</label>
-              <input style={inputStyle} type="password" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
+              <label htmlFor="cu-password" style={fieldLabel}>Password</label>
+              <input id="cu-password" style={inputStyle} type="password" value={createForm.password} onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))} />
             </div>
             <div style={fieldGroup}>
-              <label style={fieldLabel}>Role</label>
-              <select style={inputStyle} value={createForm.console_role} onChange={(e) => setCreateForm((f) => ({ ...f, console_role: e.target.value }))}>
+              <label htmlFor="cu-role" style={fieldLabel}>Role</label>
+              <select id="cu-role" style={inputStyle} value={createForm.console_role} onChange={(e) => setCreateForm((f) => ({ ...f, console_role: e.target.value }))}>
                 {ROLES.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}

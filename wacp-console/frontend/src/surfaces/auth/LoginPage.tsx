@@ -45,7 +45,7 @@ export function LoginPage() {
             <input id="login-username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
-              autoFocus required />
+              required />
           </div>
           <div>
             <label htmlFor="login-password" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>Password</label>

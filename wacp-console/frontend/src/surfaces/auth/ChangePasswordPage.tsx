@@ -41,7 +41,7 @@ export function ChangePasswordPage() {
             <input id="chpw-current" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded text-sm"
               style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
-              autoFocus required />
+              required />
           </div>
           <div>
             <label htmlFor="chpw-new" className="block text-sm mb-1" style={{ color: "var(--color-text-secondary)" }}>New Password</label>

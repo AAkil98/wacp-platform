@@ -3,6 +3,7 @@ id: wcon-mutation-testing
 type: coding
 status: final
 created: 2026-04-17T00:00:00
+revised: 2026-04-20T00:00:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [testing, mutation, ci, quality]
 depends_on: [wcon-w1-grpc-pool, wcon-w2-launch-flow, wcon-w3-session-monitor]
@@ -122,12 +123,15 @@ Notes on the steps:
 
 ```yaml
 - name: Run mutants
+  # --file globs containing path separators match from the workspace root
+  # (cargo-mutants book → skip_files.md). Full paths required because each
+  # crate lives under wacp/crates/ after the M0–M7 monorepo merge.
   run: |
     cargo mutants -p wacp-transport \
-      --file src/auth_api_key.rs \
-      --file src/auth_session.rs \
-      --file src/auth_oauth.rs \
-      --file src/auth.rs \
+      --file wacp/crates/wacp-transport/src/auth_api_key.rs \
+      --file wacp/crates/wacp-transport/src/auth_session.rs \
+      --file wacp/crates/wacp-transport/src/auth_oauth.rs \
+      --file wacp/crates/wacp-transport/src/auth.rs \
       --output mutants.out \
       --no-shuffle
 ```
@@ -140,7 +144,7 @@ Notes on the steps:
 - name: Run mutants
   run: |
     cargo mutants -p wacp-tools \
-      --file src/execution.rs \
+      --file wacp/crates/wacp-tools/src/execution.rs \
       --output mutants.out \
       --no-shuffle
 ```
@@ -153,7 +157,7 @@ Notes on the steps:
 - name: Run mutants
   run: |
     cargo mutants -p console-core \
-      --file src/session_launcher.rs \
+      --file wacp-console/crates/console-core/src/session_launcher.rs \
       --output mutants.out \
       --no-shuffle
 ```
@@ -166,7 +170,7 @@ Notes on the steps:
 - name: Run mutants
   run: |
     cargo mutants -p console-core \
-      --file src/session_monitor.rs \
+      --file wacp-console/crates/console-core/src/session_monitor.rs \
       --output mutants.out \
       --no-shuffle
 ```
@@ -235,7 +239,7 @@ The aggregator is the authoritative output. Per-job summaries also exist (in the
 
 When a target falls below threshold or surfaces a surviving mutant that should be killed:
 
-1. **Reproduce locally.** `cargo mutants -p <crate> --file <file> --no-shuffle` on the same code reproduces the survivors. Output goes to `mutants.out/`.
+1. **Reproduce locally.** `cargo mutants -p <crate> --file <file> --no-shuffle` on the same code reproduces the survivors. `<file>` is the path from the workspace root (e.g. `wacp/crates/wacp-transport/src/auth.rs`) — cargo-mutants matches path-separator globs against the source-tree root, not the crate root. Output goes to `mutants.out/`.
 2. **Classify the mutant.**
    - **Real coverage gap** — write a killer test. Run `cargo test` to confirm green pre-mutation. Run mutants again to confirm the mutant is now caught.
    - **Equivalent mutant** — the mutation produces semantically-equivalent behavior (e.g., `>` → `>=` in a loop bound that's never hit at the boundary). Add `// mutants:skip` directly above the line with a one-line comment justifying why.

@@ -50,12 +50,15 @@ jobs:
           tool: cargo-mutants
 
       - name: Run mutants
+        # --file patterns with path separators match from the workspace root
+        # (per cargo-mutants docs — skip_files.md). Full paths required since
+        # M0–M7 nested the crate under wacp/crates/.
         run: |
           cargo mutants -p wacp-transport \
-            --file src/auth_api_key.rs \
-            --file src/auth_session.rs \
-            --file src/auth_oauth.rs \
-            --file src/auth.rs \
+            --file wacp/crates/wacp-transport/src/auth_api_key.rs \
+            --file wacp/crates/wacp-transport/src/auth_session.rs \
+            --file wacp/crates/wacp-transport/src/auth_oauth.rs \
+            --file wacp/crates/wacp-transport/src/auth.rs \
             --no-shuffle
         continue-on-error: true
 
@@ -91,7 +94,7 @@ jobs:
       - name: Run mutants
         run: |
           cargo mutants -p wacp-tools \
-            --file src/execution.rs \
+            --file wacp/crates/wacp-tools/src/execution.rs \
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)
@@ -125,7 +128,7 @@ jobs:
       - name: Run mutants
         run: |
           cargo mutants -p console-core \
-            --file src/session_launcher.rs \
+            --file wacp-console/crates/console-core/src/session_launcher.rs \
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)
@@ -159,7 +162,7 @@ jobs:
       - name: Run mutants
         run: |
           cargo mutants -p console-core \
-            --file src/session_monitor.rs \
+            --file wacp-console/crates/console-core/src/session_monitor.rs \
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)

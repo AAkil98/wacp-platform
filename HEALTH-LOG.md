@@ -536,6 +536,43 @@ The runtime's config validator correctly refused to start (two services can't sh
 
 **Preventive heuristic.** Any integration test that spawns N services on ephemeral ports should assume port collision is possible and either serialize test runs (we do — `workers: 1` in Playwright config, but cargo test runs file-parallel) or pre-reserve ports transactionally. The current harness's comment acknowledges the risk; a future flake that hits in multi-CI-retry-land is a signal to prioritise the holder-listener fix.
 
+## 15. CI workflow drift after the M0–M7 monorepo nesting (observed 2026-04-20)
+
+### 15.1 `ci-mutation.yml` — `--file` globs rooted at pre-merge crate layout, matched zero files post-merge
+
+Surfaced by the first scheduled run of `.github/workflows/ci-mutation.yml` on 2026-04-20 06:13 UTC (cron `0 4 * * 1`). All four per-target jobs — `wacp-transport (auth)`, `wacp-tools (execution)`, `console-core (session_launcher)`, `console-core (session_monitor)` — failed within 22–29 s. The cargo-mutants step ran cleanly but logged:
+
+```
+WARN No mutants found under the active filters
+Found 0 mutants to test
+```
+
+`scripts/mutation-score.py` then correctly refused the empty outcomes file:
+
+```
+##[warning]no outcomes.json in mutants.out — build error?
+FAIL wacp-transport-auth: no mutants ran (build error or empty target)
+```
+
+**Observation.** Each job passed filters like `--file src/auth_api_key.rs`. Per cargo-mutants' docs ([skip_files.md](https://github.com/sourcefrog/cargo-mutants/blob/main/book/src/skip_files.md)):
+
+> *"If the glob contains a path separator then it matches against the path from the root of the source tree."*
+
+After the M0–M7 merger, the source-tree root is `wacp-platform/`, and the four crates live at `wacp/crates/wacp-transport/`, `wacp/crates/wacp-tools/`, and `wacp-console/crates/console-core/`. So `src/auth_api_key.rs` as a pattern looks for a file literally at `wacp-platform/src/auth_api_key.rs` — which doesn't exist. Zero matches → zero mutants tested. The `-p <crate>` scoping works (package lookup is name-based) but the `--file` filter is a separate post-glob stage that's agnostic to `-p`.
+
+**Why it matters.** The pipeline reported a RED status, which is the right *outward* signal — but for the wrong reason. An engineer triaging the notification could reasonably assume the targets were mutation-tested and fell below threshold; the actual state is that no mutants ran at all. The 85 % threshold policy (spec §5) was effectively unenforced from the first scheduled run until this fix.
+
+More broadly: the mutation spec (`wcon-mutation-testing.md`) was written in the pre-merge era (2026-04-17) when `wacp/` was a standalone crate root, and the workflow was transliterated from the spec's example YAML without accounting for the workspace nesting that M0–M7 introduced. The same class of drift can bite any CI step that assumes `src/...` is unambiguous.
+
+**Status.** Resolved in the `fix/ci-mutation-paths` branch landing 2026-04-20. `.github/workflows/ci-mutation.yml` now uses full workspace-relative paths (`wacp/crates/wacp-transport/src/auth_api_key.rs`, etc.). Spec §4.1–§4.4 updated in lockstep, spec §7 reproduction guidance clarified to note that `<file>` is workspace-root-relative. Verified via `workflow_dispatch` before ff to dev.
+
+**Prevention.**
+1. *Rule:* When crate paths change (e.g., another merger or split), grep every `.github/workflows/*.yml` for crate-relative paths and `cargo *` invocations that assume a particular CWD. The mutation spec says `cargo mutants -p <crate> --file <path>` — always mentally fill `<path>` with `wacp/crates/<crate>/...` or `wacp-console/crates/<crate>/...` going forward.
+2. *Watch-list:* the other workflows (`ci-wacp.yml`, `ci-console.yml`, `ci-lint.yml`, `coverage.yml`, `release-*.yml`) were not affected because they use `-p <pkg>` scoping only — `cargo` resolves packages by name, not path. But any flag that takes a file path (`--manifest-path`, `--out-dir`, path args to scripts) remains vulnerable.
+3. *Retro:* the M0–M7 checklist at `impl/merge-execution-log.md` covered workspace wiring, proto codegen, and `cargo test` parity but didn't enumerate file-path-sensitive workflows. The mutation workflow was wired *after* M0–M7 (at `6f32ade`, 2026-04-17), so the drift was author-introduced rather than migration-introduced — a fresh spec-vs-implementation gap, not a stale one.
+
+**Cross-refs.** AUDIT §13.7.9 (mutation-testing pipeline), spec `wcon-mutation-testing` §3.3 + §4.1–§4.4 + §7, `scripts/mutation-score.py`, `scripts/mutation-summary.py`. Unrelated to §14 port flake (different class of CI issue).
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

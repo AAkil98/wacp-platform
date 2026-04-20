@@ -208,9 +208,9 @@ Per HEALTH-LOG §12.5. Orthogonal to all other phases.
 | P1 topic → dev ff | `c07af7f` on dev | 2026-04-19 | clean ff of 6 topic commits; topic branch deleted locally, `aakil98/ci/pre-launch-closeout` retained |
 | (post-ff SEED 16th pass + seed-refresh SKILL.md invariants) | direct-to-dev | 2026-04-19 | — |
 | P2 branch protection | (repo admin) | 2026-04-20 | `gh api PUT` on `main` + `dev`: linear history on, force-push off, deletion off, `enforce_admins=false` |
-| P3 ff dev→main | — | — | uses `ff-main` skill |
-| P4 Bucket B refactor | — | — | per tech-debt §3.2; may spawn its own sub-plan |
-| P5 §12.5 bisect | — | — | update HEALTH-LOG.md with outcome |
+| P3 ff dev→main | `338e4f2` on main | 2026-04-20 | `ff-main` skill; range `d0be941..338e4f2`, 11 commits (P1 batch + 2 SEED refreshes + P2 doc commit) |
+| P4 Bucket B refactor | `b076711..55c29ab` on dev | 2026-04-20 | 13-commit ff of `refactor/file-splits`; spawned `impl/bucket-b-refactor-plan.md` sub-plan with per-phase detail + deviation rationale |
+| P5 §12.5 bisect + fix | `7c4ee1d` on dev | 2026-04-20 | root cause: `/api/roles` returns `PaginatedResponse<T>`, frontend cast to `T[]` + `.map` called in form render; `Array.isArray` branch lets either shape through. Golden-path E2E un-skipped and passing. See HEALTH-LOG §12.5. |
 
 ---
 

@@ -500,6 +500,25 @@ Two-test smoke (`tests/mock_coordinator_smoke.rs`) verifies both legs: forward p
 
 Cargo.toml edit — moved `tonic`, `tokio-stream`, `wacp-transport` from `[dev-dependencies]` to `[dependencies]` (the new mock lives in `src/` so tests-only deps wouldn't satisfy it). No behaviour change for existing suites; build time unchanged.
 
+## 14. Integration-test port-allocation TOCTOU flake (observed 2026-04-20)
+
+### 14.1 `RuntimeHarness::pick_port` — occasional duplicate-port collision
+
+Surfaced while waiting on CI for the `refactor/file-splits` ff at `55c29ab`. `ci-console` on GitHub Actions failed with:
+
+```
+fatal: configuration error: validation error: server.agent_listen and server.coordinator_listen:
+  duplicate listen address: [::1]:40279
+```
+
+The runtime's config validator correctly refused to start (two services can't share a port), but the test harness had called `pick_port()` five times in sequence expecting five unique ports — and twice the OS returned `40279`. Root cause: `pick_port()` at `wacp-console/integration/src/runtime_harness.rs:232` binds to `[::1]:0`, captures the assigned port, then closes the listener before the runtime binds. The port stays in `TIME_WAIT` briefly, but not always long enough to prevent a second `bind(":0")` from rolling the same number. The author explicitly flagged the TOCTOU window in the file comment.
+
+**Impact.** `account_lockout_after_five_failed_logins` in `auth_matrix.rs` failed; the flaky run triggered the HEALTH monitor and wasted ~20 min of session time reviewing whether the Bucket-B refactor had broken something. It hadn't — a `gh run rerun --failed` on the same SHA passed on retry.
+
+**Fix sketch (not landed yet).** Replace `pick_port` with a holder-listener pattern: `TcpListener::bind(":0")` stays open, the harness passes the port in but also passes the `StdListener` as a pre-opened fd (requires a `--listen-fd` CLI mode on `wacp-runtime`), and only drops the listener after the runtime's `bind()` succeeds. Alternatively: allocate a port range once at harness-construction time and deterministically partition it across the five services within a single test (still TOCTOU-vulnerable cross-test, but zero in-test collisions). Either fix is ~2–3 h; not blocking.
+
+**Preventive heuristic.** Any integration test that spawns N services on ephemeral ports should assume port collision is possible and either serialize test runs (we do — `workers: 1` in Playwright config, but cargo test runs file-parallel) or pre-reserve ports transactionally. The current harness's comment acknowledges the risk; a future flake that hits in multi-CI-retry-land is a signal to prioritise the holder-listener fix.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

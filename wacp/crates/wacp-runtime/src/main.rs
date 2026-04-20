@@ -1,4 +1,5 @@
 mod agent;
+mod agent_service;
 mod channel_backend;
 pub mod config;
 mod conversions;

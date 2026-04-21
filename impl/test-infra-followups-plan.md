@@ -155,15 +155,15 @@ After all three commits land, trigger a `workflow_dispatch` run of `ci-mutation.
 
 ## 4. Acceptance Criteria
 
-- [ ] Phase A ff'd to `dev`: merged lcov in Codecov; frontend coverage baseline updated.
-- [ ] Phase B ff'd to `dev`: 100× stress-test passes; HEALTH-LOG §14.1 struck through.
-- [ ] Phase C ff'd to `dev`: `ci-mutation.yml` pins `cargo-mutants` to `^27`; `scripts/test_mutation_scripts.sh` runs in `ci-lint`.
-- [ ] Phase D ff'd to `dev`: post-triage `workflow_dispatch` shows all four mutation targets ≥ 95 % **or** each remaining survivor carries `#[mutants::skip]` + comment.
-- [ ] `cargo test -p wacp-transport -p wacp-tools -p console-core` green.
-- [ ] `cargo test -p console-integration --test lifecycle --test chaos` green.
-- [ ] `pnpm test:all` green under `E2E_COVERAGE=1`.
-- [ ] HEALTH-LOG §14.1 and §15.2 updated with resolution pointers.
-- [ ] AUDIT-2026-04-15.md §13.9 table updated with entries 13.9.5–13.9.7 (and 13.9.4 closed).
+- [x] Phase A ff'd to `dev` (`f6e1647`): merged lcov in Codecov via Playwright V8 + c8 + same-flag upload. CI `frontend-e2e` job green first run.
+- [x] Phase B ff'd to `dev` (`4aef1df`): batch-pick eliminates intra-harness collision; 1000-iteration regression test; HEALTH-LOG §14.1 struck through.
+- [x] Phase C ff'd to `dev` (`d9e9c60`): `ci-mutation.yml` pins `cargo-mutants` to `^27`; `scripts/test_mutation_scripts.sh` runs in `ci-lint`. CI `mutation-scripts` job green first run.
+- [x] Phase D ff'd to `dev` (`7c11186..f5658cf`, 5 commits): all 4 mutation targets at 100 % locally — `wacp-tools` + `session_launcher` via boundary tests; `wacp-transport` via 4 `#[mutants::skip]` helpers documenting the time-unreachable residual.
+- [x] `cargo test -p wacp-transport -p wacp-tools -p console-core` green (per-phase local runs — 209 + 136 + 188 = 533 tests).
+- [x] `cargo test -p console-integration --test lifecycle --test chaos` green (Phase B local run — 6/6).
+- [x] `pnpm test:all` green under `E2E_COVERAGE=1` — validated in CI `frontend-e2e` job on Phase A push (7/7 E2E passed with coverage, c8 report emitted, Codecov upload accepted).
+- [x] HEALTH-LOG §14.1 and §15.2 updated with resolution pointers.
+- [x] AUDIT-2026-04-15.md §13.9 table updated with entries 13.9.5–13.9.7 (and 13.9.4 closed).
 - [ ] Plan archived via `archive-plan` skill.
 - [ ] SEED refreshed via `seed-refresh` skill at the batch boundary.
 
@@ -195,11 +195,11 @@ After all three commits land, trigger a `workflow_dispatch` run of `ci-mutation.
 
 | Phase | Commit(s) | Date | Note |
 |---|---|---|---|
-| A | TBD | — | Playwright `--coverage` merge |
-| B | TBD | — | `pick_port` TOCTOU fix |
-| C | TBD | — | Mutation-pipeline hardening |
-| D | TBD | — | Three single-survivor triages |
-| E | TBD | — | Verify + archive |
+| A | `f6e1647` | 2026-04-21 | Playwright V8 coverage → c8 → Codecov `frontend` flag. Deviation from plan's merge-script: same-flag Codecov upload unions vitest + Playwright lcovs. |
+| B | `4aef1df` | 2026-04-21 | Batch-pick eliminates intra-harness collision; 1000-iter regression test. Plan deviation: batch-pick (~45 min) vs. full holder-listener (~2–3 h+). Cross-harness TOCTOU residual accepted. |
+| C | `d9e9c60` | 2026-04-21 | `cargo-mutants` pinned to `^27` + parser-fixture regression test wired into ci-lint. CI `mutation-scripts` job green first run. |
+| D | `7c11186..f5658cf` | 2026-04-21 | 5 commits across 3 targets + fmt fixup + HEALTH-LOG update. wacp-tools + session_launcher killed via boundary tests; wacp-transport marked via 4 `#[mutants::skip]` helpers. Plan deviation: skip helpers instead of clock-injection refactor (plan-documented alternative). |
+| E | _in flight_ | 2026-04-21 | Close + archive. AUDIT §13.9.4–§13.9.7 closed. |
 
 ---
 

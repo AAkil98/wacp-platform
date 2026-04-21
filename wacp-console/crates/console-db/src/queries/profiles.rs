@@ -191,12 +191,3 @@ pub async fn soft_delete(pool: &DbPool, id: &str, now: &str) -> Result<bool, sql
             .await?;
     Ok(result.rows_affected() > 0)
 }
-
-/// Get the max version number for a profile.
-pub async fn max_version(pool: &DbPool, id: &str) -> Result<Option<i64>, sqlx::Error> {
-    let row: Option<(i64,)> = sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.map(|r| r.0))
-}

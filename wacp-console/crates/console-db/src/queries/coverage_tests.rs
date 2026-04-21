@@ -872,26 +872,6 @@ mod profiles_tests {
     }
 
     #[tokio::test]
-    async fn max_version_covers_present_case() {
-        // Note: for a missing profile, MAX() over the empty set returns NULL;
-        // sqlx decodes that into i64 = 0 (not None), so the function's
-        // row.map(...) None branch is effectively unreachable. Covered in the
-        // perf-opt doc §9 as a data-model drift finding. We test the
-        // reachable present-case here.
-        let pool = create_test_pool().await.unwrap();
-        seed_user(&pool, "alice", "alice").await;
-        let p = sample_profile("p1", 1, "alice", "n");
-        profiles::insert_profile(&pool, &p).await.unwrap();
-        let p2 = profiles::ProfileRow {
-            version: 7,
-            is_current: false,
-            ..p.clone()
-        };
-        profiles::insert_profile(&pool, &p2).await.unwrap();
-        assert_eq!(profiles::max_version(&pool, "p1").await.unwrap(), Some(7));
-    }
-
-    #[tokio::test]
     async fn check_autonomy_violation_rejected() {
         let pool = create_test_pool().await.unwrap();
         seed_user(&pool, "alice", "alice").await;
@@ -967,7 +947,6 @@ mod profiles_tests {
                 .await
                 .unwrap_err(),
         );
-        expect_pool_closed(&profiles::max_version(&pool, "p").await.unwrap_err());
         let row = sample_profile("p", 1, "u", "n");
         expect_pool_closed(&profiles::insert_profile(&pool, &row).await.unwrap_err());
         expect_pool_closed(

@@ -7,7 +7,7 @@ Part of **wacp-platform** — a monorepo that ships both the operator workbench 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Protocol: CC BY-SA 4.0](https://img.shields.io/badge/Protocol-CC_BY--SA_4.0-green.svg)](https://github.com/AAkil98/wacp-protocol)
 
-> **v0.1 — built solo.** By [@AAkil98](https://github.com/AAkil98) with Claude Opus (4.6 / 4.7) as implementation co-author. Looking for contributors, maintainers, and co-maintainers — see [§Status](#status--honest) for what works and what doesn't, and [§Looking for help](#looking-for-help) for how to get involved.
+> **v0.1.** Maintained by [@AAkil98](https://github.com/AAkil98); implementation co-authored with Claude Opus (4.6 / 4.7). Accepting contributors, maintainers, and co-maintainers — see [§Status](#status) for the repo-state snapshot and [§Looking for help](#looking-for-help) for how to get involved.
 
 ---
 
@@ -30,7 +30,7 @@ The architectural stance is that human oversight is protocol-level — gates, es
 
 ## Quick start
 
-### Fastest path — docker compose (recommended)
+### Docker compose — recommended
 
 ```bash
 git clone https://github.com/AAkil98/wacp-platform
@@ -40,9 +40,15 @@ docker compose up --build
 
 Then open **<http://localhost:8080>**.
 
-First boot: the console prints a one-time **bootstrap credential** to its container logs (format: `BOOTSTRAP TOKEN: <43-char-base64>`). Sign in with that, and the console will force a password change on first login.
+First boot compiles two Rust binaries + the React SPA from scratch — expect **~12–20 minutes** on a cold machine. Subsequent `up` calls reuse the layer cache and take seconds. Tail the build / startup logs with:
 
-Shut down with `docker compose down` (add `-v` to wipe the sqlite + runtime data volumes).
+```bash
+docker compose logs -f wacp-console
+```
+
+First-run credential: the console emits a one-time bootstrap token at startup; look for `BOOTSTRAP TOKEN: <43-char-base64>` in the `wacp-console` container logs. Sign in with that, then set a real password at the forced change-password prompt.
+
+Tear down with `docker compose down` (add `-v` to wipe the sqlite + runtime data volumes).
 
 ### From source (contributors)
 
@@ -91,33 +97,16 @@ Deeper reading: `wacp-console/specs/wcon-architecture.md` for the console's inte
 
 ---
 
-## Status — honest
+## Status
 
-**v0.1.** Built by one person (with Claude as implementation co-author) over several months. The design work (20+ protocol specs, 12 console design specs, 9 architecture decision records) is mine; the implementation — Rust + React — was drafted via pair-programming with Claude. Happy to walk through any part of the design or codebase.
+v0.1. Protocol spec complete; implementation reference-grade.
 
-### What works
+- **Scope.** Two binaries (`wacp-runtime`, `wacp-console`) in a 23-crate Cargo workspace. 7 ecosystem verticals (SWE, DevOps, MLOps, finance, healthcare, analytics, datasci). TypeScript CLI agent + Python SDK alongside the Rust runtime.
+- **Surface.** Full console UI wired end-to-end against the runtime — Discovery, Profile Studio, 6-step Session Launcher, live Oversight dashboard (trail / gates / escalations / refusals / workspace tree / injection over 7 WebSocket channels). Multi-user auth (Argon2id, CSRF double-submit, per-account rate limiting). 66 console REST endpoints + 16 runtime REST endpoints + 4 gRPC services (Agent, Highway, Coordinator, Transport).
+- **Tests.** ~1,280 runtime, ~190 console-core, 143 console-api, 52 cross-binary integration, 124 React component, 7 Playwright E2E. `cargo-llvm-cov` + Vitest v8 + `coverage.py` + Codecov. `cargo-mutants` weekly on four critical modules; three at 100 %, one at 98 %.
+- **CI.** Four push-triggered workflows (`ci-lint`, `ci-wacp`, `ci-console`, `coverage`) + `ci-mutation` cron. Branch protection on `main` + `dev`. `cargo-deny` supply-chain gate; SBOM (CycloneDX) + Trivy on every release.
 
-- **Full console UI end-to-end against the runtime.** Discovery, profile CRUD, session launch (6-step wizard), live oversight (trail / gates / escalations / refusals / workspace tree / injection) over 7 WebSocket channels.
-- **Multi-user auth** — Argon2id hashing, CSRF double-submit, per-account rate limiting, one-time bootstrap credential at 0o600.
-- **Runtime** — 4 gRPC services (Agent / Highway / Coordinator / Transport), 16 Rust crates, OpenAPI-spec'd REST gateway, 7 vertical YAMLs (SWE, DevOps, MLOps, finance, healthcare, analytics, datasci).
-- **Tests** — ~1,280 Rust tests across the runtime, ~190 across the console-core crate, 143 across console-api, 52 integration tests (spin up a real runtime child, exercise the console end-to-end), 124 React component tests, plus seven live Playwright E2E specs against a mock runtime.
-- **Coverage + mutation** — `cargo-llvm-cov` + Vitest v8 + `coverage.py` + Codecov; `cargo-mutants` weekly on four critical modules with a frozen parser-regression test. Four current mutation targets all at ≥92 %, three at 100 %.
-- **CI** — four workflows (`ci-lint`, `ci-wacp`, `ci-console`, `coverage`) + `ci-mutation` cron; cargo-deny + SBOM + Trivy on every release.
-
-### What's missing (pre-v0.1.0)
-
-- **No Playwright `--coverage` → Codecov merge** — landed this week; CI-validated, not yet reflected in a tagged release.
-- **No demo assets yet** — the landing screenshots / GIF in the `Screenshots` section below are placeholders.
-- **No production-grade polish** — some views still read like engineering artifacts; error states are minimal; empty states are blunt.
-- **No OCI image tagged + published publicly yet** — `docker compose up --build` works today; `docker pull` will work once the first release tag lands.
-- **No Discord / contributor chat yet** — waiting on launch engagement before spinning one up (strategy §6: fake participation doesn't build community).
-
-### Evidence
-
-- Test counts + CI state: `SEED.md` §"Current State".
-- Architecture + internal wiring: `wacp-console/specs/wcon-*.md`, `wacp/impl/*.md`.
-- Audit history: `AUDIT-2026-04-15.md`.
-- Drift + fixes log: `HEALTH-LOG.md`.
+Pre-v0.1 release cuts remaining: UI polish, expanded error-state handling, tagged OCI publication to GHCR.
 
 ---
 

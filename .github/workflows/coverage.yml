@@ -173,6 +173,91 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  frontend-e2e:
+    name: Coverage — frontend E2E (Playwright V8)
+    runs-on: ubuntu-latest
+    # Mirrors `ci-console.yml::e2e` setup (Rust + pnpm + Chromium + backends),
+    # but passes E2E_COVERAGE=1 so the Playwright fixture collects V8 coverage
+    # per page and c8 emits an lcov with `src/**` resolved via inline sourcemaps
+    # (vite.config.ts gates sourcemaps behind the same env flag).
+    # Uploads under the same `frontend` Codecov flag as the Vitest job — same-
+    # flag uploads for a given commit are unioned, so Playwright-covered paths
+    # add to the per-file coverage instead of landing in a parallel metric.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage-frontend-e2e
+
+      - uses: rui314/setup-mold@v1
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: wacp-console/frontend/pnpm-lock.yaml
+
+      - name: Build frontend with inline sourcemaps
+        working-directory: wacp-console/frontend
+        env:
+          E2E_COVERAGE: "1"
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build wacp-console + wacp-mock-runtime
+        run: |
+          cargo build \
+            -p wacp-console --bin wacp-console \
+            -p console-test-support --bin wacp-mock-runtime
+        env:
+          CARGO_BUILD_JOBS: "2"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('wacp-console/frontend/pnpm-lock.yaml') }}
+
+      - name: Install Chromium (via Playwright)
+        working-directory: wacp-console/frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests with V8 coverage
+        working-directory: wacp-console/frontend
+        run: pnpm test:e2e:coverage
+
+      - name: Generate lcov from raw V8 coverage
+        working-directory: wacp-console/frontend
+        run: pnpm coverage:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-frontend-e2e
+          path: wacp-console/frontend/coverage/e2e/lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: wacp-console/frontend/coverage/e2e/lcov.info
+          flags: frontend
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   python:
     name: Coverage — sdk-python (branch)
     runs-on: ubuntu-latest

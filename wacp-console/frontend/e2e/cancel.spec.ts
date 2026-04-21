@@ -6,7 +6,7 @@
 // the mock runtime cannot yet drive the session-launcher far enough for a
 // session to become active + cancellable.
 
-import { test } from "@playwright/test";
+import { test } from "./fixtures";
 
 test.skip("cancel from the launch wizard returns to sessions list with draft state preserved", () => {
   // Unskip requirements:

@@ -7,7 +7,7 @@
 // buttons in the shipping surface. See `wcon-profiles` §4 for the spec and
 // perf-opt §2.5 for the drift-resolution protocol.
 
-import { test } from "@playwright/test";
+import { test } from "./fixtures";
 
 test.skip("export profile YAML, delete, import — fields match, new UUID", () => {
   // Unskip requirements:

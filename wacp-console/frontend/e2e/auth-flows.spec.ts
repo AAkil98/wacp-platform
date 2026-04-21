@@ -10,7 +10,7 @@
 //   - API-token create + use (not a Settings-page affordance in the shipping
 //     UI; needs a drift check first — see perf-opt §2.5).
 
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import {
   ADMIN_USERNAME,
   FINAL_ADMIN_PASSWORD,

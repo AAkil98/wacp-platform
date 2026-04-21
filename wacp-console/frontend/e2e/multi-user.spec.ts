@@ -4,7 +4,7 @@
 // what their role permits. Stubbed because the D2 scope is "two specs
 // unskipped"; this one depends on fixtures that don't exist yet.
 
-import { test } from "@playwright/test";
+import { test } from "./fixtures";
 
 test.skip("admin can edit users; operator cannot; viewer cannot", () => {
   // To unskip this test, the harness needs:

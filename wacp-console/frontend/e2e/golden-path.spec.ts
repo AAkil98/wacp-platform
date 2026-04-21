@@ -6,7 +6,7 @@
 // mock runtime can faithfully serve. The launch → gate → complete tail is
 // skipped with a pointer to what's needed to unskip.
 
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 import { ensureAdminOnDiscovery } from "./helpers/admin";
 
 test.describe.configure({ mode: "serial" });

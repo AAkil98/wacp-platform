@@ -322,6 +322,35 @@ async fn panic_message_truncated_at_4096() {
 }
 
 #[tokio::test]
+async fn panic_message_exactly_4096_bytes_is_not_truncated() {
+    // Boundary test for the `msg.len() > 4096` check in invoke_with_timeout
+    // (execution.rs:126). A message of exactly 4096 bytes must pass through
+    // unchanged — only lengths STRICTLY greater than 4096 get truncated to
+    // "<4093-byte-prefix>..." Pins the `>` vs `>=` semantics.
+    let cap = test_capability();
+    let exact_panic_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {
+        panic!("{}", "x".repeat(4096));
+    };
+    let result = execute(
+        &exact_panic_handler,
+        &cap,
+        "test",
+        &json!({}),
+        &default_config(),
+        json!({"value": 1}),
+        default_opts(),
+    )
+    .await;
+    let err = result.unwrap_err();
+    assert_eq!(err.code, ToolErrorCode::InternalError);
+    assert_eq!(err.message.len(), 4096, "4096-byte message length preserved");
+    assert!(
+        !err.message.ends_with("..."),
+        "4096-byte message must NOT be truncated — current message: ends_with('...')",
+    );
+}
+
+#[tokio::test]
 async fn handler_panic_without_message() {
     let cap = test_capability();
     let panicking_handler = |_ctx: &ToolContext, _args: serde_json::Value| async move {

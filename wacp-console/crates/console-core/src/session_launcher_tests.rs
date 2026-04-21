@@ -1298,3 +1298,44 @@ async fn launch_step_display_and_as_str() {
     assert_eq!(format!("{}", LaunchStep::SubmitGoal), "submit_goal");
     assert_eq!(format!("{}", LaunchStep::Finalize), "finalize");
 }
+
+// =====================================================================
+// build_directive — allow/deny filter boundary
+// =====================================================================
+
+#[tokio::test]
+async fn build_directive_keeps_allow_when_deny_is_non_empty_and_disjoint() {
+    // Boundary test for the `d == t` comparison in build_directive's
+    // allow/deny filter (session_launcher.rs:492:52). Under the `!=`
+    // mutant, `deny.iter().any(|d| d != t)` evaluates to `true` for any
+    // non-empty deny whose elements aren't all equal to `t`, so the
+    // filter incorrectly drops tools that are present in allow but
+    // absent from deny. A profile with `allow=["keep-me"]`,
+    // `deny=["drop-this"]` pins the original `==` semantics: "keep-me"
+    // must survive the filter.
+    let db = create_test_pool().await.expect("test pool");
+    insert_user(&db, "u-1").await;
+
+    let mut profile = mk_profile("p-deny");
+    profile.tool_allowlist = Some(r#"["keep-me"]"#.into());
+    profile.tool_denylist = Some(r#"["drop-this"]"#.into());
+    insert_profile(&db, &profile).await;
+
+    let session = mk_session("s-deny");
+    console_db::queries::sessions::insert_session(&db, &session)
+        .await
+        .expect("insert session");
+    let mut asgn = mk_assignment("a-deny", "s-deny", 0, "p-deny");
+    asgn.profile_id = "p-deny".into();
+    asgn.profile_version = 1;
+
+    let (_payload, tools, _prepared) = build_directive(&db, &session, &asgn)
+        .await
+        .expect("build_directive");
+
+    assert_eq!(
+        tools,
+        vec!["keep-me".to_string()],
+        "allow-minus-deny should keep tools not in deny — got {tools:?}",
+    );
+}

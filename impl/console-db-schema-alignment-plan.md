@@ -151,15 +151,15 @@ Commit message: `fix(console-db): §9.2 — delete orphan max_version (zero prod
 ## 4. Acceptance Criteria
 
 - [x] Phase A decision memo complete in §3.1 + §3.2 with chosen path + caller audit.
-- [ ] HEALTH-LOG §9.1 struck through with resolution pointer (path + commit SHA).
-- [ ] HEALTH-LOG §9.2 struck through with resolution pointer (path + commit SHA).
-- [ ] `cargo test -p console-db` green.
-- [ ] `cargo test -p console-core` green (≥190 lib tests).
-- [ ] `cargo test -p console-api` green.
-- [ ] `cargo test -p console-integration` green on at least lifecycle + launch_failure_matrix + chaos + cross_session (the suites that exercise session_assignments).
-- [ ] `cargo clippy -p console-db -p console-core -p console-api -- -D warnings` clean (matches CI; §16-deferred pre-existing lints not in scope).
-- [ ] `cargo fmt --check` clean.
-- [ ] AUDIT-2026-04-15.md has a follow-up entry noting the schema alignment.
+- [x] HEALTH-LOG §9.1 struck through with resolution pointer (Path A + `2921ecc`).
+- [x] HEALTH-LOG §9.2 struck through with resolution pointer (Path C + `a32bd02`).
+- [x] `cargo test -p console-db` green — 96/96 (was 98 pre-Phase-B; retired `not_null_violation_when_profile_id_is_none` + `max_version_covers_present_case`).
+- [x] `cargo test -p console-core` green — 188/188 (was 190; retired the 2 `derive_slots` tests as ripple of the §9.1 fix).
+- [x] `cargo test -p console-api` green — 143/143.
+- [x] `cargo test -p console-integration` green — 20/20 across lifecycle (3) + chaos (3) + launch_failure_matrix (10) + cross_session (4).
+- [x] `cargo clippy -p console-db -p console-core -p console-api -- -D warnings` clean (matches CI; §16-deferred pre-existing lints not in scope).
+- [x] `cargo fmt --check` clean.
+- [x] AUDIT-2026-04-15.md has a follow-up entry noting the schema alignment — §13.9.1 + §13.9.2.
 - [ ] Plan archived via `archive-plan` skill.
 - [ ] Topic branch ff'd to `dev`.
 
@@ -194,10 +194,10 @@ Residual risks for Phase B + C:
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| A | _pending_ | 2026-04-20 | Decision memo locked: §9.1 Path A (tighten struct + ripple-remove `derive_slots`); §9.2 Path C (delete `max_version`; plan deviation, zero production callers) |
-| B | TBD | — | §9.1 resolution |
-| C | TBD | — | §9.2 resolution |
-| D | TBD | — | Verify + archive |
+| A | `5ff1946` | 2026-04-20 | Decision memo locked: §9.1 Path A (tighten struct + ripple-remove `derive_slots`); §9.2 Path C (delete `max_version`; plan deviation, zero production callers). |
+| B | `2921ecc` | 2026-04-21 | §9.1 Path A. 11 files changed across 4 crates + docs (+64/−123). HEALTH-LOG §16 also filed (6 pre-existing test-only clippy drifts surfaced during verification). Plan Phase D gate narrowed to match CI. |
+| C | `a32bd02` | 2026-04-21 | §9.2 Path C (delete). 2 files changed (−30 lines). Zero `max_version` references remain. |
+| D | _in flight_ | 2026-04-21 | Verify + close. HEALTH-LOG §9.1 + §9.2 struck through; AUDIT §13.9 follow-up entries added; acceptance boxes ticked. Archive + ff next. |
 
 ---
 

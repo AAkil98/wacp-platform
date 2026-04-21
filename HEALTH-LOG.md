@@ -198,36 +198,40 @@ Writing the branch-coverage tests for `console-db` (audit §13.7.5, `testing.rs`
 
 ### 9.1 `session_assignments.profile_id` — type says Optional, schema says NOT NULL
 
-- `migrations/007_session_assignments.sql`: `profile_id TEXT NOT NULL`, `profile_version INTEGER NOT NULL`.
-- `queries/session_assignments.rs::SessionAssignmentRow`: `profile_id: Option<String>`, `profile_version: Option<i64>`.
-- `queries/session_assignments.rs::count_assigned`: `WHERE session_id = ? AND profile_id IS NOT NULL` — defensive clause for a case the schema does not allow.
+**Status: RESOLVED 2026-04-21** via `fix(console-db): §9.1 — tighten SessionAssignmentRow to match NOT NULL schema` (`2921ecc`) on `refactor/console-db-schema-alignment`, per plan `impl/archive/console-db-schema-alignment-plan.md` Phase B (Path A — tighten struct). Struct fields `profile_id: Option<String>` and `profile_version: Option<i64>` dropped their `Option` wrappers; `count_assigned`'s dead `IS NOT NULL` clause removed; `sessions.rs:155–175` auto-derivation block deleted (was a no-op — every insert returned `NotNullViolation` that `.ok()` silently swallowed); orphan `session_validation::derive_slots` + its 2 tests removed as ripple; 6 test-fixture sites dropped `Some(...)` wrappers; `not_null_violation_when_profile_id_is_none` retired (invariant now compile-time enforced).
 
-Consequence today: the `IS NOT NULL` filter in `count_assigned` is dead code against the current schema. A caller that constructs a `SessionAssignmentRow` with `profile_id: None` gets a `NotNullViolation` at `INSERT` time (covered by the new `not_null_violation_when_profile_id_is_none` test), *not* a compile error or a defaulted row. The API surface lies about the field being optional.
+~~- `migrations/007_session_assignments.sql`: `profile_id TEXT NOT NULL`, `profile_version INTEGER NOT NULL`.~~
+~~- `queries/session_assignments.rs::SessionAssignmentRow`: `profile_id: Option<String>`, `profile_version: Option<i64>`.~~
+~~- `queries/session_assignments.rs::count_assigned`: `WHERE session_id = ? AND profile_id IS NOT NULL` — defensive clause for a case the schema does not allow.~~
 
-Two possible resolutions — pick one, don't leave both:
-1. **Tighten the struct.** Change `profile_id: String` and `profile_version: i64`. The schema becomes the source of truth; callers can't represent an invalid state. Requires touching every construction site.
-2. **Loosen the schema.** If unassigned role slots are actually a valid transient state (e.g., a session configured mid-wizard where not every slot is filled yet), drop the NOT NULL constraint and let the struct's Optional stand. Then `count_assigned`'s defensive clause becomes load-bearing.
+~~Consequence today: the `IS NOT NULL` filter in `count_assigned` is dead code against the current schema. A caller that constructs a `SessionAssignmentRow` with `profile_id: None` gets a `NotNullViolation` at `INSERT` time (covered by the new `not_null_violation_when_profile_id_is_none` test), *not* a compile error or a defaulted row. The API surface lies about the field being optional.~~
 
-Either choice is defensible. What isn't defensible is keeping both: today the code pretends to support a state the database refuses to store.
+~~Two possible resolutions — pick one, don't leave both:~~
+~~1. **Tighten the struct.** Change `profile_id: String` and `profile_version: i64`. The schema becomes the source of truth; callers can't represent an invalid state. Requires touching every construction site.~~
+~~2. **Loosen the schema.** If unassigned role slots are actually a valid transient state (e.g., a session configured mid-wizard where not every slot is filled yet), drop the NOT NULL constraint and let the struct's Optional stand. Then `count_assigned`'s defensive clause becomes load-bearing.~~
+
+~~Either choice is defensible. What isn't defensible is keeping both: today the code pretends to support a state the database refuses to store.~~
 
 ### 9.2 `profiles::max_version` — NULL aggregate handling is ambiguous
 
-```rust
-let row: Option<(i64,)> = sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")
-    .fetch_optional(pool).await?;
-Ok(row.map(|r| r.0))
-```
+**Status: RESOLVED 2026-04-21** via `fix(console-db): §9.2 — delete orphan max_version (zero production callers)` (`a32bd02`) on `refactor/console-db-schema-alignment`, per plan `impl/archive/console-db-schema-alignment-plan.md` Phase C. Plan deviation from the two options below: Phase A grep surfaced **zero** production callers — the function was dead. Profile edit / rollback at `routes/profiles.rs:359` + `:537` compute `current.version + 1` inline where `current` came from `get_current(...)` (one fewer roundtrip, and the query isn't aggregate so the NULL-discriminant problem never arises). Function + 2 test references deleted; net −7 production lines, −21 test lines.
 
-SQLite's `MAX(...)` over an empty set returns NULL. sqlx decodes that NULL into `i64` = 0 (observed from the failing test run that expected `None` for a missing profile). So:
+~~```rust~~
+~~let row: Option<(i64,)> = sqlx::query_as("SELECT MAX(version) FROM profiles WHERE id = ?")~~
+~~    .fetch_optional(pool).await?;~~
+~~Ok(row.map(|r| r.0))~~
+~~```~~
 
-- `row.map(|r| r.0)` never hits the `None` branch — aggregate queries always produce one row.
-- For a missing profile, the function returns `Ok(Some(0))` — indistinguishable from "profile exists with version 0" (which the schema allows but is unusual).
+~~SQLite's `MAX(...)` over an empty set returns NULL. sqlx decodes that NULL into `i64` = 0 (observed from the failing test run that expected `None` for a missing profile). So:~~
 
-Impact is small — all current callers create a profile before asking for `max_version` — but the signature `Option<i64>` implies more than the implementation delivers. Either:
-1. Change the inner tuple to `Option<(Option<i64>,)>` (decode NULL explicitly) so missing vs. present is distinguishable, or
-2. Change the signature to `Result<i64, sqlx::Error>` with the understanding that "no rows" is encoded as 0.
+~~- `row.map(|r| r.0)` never hits the `None` branch — aggregate queries always produce one row.~~
+~~- For a missing profile, the function returns `Ok(Some(0))` — indistinguishable from "profile exists with version 0" (which the schema allows but is unusual).~~
 
-I'd lean toward (1) — the caller is currently doing `unwrap_or(0) + 1` anyway, and an explicit "no versions exist yet" signal is more honest than a sentinel.
+~~Impact is small — all current callers create a profile before asking for `max_version` — but the signature `Option<i64>` implies more than the implementation delivers. Either:~~
+~~1. Change the inner tuple to `Option<(Option<i64>,)>` (decode NULL explicitly) so missing vs. present is distinguishable, or~~
+~~2. Change the signature to `Result<i64, sqlx::Error>` with the understanding that "no rows" is encoded as 0.~~
+
+~~I'd lean toward (1) — the caller is currently doing `unwrap_or(0) + 1` anyway, and an explicit "no versions exist yet" signal is more honest than a sentinel.~~
 
 ### 9.3 Perf signals observed (or not)
 

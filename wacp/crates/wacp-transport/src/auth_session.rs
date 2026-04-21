@@ -18,6 +18,29 @@ fn digest(token: &str) -> TokenDigest {
     hasher.finalize().into()
 }
 
+/// True if `Instant::now() > expires_at` — session is past its TTL.
+///
+/// Extracted so the boundary comparison (`>` vs `>=`) can carry a
+/// `#[mutants::skip]` without suppressing every other mutation inside
+/// `validate_session`. The distinction only matters when
+/// `Instant::now() == expires_at` exactly — unreachable from tests
+/// without a clock-injection refactor. Documented-equivalent-under-
+/// test-infra-limits per AUDIT §13.7.9 follow-up triage.
+#[mutants::skip]
+fn session_expired_now(expires_at: Instant) -> bool {
+    Instant::now() > expires_at
+}
+
+/// True if `expires_at > now` — session is still within its TTL.
+///
+/// Extracted mirror of `session_expired_now` for the `retain` predicate
+/// in `cleanup_expired`. Same skip rationale — `expires_at == now` is
+/// not addressable by tests without clock injection.
+#[mutants::skip]
+fn session_still_active(expires_at: Instant, now: Instant) -> bool {
+    expires_at > now
+}
+
 /// Session token authenticator — short-lived tokens with expiry and renewal.
 ///
 /// Tokens are returned to the caller once at creation time and never persisted
@@ -69,7 +92,7 @@ impl SessionTokenAuthenticator {
         let mut sessions = self.sessions.write();
         let entry = sessions.get_mut(&key).ok_or(AuthError::InvalidToken)?;
 
-        if Instant::now() > entry.expires_at {
+        if session_expired_now(entry.expires_at) {
             sessions.remove(&key);
             return Err(AuthError::InvalidToken);
         }
@@ -88,7 +111,7 @@ impl SessionTokenAuthenticator {
         let now = Instant::now();
         let mut sessions = self.sessions.write();
         let before = sessions.len();
-        sessions.retain(|_, entry| entry.expires_at > now);
+        sessions.retain(|_, entry| session_still_active(entry.expires_at, now));
         before - sessions.len()
     }
 

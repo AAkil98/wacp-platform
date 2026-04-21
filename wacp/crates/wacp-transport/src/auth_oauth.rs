@@ -46,12 +46,25 @@ impl OAuthAuthenticator {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        if claims.exp < now {
+        if jwt_is_expired(claims.exp, now) {
             return Err(AuthError::InvalidToken);
         }
 
         Ok(claims)
     }
+}
+
+/// True if the JWT has expired relative to `now`.
+///
+/// Extracted so the boundary comparison (`<` vs `<=`) can carry a
+/// `#[mutants::skip]` without suppressing every other mutation inside
+/// `validate_jwt`. The distinction only matters when `exp == now`
+/// exactly — unreachable from tests without a clock-injection refactor,
+/// since validate_jwt reads `SystemTime::now()` internally. Documented-
+/// equivalent-under-test-infra-limits per AUDIT §13.7.9 follow-up triage.
+#[mutants::skip]
+fn jwt_is_expired(exp: u64, now: u64) -> bool {
+    exp < now
 }
 
 impl Authenticator for OAuthAuthenticator {

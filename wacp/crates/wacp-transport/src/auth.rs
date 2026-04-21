@@ -138,6 +138,22 @@ pub struct AuthRateLimiter {
 
 const MAX_TRACKED_IPS: usize = 10_000;
 
+/// True if `t` is strictly before `cutoff` — i.e., falls outside the
+/// rate-limiter's sliding window and should be pruned.
+///
+/// Extracted so the boundary comparison (`<` vs `<=`) can carry a
+/// `#[mutants::skip]` without suppressing every other mutation inside
+/// `AuthRateLimiter::check`. The `<` vs `<=` distinction is only
+/// observable when `t == cutoff` exactly — unreachable from external
+/// tests without a clock-injection refactor, since both `t` (push time)
+/// and `cutoff = Instant::now() - window` are produced from the
+/// monotonic clock we can't control. Documented-equivalent-under-test-
+/// infra-limits per AUDIT §13.7.9 follow-up triage.
+#[mutants::skip]
+fn is_before_cutoff(t: Instant, cutoff: Instant) -> bool {
+    t < cutoff
+}
+
 impl AuthRateLimiter {
     /// Create a rate limiter. max_failures=0 disables rate limiting.
     pub fn new(max_failures: u32, window_seconds: u32) -> Self {
@@ -156,7 +172,10 @@ impl AuthRateLimiter {
         let mut map = self.failures.lock();
         if let Some(timestamps) = map.get_mut(ip) {
             let cutoff = Instant::now() - self.window;
-            while timestamps.front().is_some_and(|t| *t < cutoff) {
+            while timestamps
+                .front()
+                .is_some_and(|t| is_before_cutoff(*t, cutoff))
+            {
                 timestamps.pop_front();
             }
             if timestamps.len() >= self.max_failures as usize {

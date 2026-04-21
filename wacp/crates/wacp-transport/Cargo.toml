@@ -25,6 +25,12 @@ utoipa = { version = "5", features = ["axum_extras", "yaml"] }
 futures = { workspace = true }
 tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["cors"] }
+# Provides `#[mutants::skip]` for cargo-mutants triage. The crate is a
+# no-op proc-macro (returns its input unchanged) — zero runtime cost,
+# minimal compile cost. Required for the boundary-helper functions in
+# auth.rs / auth_oauth.rs / auth_session.rs that document time-based
+# survivors per AUDIT §13.7.9.
+mutants = "0.0.3"
 
 [dev-dependencies]
 tokio = { workspace = true }

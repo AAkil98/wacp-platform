@@ -54,12 +54,15 @@ impl RuntimeHarness {
         bin_path: &str,
         ready_timeout: Duration,
     ) -> Result<Self, RuntimeHarnessError> {
-        let agent_port = pick_port()?;
-        let highway_port = pick_port()?;
-        let coordinator_port = pick_port()?;
-        let rest_port = pick_port()?;
-        let health_port = pick_port()?;
-        let metrics_port = pick_port()?;
+        // Pick all 6 ports in one batch so the OS cannot hand out the same
+        // port twice within a single harness (see HEALTH-LOG §14.1).
+        let ports = pick_ports_batch(6)?;
+        let agent_port = ports[0];
+        let highway_port = ports[1];
+        let coordinator_port = ports[2];
+        let rest_port = ports[3];
+        let health_port = ports[4];
+        let metrics_port = ports[5];
 
         let data_dir = TempDir::new()?;
         let bin_path = std::env::var("WACP_RUNTIME_BIN").unwrap_or_else(|_| bin_path.to_string());
@@ -225,20 +228,67 @@ impl Drop for RuntimeHarness {
     }
 }
 
-/// Bind a random ephemeral port, then close — we hand the number to the
-/// runtime via env-var. There's a small TOCTOU window where two
-/// harnesses race on the same port; mitigated by the ports staying
-/// "in use" via TIME_WAIT briefly after close, plus the random spread.
-fn pick_port() -> Result<u16, RuntimeHarnessError> {
-    let listener = std::net::TcpListener::bind("[::1]:0")
-        .map_err(|e| RuntimeHarnessError::PortAlloc(e.to_string()))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| RuntimeHarnessError::PortAlloc(e.to_string()))?
-        .port();
-    Ok(port)
+/// Pick N unique ephemeral ports by holding N `TcpListener`s open
+/// simultaneously. The OS will not assign the same port twice to open
+/// sockets in the same process, so the N ports returned are guaranteed
+/// to be pairwise distinct — eliminating the intra-harness collision
+/// documented in HEALTH-LOG §14.1.
+///
+/// A cross-harness TOCTOU window remains between the drop of these
+/// listeners and the runtime child's subsequent bind: another process
+/// could grab one of these ports in that window. The earlier
+/// single-port-at-a-time `pick_port()` had the same cross-harness race
+/// plus an intra-harness race that was observed in CI; this batched
+/// variant removes the intra-harness half.
+fn pick_ports_batch(n: usize) -> Result<Vec<u16>, RuntimeHarnessError> {
+    let listeners: Vec<std::net::TcpListener> = (0..n)
+        .map(|_| {
+            std::net::TcpListener::bind("[::1]:0")
+                .map_err(|e| RuntimeHarnessError::PortAlloc(e.to_string()))
+        })
+        .collect::<Result<_, _>>()?;
+    listeners
+        .iter()
+        .map(|l| {
+            l.local_addr()
+                .map(|a| a.port())
+                .map_err(|e| RuntimeHarnessError::PortAlloc(e.to_string()))
+        })
+        .collect()
+    // listeners drop here; ports enter TIME_WAIT briefly.
 }
 
 fn fmt_addr(port: u16) -> String {
     format!("[::1]:{port}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn pick_ports_batch_returns_unique_ports_across_1000_iterations() {
+        // Regression test for HEALTH-LOG §14.1. The pre-fix `pick_port()` was
+        // observed producing duplicate ports within a single six-call sequence.
+        // With the batched variant, 1000 iterations × 6 ports should find zero
+        // intra-batch duplicates (cross-batch collision is possible but not
+        // asserted here — that's the residual cross-harness race).
+        for i in 0..1000 {
+            let ports = pick_ports_batch(6).expect("pick 6 ports");
+            assert_eq!(ports.len(), 6, "iteration {i}: wrong count");
+            let unique: HashSet<u16> = ports.iter().copied().collect();
+            assert_eq!(
+                unique.len(),
+                ports.len(),
+                "iteration {i}: duplicate ports {ports:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn pick_ports_batch_handles_zero_and_one() {
+        assert_eq!(pick_ports_batch(0).unwrap().len(), 0);
+        assert_eq!(pick_ports_batch(1).unwrap().len(), 1);
+    }
 }

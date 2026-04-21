@@ -1,0 +1,3 @@
+sample: 66.7 % (2/3) [Caught=1 Missed=1 Timeout=1 Unviable=1 Failed=0]
+Surviving mutants (1):
+  src/foo.rs:58 — replace > with >=

@@ -44,10 +44,15 @@ jobs:
           version: "29.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install cargo-mutants
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-mutants
+      # Pin cargo-mutants to the v27.x line. The first scheduled run
+      # (2026-04-20, HEALTH-LOG §15.1 + §15.2) broke silently when v27
+      # renamed `Caught`/`Missed` → `CaughtMutant`/`MissedMutant` in
+      # outcomes.json; the scripts were never updated and reported 0/0
+      # for every target. Pinning prevents a future major-version bump
+      # from repeating that failure mode without first bumping the
+      # parser + the mutants-sample fixture in sync.
+      - name: Install cargo-mutants (pinned to ^27)
+        run: cargo install cargo-mutants --version '^27' --locked
 
       - name: Run mutants
         # --file patterns with path separators match from the workspace root
@@ -87,10 +92,15 @@ jobs:
         with:
           version: "29.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-mutants
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-mutants
+      # Pin cargo-mutants to the v27.x line. The first scheduled run
+      # (2026-04-20, HEALTH-LOG §15.1 + §15.2) broke silently when v27
+      # renamed `Caught`/`Missed` → `CaughtMutant`/`MissedMutant` in
+      # outcomes.json; the scripts were never updated and reported 0/0
+      # for every target. Pinning prevents a future major-version bump
+      # from repeating that failure mode without first bumping the
+      # parser + the mutants-sample fixture in sync.
+      - name: Install cargo-mutants (pinned to ^27)
+        run: cargo install cargo-mutants --version '^27' --locked
       - name: Run mutants
         run: |
           cargo mutants -p wacp-tools \
@@ -121,10 +131,15 @@ jobs:
         with:
           version: "29.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-mutants
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-mutants
+      # Pin cargo-mutants to the v27.x line. The first scheduled run
+      # (2026-04-20, HEALTH-LOG §15.1 + §15.2) broke silently when v27
+      # renamed `Caught`/`Missed` → `CaughtMutant`/`MissedMutant` in
+      # outcomes.json; the scripts were never updated and reported 0/0
+      # for every target. Pinning prevents a future major-version bump
+      # from repeating that failure mode without first bumping the
+      # parser + the mutants-sample fixture in sync.
+      - name: Install cargo-mutants (pinned to ^27)
+        run: cargo install cargo-mutants --version '^27' --locked
       - name: Run mutants
         run: |
           cargo mutants -p console-core \
@@ -155,10 +170,15 @@ jobs:
         with:
           version: "29.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install cargo-mutants
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-mutants
+      # Pin cargo-mutants to the v27.x line. The first scheduled run
+      # (2026-04-20, HEALTH-LOG §15.1 + §15.2) broke silently when v27
+      # renamed `Caught`/`Missed` → `CaughtMutant`/`MissedMutant` in
+      # outcomes.json; the scripts were never updated and reported 0/0
+      # for every target. Pinning prevents a future major-version bump
+      # from repeating that failure mode without first bumping the
+      # parser + the mutants-sample fixture in sync.
+      - name: Install cargo-mutants (pinned to ^27)
+        run: cargo install cargo-mutants --version '^27' --locked
       - name: Run mutants
         run: |
           cargo mutants -p console-core \

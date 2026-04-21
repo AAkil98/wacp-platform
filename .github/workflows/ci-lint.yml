@@ -42,3 +42,20 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check file sizes
         run: bash scripts/check-file-sizes.sh
+
+  mutation-scripts:
+    # Regression test for scripts/mutation-score.py + scripts/mutation-summary.py
+    # against a frozen outcomes.json fixture. Catches any cargo-mutants schema
+    # drift that would otherwise silently break the weekly mutation cron (as
+    # HEALTH-LOG §15.2 originally documented). Cheap (~5 s) since it just runs
+    # the Python scripts against a committed sample and diffs against expected
+    # stdout.
+    name: Mutation scripts — parser regression test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run mutation-script regression test
+        run: bash scripts/test_mutation_scripts.sh

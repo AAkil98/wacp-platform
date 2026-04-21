@@ -343,7 +343,11 @@ async fn panic_message_exactly_4096_bytes_is_not_truncated() {
     .await;
     let err = result.unwrap_err();
     assert_eq!(err.code, ToolErrorCode::InternalError);
-    assert_eq!(err.message.len(), 4096, "4096-byte message length preserved");
+    assert_eq!(
+        err.message.len(),
+        4096,
+        "4096-byte message length preserved"
+    );
     assert!(
         !err.message.ends_with("..."),
         "4096-byte message must NOT be truncated — current message: ends_with('...')",

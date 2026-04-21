@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Maintainer / co-maintainer interest
+    url: mailto:aakilabderr22@gmail.com
+    about: Want to take on a maintainer or co-maintainer role? Email with a link to your recent work and what draws you to this project.
+  - name: Protocol spec questions
+    url: https://github.com/AAkil98/wacp-protocol/issues
+    about: The WACP protocol spec lives in a separate repo (CC BY-SA 4.0). File spec-level issues there, not here.
+  - name: Security concerns
+    url: mailto:aakilabderr22@gmail.com
+    about: For anything affecting authentication, permissions, or data integrity, email rather than open a public issue.

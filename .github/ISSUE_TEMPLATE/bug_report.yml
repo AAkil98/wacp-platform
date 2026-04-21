@@ -1,0 +1,82 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. For anything affecting authentication, permissions, or data integrity, email `aakilabderr22@gmail.com` instead of opening a public issue.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface is affected?
+      options:
+        - wacp-console — web UI / frontend
+        - wacp-console — backend (REST / gRPC / sqlite)
+        - wacp-runtime — protocol runtime
+        - wacp-protocol — spec (file at AAkil98/wacp-protocol instead)
+        - ecosystem vertical (swe / devops / mlops / finance / healthcare / analytics / datasci)
+        - sdk-python
+        - "@wacp/cli or @wacp/local (TypeScript)"
+        - CI / tooling
+        - Documentation
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Step-by-step — commands, config, what you clicked, etc. Minimal is best.
+      placeholder: |
+        1. `docker compose up --build`
+        2. Sign in with the bootstrap token
+        3. Click "New session"
+        4. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Paste relevant container logs, stack traces, or browser console errors. Use triple backticks.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA (`git rev-parse HEAD`) or published image tag.
+      placeholder: e.g. `26581dc` or `ghcr.io/aakil98/wacp-console:v0.1.0-rc1`
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Docker version, browser if relevant, anything unusual.
+      value: |
+        - OS:
+        - Docker / runtime:
+        - Browser (if frontend):
+    validations:
+      required: false

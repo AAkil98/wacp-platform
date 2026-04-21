@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose something new — a capability, a UI, an API, a convention.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Design-scale proposals** (new protocol primitive, new architectural surface, anything touching multiple crates) should prefix the title with `design:` — maintainers will engage on scope before any code is written. See [`CONTRIBUTING.md` §Larger changes](../../blob/dev/CONTRIBUTING.md#larger-changes).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: The user-facing need or technical limitation. Be concrete — a failure mode, a task you can't do today, a friction point you hit. The more specific, the easier it is to evaluate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to see. Architecture-level, not pseudocode. If you've sketched an API shape, paste it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve the same problem. Why this proposal over those?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Rough scope
+      options:
+        - Small — single file, <100 lines, no spec change
+        - Medium — multiple files, test additions, touches one crate
+        - Large — new crate / cross-binary / spec update required
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: willing
+    attributes:
+      label: Are you willing to contribute this?
+      description: No expectation — but if yes, saying so helps scoping and review sequencing.
+      placeholder: "Yes / No / With guidance / Depends on scope"

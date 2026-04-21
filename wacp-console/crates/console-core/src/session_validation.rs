@@ -106,22 +106,12 @@ pub async fn validate_session(
     for assignment in &assignments {
         let slot = Some(assignment.slot_position);
 
-        // 4. UNKNOWN_PROFILE
-        let Some(ref pid) = assignment.profile_id else {
-            violations.push(SessionViolation {
-                code: "UNKNOWN_PROFILE",
-                message: format!("Slot {} has no profile assigned", assignment.slot_position),
-                slot,
-            });
-            continue;
-        };
-
+        let pid = &assignment.profile_id;
         let profile = profiles::get_current(pool, pid).await.ok().flatten();
-        let versioned_profile = if let Some(pv) = assignment.profile_version {
-            profiles::get_version(pool, pid, pv).await.ok().flatten()
-        } else {
-            profile.clone()
-        };
+        let versioned_profile = profiles::get_version(pool, pid, assignment.profile_version)
+            .await
+            .ok()
+            .flatten();
 
         // 4a. DELETED_PROFILE_IN_ASSIGNMENT
         if let Some(ref p) = profile {
@@ -145,12 +135,12 @@ pub async fn validate_session(
         }
 
         // 5. UNKNOWN_VERSION
-        if assignment.profile_version.is_some() && versioned_profile.is_none() {
+        if versioned_profile.is_none() {
             violations.push(SessionViolation {
                 code: "UNKNOWN_VERSION",
                 message: format!(
                     "Profile '{pid}' version {} not found",
-                    assignment.profile_version.unwrap_or(0)
+                    assignment.profile_version
                 ),
                 slot,
             });
@@ -245,19 +235,6 @@ pub async fn validate_session(
     // (the caller checks this separately since it requires async gRPC)
 
     SessionValidationResult { violations }
-}
-
-/// Mode B slot derivation: one slot per distinct role in the vertical.
-pub fn derive_slots(index: &TaxonomyIndex, vertical_id: &str) -> Vec<(String, i64)> {
-    let Some(vertical) = index.get_vertical(vertical_id) else {
-        return vec![];
-    };
-    vertical
-        .roles
-        .iter()
-        .enumerate()
-        .map(|(i, role)| (role.clone(), i as i64))
-        .collect()
 }
 
 #[cfg(test)]
@@ -393,21 +370,5 @@ mod tests {
                 .iter()
                 .any(|v| v.code == "MISSING_CONTEXT")
         );
-    }
-
-    #[test]
-    fn slot_derivation() {
-        let index = taxonomy_builder::build_index(None, &[test_manifest()], &[]).index;
-        let slots = derive_slots(&index, "swe");
-        assert_eq!(slots.len(), 1);
-        assert_eq!(slots[0].0, "swe:implementer");
-        assert_eq!(slots[0].1, 0);
-    }
-
-    #[test]
-    fn slot_derivation_empty_vertical() {
-        let index = taxonomy_builder::build_index(None, &[], &[]).index;
-        let slots = derive_slots(&index, "nonexistent");
-        assert!(slots.is_empty());
     }
 }

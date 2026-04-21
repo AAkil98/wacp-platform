@@ -28,20 +28,15 @@ fn mk_session(id: &str) -> SessionRow {
     }
 }
 
-fn mk_assignment(
-    id: &str,
-    session_id: &str,
-    slot: i64,
-    profile_id: Option<&str>,
-) -> SessionAssignmentRow {
+fn mk_assignment(id: &str, session_id: &str, slot: i64, profile_id: &str) -> SessionAssignmentRow {
     SessionAssignmentRow {
         id: id.into(),
         session_id: session_id.into(),
         role_ref: format!("role-{slot}"),
         stage_id: None,
         slot_position: slot,
-        profile_id: profile_id.map(String::from),
-        profile_version: profile_id.map(|_| 1),
+        profile_id: profile_id.into(),
+        profile_version: 1,
         workspace_id: None,
         budget_max_cost_micros: None,
         budget_max_tokens: None,
@@ -148,7 +143,7 @@ async fn setup_db(session_id: &str, assignment_count: usize) -> (DbPool, Vec<Str
     let mut assignment_ids = Vec::with_capacity(assignment_count);
     for i in 0..assignment_count {
         let asgn_id = format!("asgn-{i}");
-        let asgn = mk_assignment(&asgn_id, session_id, i as i64, Some("profile-1"));
+        let asgn = mk_assignment(&asgn_id, session_id, i as i64, "profile-1");
         console_db::queries::session_assignments::insert_assignment(&db, &asgn)
             .await
             .expect("insert assignment");

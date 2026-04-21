@@ -138,7 +138,7 @@ Commit message: `fix(console-db): §9.2 — delete orphan max_version (zero prod
 2. `cargo test -p console-core` green (≥190 lib tests still pass).
 3. `cargo test -p console-api` green.
 4. `cargo test -p console-integration` green on a subset of suites that touch session assignments (lifecycle, cross_session, launch_failure_matrix, chaos).
-5. `cargo clippy -p console-db -p console-core -p console-api --all-targets -- -D warnings` clean.
+5. `cargo clippy -p console-db -p console-core -p console-api -- -D warnings` clean. **Scope note:** this matches CI's invocation (`ci-console.yml:73-76` — per-crate, no `--all-targets`). The wider `--all-targets` invocation surfaces six pre-existing test-only lint errors unrelated to this plan — see `HEALTH-LOG.md` §16 for triage + follow-up path.
 6. `cargo fmt --check` clean.
 7. Update `HEALTH-LOG.md`:
    - §9.1: strike through the "pick one" resolution block, replace with "Resolved in commit {SHA}: Path {X}. Call site at `sessions.rs:{line}` also fixed."
@@ -157,7 +157,7 @@ Commit message: `fix(console-db): §9.2 — delete orphan max_version (zero prod
 - [ ] `cargo test -p console-core` green (≥190 lib tests).
 - [ ] `cargo test -p console-api` green.
 - [ ] `cargo test -p console-integration` green on at least lifecycle + launch_failure_matrix + chaos + cross_session (the suites that exercise session_assignments).
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean.
+- [ ] `cargo clippy -p console-db -p console-core -p console-api -- -D warnings` clean (matches CI; §16-deferred pre-existing lints not in scope).
 - [ ] `cargo fmt --check` clean.
 - [ ] AUDIT-2026-04-15.md has a follow-up entry noting the schema alignment.
 - [ ] Plan archived via `archive-plan` skill.

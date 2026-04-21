@@ -152,28 +152,6 @@ async fn create_session(
         .await
         .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
 
-    // Auto-derive slots from vertical roles
-    let index = state.taxonomy.load();
-    let slots = session_validation::derive_slots(&index, &row.vertical);
-    for (role_ref, position) in &slots {
-        let assignment = session_assignments::SessionAssignmentRow {
-            id: uuid::Uuid::new_v4().to_string(),
-            session_id: id.clone(),
-            role_ref: role_ref.clone(),
-            stage_id: None,
-            slot_position: *position,
-            profile_id: None,
-            profile_version: None,
-            workspace_id: None,
-            budget_max_cost_micros: None,
-            budget_max_tokens: None,
-            budget_max_wall_time_ms: None,
-        };
-        session_assignments::insert_assignment(&state.db, &assignment)
-            .await
-            .ok();
-    }
-
     log_audit(
         &state.db,
         AuditEntry {
@@ -193,7 +171,6 @@ async fn create_session(
         Json(serde_json::json!({
             "id": id,
             "state": session_state::CONFIGURING,
-            "slots": slots.len(),
         })),
     ))
 }
@@ -373,8 +350,8 @@ async fn set_assignments(
             role_ref: input.role_ref.clone(),
             stage_id: None,
             slot_position: i as i64,
-            profile_id: Some(input.profile_id.clone()),
-            profile_version: Some(version),
+            profile_id: input.profile_id.clone(),
+            profile_version: version,
             workspace_id: None,
             budget_max_cost_micros: input.budget_max_cost_micros,
             budget_max_tokens: input.budget_max_tokens,

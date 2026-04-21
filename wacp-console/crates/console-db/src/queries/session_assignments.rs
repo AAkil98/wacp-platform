@@ -9,8 +9,8 @@ pub struct SessionAssignmentRow {
     pub role_ref: String,
     pub stage_id: Option<String>,
     pub slot_position: i64,
-    pub profile_id: Option<String>,
-    pub profile_version: Option<i64>,
+    pub profile_id: String,
+    pub profile_version: i64,
     pub workspace_id: Option<String>,
     pub budget_max_cost_micros: Option<i64>,
     pub budget_max_tokens: Option<i64>,
@@ -112,12 +112,10 @@ pub async fn find_active_sessions_for_profile(
 }
 
 pub async fn count_assigned(pool: &DbPool, session_id: &str) -> Result<i64, sqlx::Error> {
-    let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM session_assignments
-         WHERE session_id = ? AND profile_id IS NOT NULL",
-    )
-    .bind(session_id)
-    .fetch_one(pool)
-    .await?;
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM session_assignments WHERE session_id = ?")
+            .bind(session_id)
+            .fetch_one(pool)
+            .await?;
     Ok(row.0)
 }

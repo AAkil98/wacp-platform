@@ -89,8 +89,8 @@ fn sample_assignment(
         role_ref: "developer".into(),
         stage_id: None,
         slot_position: slot,
-        profile_id: Some(profile_id.into()),
-        profile_version: Some(profile_version),
+        profile_id: profile_id.into(),
+        profile_version,
         workspace_id: None,
         budget_max_cost_micros: None,
         budget_max_tokens: None,
@@ -1494,21 +1494,6 @@ mod session_assignments_tests {
                 .unwrap(),
             3
         );
-    }
-
-    #[tokio::test]
-    async fn not_null_violation_when_profile_id_is_none() {
-        // Covers the drift: the ProfileRow struct allows None, but the schema
-        // rejects it. Exercising the rejection documents the invariant.
-        let pool = create_test_pool().await.unwrap();
-        seed_session_with_profile(&pool).await;
-        let mut r = sample_assignment("a1", "s1", "p1", 1, 0);
-        r.profile_id = None;
-        r.profile_version = None;
-        let err = session_assignments::insert_assignment(&pool, &r)
-            .await
-            .unwrap_err();
-        expect_kind(&err, ErrorKind::NotNullViolation);
     }
 
     #[tokio::test]

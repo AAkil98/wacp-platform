@@ -470,13 +470,9 @@ async fn build_directive(
     session: &console_db::queries::sessions::SessionRow,
     asgn: &console_db::queries::session_assignments::SessionAssignmentRow,
 ) -> Result<(Vec<u8>, Vec<String>, PreparedDirective), LaunchError> {
-    let profile = if let Some(pid) = asgn.profile_id.as_deref() {
-        console_db::queries::profiles::get_current(db, pid)
-            .await
-            .map_err(|e| LaunchError::Db(e.to_string()))?
-    } else {
-        None
-    };
+    let profile = console_db::queries::profiles::get_current(db, &asgn.profile_id)
+        .await
+        .map_err(|e| LaunchError::Db(e.to_string()))?;
 
     let (llm_provider, llm_model, llm_temperature, llm_max_tokens, autonomy, tools) = match &profile
     {

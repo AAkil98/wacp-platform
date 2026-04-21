@@ -600,6 +600,35 @@ Fix introduces a `STATUS_ALIASES` map (`CaughtMutant → Caught`, `MissedMutant 
 
 **Cross-refs.** §15.1 (companion bug, same session). Spec `wcon-mutation-testing` §5 (score formula), §6 (aggregator), §7 (triage loop).
 
+## 16. Clippy drift in test-only code, unflagged by CI (observed 2026-04-21)
+
+Surfaced during the `console-db-schema-alignment-plan` Phase B verification sweep, when `cargo clippy --workspace --all-targets -- -D warnings` was run locally. CI's clippy invocation (in `.github/workflows/ci-console.yml:73-76` + `.github/workflows/ci-wacp.yml:56-64`) uses `cargo clippy -p <crate>` per-crate **without** `--all-targets`, so it skips `#[test]` modules and test targets entirely. Six errors were hiding behind that narrower gate:
+
+### 16.1 `wacp/crates/wacp-runtime/src/tests.rs` — 5 errors
+
+| Line | Lint | Shape |
+|---|---|---|
+| (tests.rs hot) | `deprecated`: `prometheus::proto::MetricFamily::get_name` | 2 call sites — use `.name()` per prometheus 0.14 rename. |
+| 117 | `clippy::single_match` | `match event { WorkspaceEvent::StateChanged { .. } => { ... } }` — single-pattern match collapses to `if let`. |
+| 117 (nested) | `clippy::collapsible_match` | Same site — inner match nested inside an outer `if let`. |
+| 146 | `clippy::collapsible_if` | `if let Some(...) = &event { if *to == WorkspaceState::Failed { ... } }` — collapses via `&&` pattern (stabilised in recent rust). |
+
+All five are single-file mechanical fixes suggested verbatim by clippy. Test semantics unchanged.
+
+### 16.2 `wacp-console/crates/console-db/src/queries/tests.rs` — 1 error
+
+`clippy::module_inception` at `:2` — `mod tests { ... }` inside a file already named `tests.rs`. The simplest remedy is to drop the outer `mod tests { ... }` wrapper since the file itself is included via `#[cfg(test)] #[path = "tests.rs"] mod ...;` (or similar) from its parent module, so the outer wrapper adds no namespacing value.
+
+### 16.3 Why CI missed these
+
+`cargo clippy -p <crate>` without `--all-targets` checks only the default targets (lib + bin). `#[cfg(test)]` modules are compiled only for `cargo test`, and separate `*_tests.rs` or `tests.rs` siblings that are `#[cfg(test)]`-gated also skip. CI has been shipping these lints forever; they only fire when a developer runs the wider invocation locally (e.g., to satisfy a plan's acceptance criterion).
+
+### 16.4 Prevention
+
+Adding `--all-targets` to the existing CI clippy steps would catch this class going forward but would also expose whatever else has accumulated — so the safer path is to fix these six errors first, *then* tighten CI. Non-blocking; these are test-only and don't affect shipped behaviour. File as a small follow-up commit / branch (`fix/clippy-test-drift` or similar), separate from any §9.1/§9.2 work.
+
+**Cross-refs.** §15 (other CI-gap drift from this era). `impl/console-db-schema-alignment-plan.md` §3.5.5 Phase D gate narrowed to match CI's actual invocation.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

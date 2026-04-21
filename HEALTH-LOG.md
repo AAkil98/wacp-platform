@@ -631,7 +631,7 @@ All five are single-file mechanical fixes suggested verbatim by clippy. Test sem
 
 Adding `--all-targets` to the existing CI clippy steps would catch this class going forward but would also expose whatever else has accumulated — so the safer path is to fix these six errors first, *then* tighten CI. Non-blocking; these are test-only and don't affect shipped behaviour. File as a small follow-up commit / branch (`fix/clippy-test-drift` or similar), separate from any §9.1/§9.2 work.
 
-**Cross-refs.** §15 (other CI-gap drift from this era). `impl/console-db-schema-alignment-plan.md` §3.5.5 Phase D gate narrowed to match CI's actual invocation.
+**Cross-refs.** §15 (other CI-gap drift from this era). `impl/archive/console-db-schema-alignment-plan.md` §3.5.5 Phase D gate narrowed to match CI's actual invocation.
 
 ---
 

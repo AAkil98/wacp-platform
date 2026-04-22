@@ -1,8 +1,9 @@
 ---
 id: wacp-health-log-residual-plan
 type: impl
-status: draft
+status: final
 created: 2026-04-22T17:00:00
+revised: 2026-04-22T20:00:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, cleanup, bench, docs, audit]
 depends_on: [wacp-test-cleanup-followups-plan]
@@ -97,14 +98,14 @@ Verification: `grep -n "gap-fill replay" AUDIT-2026-04-15.md` shows struck text 
 
 ## 4. Acceptance Criteria
 
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean.
-- [ ] `cargo bench -p console-core --bench session_launcher_bench` emits real Criterion output (not placeholder).
-- [ ] `cargo test -p console-integration --test mock_coordinator_smoke` 2/2.
-- [ ] Every exhaustive `match` on a `proto::*` enum in `console-core` + `console-api` carries the `// Exhaustive on proto::...` propagation comment.
-- [ ] AUDIT §13.7.8 I4 row + closeout list have "gap-fill replay" struck with rationale.
-- [ ] HEALTH-LOG §8 + §11.2 + §13.4 struck with resolution notes + commit SHAs.
-- [ ] AUDIT §13.9.9 closure row + footer updated.
-- [ ] Plan moved to `impl/archive/health-log-residual-plan.md`.
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` clean (verified on `d99e896`; runs through `0d24538` + `88822bd` also clean).
+- [x] `cargo bench -p console-core --bench session_launcher_bench` emits real Criterion output — N=1 2.94 ms / N=3 5.40 ms / N=10 13.6 ms / N=30 34.2 ms on `0d24538`.
+- [x] `cargo test -p console-integration --test mock_coordinator_smoke` 2/2 on `9f85f67` (and `launch_failure_matrix` 10/10 unchanged).
+- [x] Every truly exhaustive `match` on a `proto::*` enum in `console-core` + `console-api` carries the propagation comment — 2 sites (`event_enricher::gate_type_string`, `session_monitor::workspace_state_string`). The 3 `_ =>` wildcard sites were classified out of scope per P2's explicit criterion; documented in commit `d99e896`.
+- [x] AUDIT §13.7.8 I4 row + closeout list have "gap-fill replay" struck with rationale on `740e2a0`.
+- [x] HEALTH-LOG §8 + §11.2 + §13.4 struck with resolution notes + commit SHAs on `88822bd`.
+- [x] AUDIT §13.9.9 closure row + footer updated on `740e2a0`.
+- [x] Plan moved to `impl/archive/health-log-residual-plan.md` (next commit).
 
 ## 5. Risks / Open Questions
 

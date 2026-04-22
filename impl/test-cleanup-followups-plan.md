@@ -142,7 +142,7 @@ Verification: `cargo test -p wacp-integration-tests --test recovery_matrix` is 8
 | Phase | Commit | Date | Note |
 |---|---|---|---|
 | A.1 | `f04f404` | 2026-04-22 | **Risk #1 fired.** §16 enumerated 6 errors; the full `--all-targets` run surfaced 23 across 11 files (wacp-runtime, wacp-coordinator, wacp-workspace, wacp-trail, wacp-transport, wacp-integration-tests, console-db). All fixed in-phase, no allow-lists. Categories: 2 `prometheus::get_name` deprecations (file-attribution corrected from tests.rs → metrics.rs #[cfg(test)] mod), 2 `single_match` + 2 `collapsible_match`, 8 `collapsible_if` (mostly `&&`-let-chain folds), 2 `redundant_guards` (pattern-binding), 1 `needless_borrows_for_generic_args`, 1 `useless_conversion`, 2 `unused_must_use` (real missing `.await` on `coord.handle_event` — tests were coincidentally-green), 1 unused import, 3 `field_reassign_with_default`, 2 `len_zero`, 1 `module_inception` (dedent). Test counts unchanged: wacp-runtime 109/109, wacp-coordinator 387/387, console-db 96/96. |
-| A.2 | — | — | — |
+| A.2 | `3125da1` | 2026-04-22 | `--all-targets` added to both `ci-wacp.yml` + `ci-console.yml` clippy steps. Draft PR #10 CI run verified: `Rust — build, clippy, test` (ci-wacp) green at 6m23s; `Rust — console crates` (ci-console) green at 2m23s. All other workflows unaffected (coverage, frontend, e2e, integration, python, ts verticals, fmt, deny, mutation-scripts, gitguardian, file-size — all pass). The tightening caught no surprise drift since A.1 cleaned every `--all-targets` error locally before push — A.2 is the gate, A.1 was the cleanup. |
 | B.1 | — | — | — |
 | B.2 | — | — | — |
 | C | — | — | — |

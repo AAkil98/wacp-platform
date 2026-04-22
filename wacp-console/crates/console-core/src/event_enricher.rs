@@ -130,6 +130,8 @@ pub struct EnrichedEscalation {
 }
 
 fn gate_type_string(t: proto::GateType) -> String {
+    // Exhaustive on `proto::GateType` — extend when `wacp-types::GateType`
+    // gains a variant. Build-break is intentional; see HEALTH-LOG §11.2.
     match t {
         proto::GateType::Unspecified => "unspecified",
         proto::GateType::TaskApproval => "task_approval",

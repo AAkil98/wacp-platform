@@ -602,6 +602,9 @@ fn process_workspace_view(
 }
 
 fn workspace_state_string(s: proto::WorkspaceState) -> String {
+    // Exhaustive on `proto::WorkspaceState` — extend when
+    // `wacp-types::WorkspaceState` gains a variant. Build-break is
+    // intentional; see HEALTH-LOG §11.2.
     match s {
         proto::WorkspaceState::Unspecified => "unspecified",
         proto::WorkspaceState::Idle => "idle",

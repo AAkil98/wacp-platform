@@ -1,21 +1,21 @@
 //! §13.7.8 I2 — startup recovery matrix.
 //!
-//! Six scenarios covering every realized branch of `console_core::recovery::run`
+//! Scenarios covering every realized branch of `console_core::recovery::run`
 //! against a scripted runtime state:
 //!
 //!   - resumed: ACTIVE + live workspace → respawn monitor
 //!   - stuck: ACTIVE with no `coordinator_workspace_id` → FAILED
 //!   - notfound: ACTIVE + workspace the runtime doesn't know → FAILED
 //!   - unavailable: ACTIVE + runtime down → session stays ACTIVE
-//!   - terminal_closed: ACTIVE + runtime reports `Closed` → COMPLETED
+//!   - terminal_aborted: ACTIVE + runtime reports `Failed` (via AbortWorkspace)
+//!     → FAILED
+//!   - terminal_closed: ACTIVE + runtime reports `Closed` (via agent Complete
+//!     → WA3.6 auto-integration) → COMPLETED (§11.4 follow-up, 2026-04-22)
 //!   - mixed: three sessions, three distinct outcomes in one pass
+//!   - report_fields: direct `recovery::run` call asserting RecoveryReport
+//!     counters
 //!
 //! **Not covered (deferred, see `HEALTH-LOG.md` §13.2):**
-//! - Workspace in `Failed` state → FAILED session. The real runtime won't
-//!   reach Failed without the workspace actor emitting a signal the
-//!   coordinator interprets as fatal, which isn't a clean seeding path.
-//!   A mock highway could script the `GetWorkspace` response; tracked for
-//!   I4's helper library if it needs a mock highway anyway.
 //! - DB-degraded boot. `FaultyDb::hold_write_lock` holds a WRITE lock, but
 //!   `recovery::run` only reads from sessions on boot — the write lock
 //!   doesn't block the read path. A different fault-injection mode would
@@ -31,6 +31,7 @@ use console_integration::{ConsoleHarness, RuntimeHarness};
 use tonic::transport::Channel;
 use wacp_transport::wacp_v1;
 use wacp_transport::wacp_v1::coordinator_service_client::CoordinatorServiceClient;
+use wacp_transport::wacp_v1::highway_service_client::HighwayServiceClient;
 
 // ---- helpers --------------------------------------------------------------
 
@@ -72,6 +73,77 @@ async fn abort_workspace(rt: &RuntimeHarness, ws_id: &str) {
         })
         .await
         .expect("abort_workspace");
+}
+
+async fn highway_client(rt: &RuntimeHarness) -> HighwayServiceClient<Channel> {
+    let url = format!("http://{}", rt.highway_addr());
+    let channel = Channel::from_shared(url)
+        .expect("highway url")
+        .connect()
+        .await
+        .expect("highway connect");
+    HighwayServiceClient::new(channel)
+}
+
+/// Drive a workspace all the way to internal `Closed` state through the
+/// runtime's real WA3.6 auto-integration path — activate via directive,
+/// bind an agent via `wacp-sdk`, emit `Complete`, then poll `GetWorkspace`
+/// until the runtime reports `Closed`. Panics on a 5 s timeout.
+///
+/// Plan deviation: the §B.1 original shape was a `RuntimeHarness::mark_
+/// workspace_closed(ws_id)` test-only method that pokes `WorkspaceTree::
+/// get_mut(...).status = Closed`. That only works for in-process runtime;
+/// `RuntimeHarness` spawns `wacp-runtime` as a child binary (see its
+/// module docstring), so direct state-poking isn't reachable without
+/// adding a test-only admin gRPC surface — exactly the "scope-creepy"
+/// branch the plan flagged. The `wacp-sdk`-based path used in
+/// `lifecycle.rs:311–321` is the short-path helper the plan was looking
+/// for: ~15 lines of test code, no admin RPC, exercises the real WA3.6
+/// chain. Kept local to this file since only recovery tests need it.
+async fn drive_to_closed(rt: &RuntimeHarness, ws_id: &str) {
+    let mut coord = coord_client(rt).await;
+    coord
+        .send_directive(wacp_v1::SendDirectiveRequest {
+            workspace_id: ws_id.into(),
+            payload: b"activate".to_vec(),
+            client_request_id: String::new(),
+        })
+        .await
+        .expect("send_directive");
+
+    let agent = wacp_sdk::Agent::connect(wacp_sdk::AgentConfig {
+        runtime_url: format!("http://{}", rt.agent_addr()),
+        workspace_id: wacp_types::WorkspaceId::from(ws_id),
+        auth_token: "recovery-closed-token".into(),
+    })
+    .await
+    .expect("agent connect");
+    agent
+        .signal(wacp_types::SignalType::Complete)
+        .await
+        .expect("emit complete");
+
+    let mut highway = highway_client(rt).await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let view = highway
+            .get_workspace(wacp_v1::GetWorkspaceRequest {
+                workspace_id: ws_id.into(),
+            })
+            .await
+            .expect("get_workspace")
+            .into_inner();
+        if view.state == wacp_v1::WorkspaceState::Closed as i32 {
+            return;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!(
+                "workspace {ws_id} did not reach Closed within 5s (last state: {})",
+                view.state
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 async fn seed_user(db: &DbPool, id: &str) {
@@ -277,13 +349,47 @@ async fn terminal_workspace_aborted_marked_failed() {
         "terminal session must not have a monitor"
     );
     // Failed → FAILED per `recovery::recover_one` (recovery.rs:173–175).
-    //
-    // Note: the sibling "Closed (non-Failed terminal) → COMPLETED" branch is
-    // not currently covered end-to-end. Reaching internal `Closed` requires
-    // an agent-side Complete signal that triggers WA3.6 auto-integration;
-    // there's no short-path helper in this harness. Tracked in
-    // `HEALTH-LOG.md` §11.4.
+    // Sibling Closed → COMPLETED branch covered by
+    // `terminal_workspace_closed_marked_completed` below.
     assert_eq!(session_state(&db, &sid).await, session_state::FAILED);
+}
+
+#[tokio::test]
+async fn terminal_workspace_closed_marked_completed() {
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
+    let closed_ws = submit_live_goal(&rt, "terminal-closed-goal").await;
+    // `drive_to_closed` routes Active → Integrating → Closed through the
+    // real WA3.6 auto-integration path (agent emits Complete via wacp-sdk).
+    // No admin RPC; no in-process state-poking. See helper doc for the
+    // §B.1 plan-deviation rationale.
+    drive_to_closed(&rt, &closed_ws).await;
+
+    let db = console_db::create_test_pool().await.expect("db");
+    seed_user(&db, "u-1").await;
+    let sid = format!("s-{}", uuid::Uuid::new_v4());
+    seed_active_session(&db, &sid, "u-1", Some(&closed_ws)).await;
+
+    let console = ConsoleHarness::spawn_with_db(&rt, db.clone())
+        .await
+        .expect("console");
+
+    assert!(
+        !console
+            .state
+            .active_sessions
+            .read()
+            .await
+            .contains_key(&sid),
+        "terminal session must not have a monitor"
+    );
+    // Closed (non-Failed terminal) → COMPLETED via `recovery::recover_one`
+    // (recovery.rs:173–175). Covers the branch HEALTH-LOG §11.4's
+    // follow-up note flagged as missing integration coverage after the
+    // 2026-04-18 enum-offset sweep renamed the prior
+    // `terminal_workspace_closed_marked_completed` test to
+    // `terminal_workspace_aborted_marked_failed` (its coincidentally-green
+    // path was actually driving Failed, not Closed — see §11.4).
+    assert_eq!(session_state(&db, &sid).await, session_state::COMPLETED);
 }
 
 #[tokio::test]

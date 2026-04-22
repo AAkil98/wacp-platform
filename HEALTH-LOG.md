@@ -188,7 +188,7 @@ Testing coverage for the Rust crates (`wacp-console/crates/*`) lives under §12.
 - `stub_serialize_for_match` @ 20×500: 595 ns per call (now single-call per `complete()` via C5).
 - `console-db create_test_pool`: 5.78 ms (under 10 ms amortization threshold). Tripwire: 15 ms.
 
-Placeholder: `session_launcher_bench` needs `InjectableCoordinator` mock relocation from `wacp-console/integration` → `console-test-support` before the SubmitGoal → Decompose(N) → Dispatch(N) sweep can land. Follow-up tracked in baseline doc.
+~~Placeholder: `session_launcher_bench` needs `InjectableCoordinator` mock relocation from `wacp-console/integration` → `console-test-support` before the SubmitGoal → Decompose(N) → Dispatch(N) sweep can land. Follow-up tracked in baseline doc.~~ — **closed 2026-04-22** via `impl/archive/health-log-residual-plan.md` P1. Relocation landed at `9f85f67` (with `spawn` signature decoupled from `RuntimeHarness` to break the would-be cyclic dep); real N∈{1,3,10,30} sweep landed at `0d24538` via `ProgrammableCoordinator` (canned-response standalone mock — no `wacp-runtime` child-process cost in the bench hot loop; the plan deviation is documented in that commit's body). Baseline numbers now in `docs/perf-baseline-2026-04-20.md` §session_launcher_launch.
 
 Run `./scripts/bench-baseline.sh` to regenerate; not in CI (bench wallclocks too noisy without dedicated hardware).
 
@@ -293,7 +293,7 @@ Adding `GateType::CheckpointApproval` broke the build of `console-core::event_en
 
 **The structural shape:** the proto types are shared between runtime and console via `wacp-transport::wacp_v1`. Any exhaustive match on a proto enum in the consumer code becomes a forced update site whenever the producer adds a variant. The `_ =>` wildcard avoids the build-break but at the cost of silently-wrong stringification (the new variant would render as e.g. `"unspecified"`).
 
-**Recommendation.** Keep the exhaustive matches — they're the correct pattern. The build-break is the *desired* signal. But document the propagation expectation: "`event_enricher::gate_type_string` is intentionally exhaustive; if a new `GateType` variant lands in `wacp-types`, this match must extend in the same PR." A short comment above the match achieves this. Considered: a workspace-wide check that all `proto::*` enum matches are exhaustive — too invasive for the gain. The compiler does the right thing already.
+~~**Recommendation.** Keep the exhaustive matches — they're the correct pattern. The build-break is the *desired* signal. But document the propagation expectation: "`event_enricher::gate_type_string` is intentionally exhaustive; if a new `GateType` variant lands in `wacp-types`, this match must extend in the same PR." A short comment above the match achieves this. Considered: a workspace-wide check that all `proto::*` enum matches are exhaustive — too invasive for the gain. The compiler does the right thing already.~~ — **closed 2026-04-22** via `impl/archive/health-log-residual-plan.md` P2 (`d99e896`). Comment landed above both truly-exhaustive sites: `event_enricher::gate_type_string` (8-variant `proto::GateType`) and `session_monitor::workspace_state_string` (10-variant `proto::WorkspaceState`). Sites with an intentional `_ =>` wildcard (narrowing or default-map patterns) were out of scope and left alone — classified in the P2 commit body.
 
 ### 11.3 Async cascade from `Coordinator::handle_event`
 
@@ -487,10 +487,12 @@ Three tests, all green in 0.19 s:
 - `malformed_text_frame_from_client_is_silently_ignored` — server per `ws.rs:96` drops incoming text with `Some(Ok(Message::Text(_))) => {}`. Sending a non-JSON text doesn't close the connection; a subsequent broadcast still arrives. Required a `WsClient::send_raw` helper (additive; integration-lib only).
 
 **Drift finding (NEW).** The AUDIT §13.7.8 scenario "gap-fill replay correctness" calls for an `/api/sessions/:id/trail?since=<seq>` REST endpoint that returns frames dropped during a Lagged event. The endpoint **does not exist** — grep of `routes/` confirms only the WS `/api/sessions/:id/ws` channel for trail streaming, no REST replay. This is the fourth instance of the "audit writes scenario against an imagined endpoint" pattern (after F8 RefusalPanel, F10 Notifications-stub, auth-flows D2 `must_change_password` deadlock). Two possible resolutions:
-1. **Build it.** `routes/sessions.rs` adds a `GET /api/sessions/:id/trail` handler that queries the trail store from `last_seen_sequence` forward. Non-trivial: the current trail buffer is in-memory per monitor, bounded to the last N entries; a proper replay needs DB-backed trail persistence. Probably weeks not hours.
+1. ~~**Build it.** `routes/sessions.rs` adds a `GET /api/sessions/:id/trail` handler that queries the trail store from `last_seen_sequence` forward. Non-trivial: the current trail buffer is in-memory per monitor, bounded to the last N entries; a proper replay needs DB-backed trail persistence. Probably weeks not hours.~~
 2. **Strike from the audit.** Lag-tolerant clients that reconnect-and-catch-up via the existing WS stream are the current design intent; the AUDIT scenario was aspirational.
 
 Recommending (2): `wcon-highway.md` §4.3 already describes the `control/lag` frame as "authoritative signal to client that it must refresh state via its own strategy" — there's no spec commitment to a server-driven replay. The integration suite's deferred scenario is tracked here; the AUDIT itself should note "replay considered; not shipping v1" when §13.7.8 closes out.
+
+**Resolution (2026-04-22).** Option (2) accepted via `impl/archive/health-log-residual-plan.md` P3 (`740e2a0`). AUDIT §13.7.8 I4 row now carries the struck-through entry with rationale; §13.4 bullet in the "Drift findings worth carrying forward" list is closed; §13.9.9 captures the closure. Option (1) remains documented above for historical context — if a future requirement surfaces the need for server-driven replay, the two-option tree and the "build it: weeks not hours" cost estimate are already here.
 
 **Tokio-broadcast invariant not tested.** tokio's `broadcast::channel` delivers whole `Frame` values; there's no split-frame possible at the transport layer. A "no partial frames" test would exercise tokio, not the console — skipped for low signal.
 

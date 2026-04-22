@@ -54,9 +54,21 @@ Scenario: single call to `create_test_pool()` — opens an in-memory SQLite DB, 
 
 **Interpretation.** Per HEALTH-LOG §9.3 the threshold for amortizing this via a `lazy_static!` migrated-template + `ATTACH DATABASE` clone pattern was >10 ms mean. At 5.78 ms we're under — the 9-migration replay per test is fast enough that the optimization's complexity cost exceeds its walltime benefit. **Regression tripwire:** a jump above 15 ms means either a migration got heavier or `sqlx` setup got slower; revisit then.
 
+## Session launcher — `SubmitGoal → Decompose(N) → Dispatch×N → finalize` (`console-core::session_launcher_bench`)
+
+Scenario: measure `SessionLauncher::launch` wall-time across N ∈ {1, 3, 10, 30} against a `ProgrammableCoordinator` (in-process, canned responses — no `wacp-runtime` child process). Setup (DB pool + coord spawn) is excluded via `iter_custom`; each sample re-seeds a fresh session row + N assignments and re-primes coord queues before timing the `launch` call.
+
+| N assignments | Median time | Notes |
+|---:|---:|---|
+| 1  | 2.94 ms | Constant floor: SubmitGoal + Decompose + Dispatch×1 + DB finalize. |
+| 3  | 5.40 ms | Dispatch cost ~0.82 ms / assignment over the N=1 floor. |
+| 10 | 13.6 ms | Scales linearly with N. |
+| 30 | 34.2 ms | ~1.04 ms / assignment at the high end. |
+
+**Interpretation.** The N=1 floor (~3 ms) is dominated by the three gRPC round-trips (SubmitGoal, Decompose, one Dispatch) through the tonic transport + the DB finalize transaction. Per-Dispatch cost is ~1 ms end-to-end, consistent with an in-process localhost socket + one `UPDATE session_assignments SET workspace_id = ?` per assignment. The bench uses `ProgrammableCoordinator` rather than `InjectableCoordinator` (which forwards to a real runtime upstream) because the bench should not pay the child-process cost — we're measuring launcher logic, not runtime behavior. **Regression tripwire:** a jump above 2× at any N (e.g., N=1 > 6 ms, N=30 > 70 ms) signals either a DB-query regression or an extra RPC round-trip introduced in the launcher.
+
 ## Placeholders / follow-up benches
 
-- **`session_launcher_bench`** — placeholder only. A real benchmark of SubmitGoal → Decompose(N) → Dispatch(N) needs the `InjectableCoordinator` mock from `wacp-console/integration` (currently not a dev-dep chain available from `console-core`). Either (a) move the mock to `console-test-support` or (b) duplicate a minimal stub inline. Either is ~30–60 min; deferred.
 - **`stub_bench.rs` streaming path** — a memory-peak bench on the 1000-event fixture. `criterion` doesn't give peak-RSS natively; either wire a minimal `peak-alloc`-style allocator counter or use `dhat` with a profile option. Deferred — C6 architectural change was verified via source inspection + existing stream tests.
 
 ## How to regenerate

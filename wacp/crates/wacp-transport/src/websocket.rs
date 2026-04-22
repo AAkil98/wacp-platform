@@ -407,7 +407,7 @@ mod tests {
         };
         let resp = dispatch_method(&req, &backend).await;
         let tasks = resp.result.unwrap();
-        assert!(tasks.as_array().unwrap().len() > 0);
+        assert!(!tasks.as_array().unwrap().is_empty());
     }
 
     #[tokio::test]

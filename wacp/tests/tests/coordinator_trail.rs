@@ -36,7 +36,7 @@ async fn event_logging_through_coordinator() {
             let json = format!(r#"{{"event":"{event:?}"}}"#);
             chain = append_event(&mut trail, &json, &chain);
             event_count += 1;
-            coord.handle_event(&event);
+            coord.handle_event(&event).await;
         }
     }
 
@@ -63,7 +63,7 @@ async fn trail_entries_match_state_changes() {
             let json = serde_json::to_string(&format!("{event:?}")).unwrap();
             chain = append_event(&mut trail, &json, &chain);
             logged_events.push(format!("{event:?}"));
-            coord.handle_event(&event);
+            coord.handle_event(&event).await;
         }
     }
 

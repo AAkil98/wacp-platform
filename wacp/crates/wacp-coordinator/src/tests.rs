@@ -4650,11 +4650,10 @@ async fn e2e_timeout_expiry() {
     for _ in 0..5 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
+            && to == WorkspaceState::Failed
         {
-            if to == WorkspaceState::Failed {
-                got_failed = true;
-                break;
-            }
+            got_failed = true;
+            break;
         }
     }
     assert!(got_failed);
@@ -4702,11 +4701,10 @@ async fn e2e_budget_exceeded() {
     for _ in 0..5 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(Duration::from_millis(100), event_rx.recv()).await
+            && to == WorkspaceState::Failed
         {
-            if to == WorkspaceState::Failed {
-                got_failed = true;
-                break;
-            }
+            got_failed = true;
+            break;
         }
     }
     assert!(got_failed);

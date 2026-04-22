@@ -211,7 +211,7 @@ mod tests {
 
         let families = metrics.registry.gather();
         assert!(!families.is_empty());
-        let names: Vec<&str> = families.iter().map(|f| f.get_name()).collect();
+        let names: Vec<&str> = families.iter().map(|f| f.name()).collect();
         assert!(names.contains(&"wacp_grpc_requests_total"));
         assert!(names.contains(&"wacp_workspaces_active"));
         assert!(names.contains(&"wacp_trail_writes_total"));
@@ -239,7 +239,7 @@ mod tests {
             .with_label_values(&["agent", "Bind"])
             .observe(0.15);
         let families = m.registry.gather();
-        let names: Vec<&str> = families.iter().map(|f| f.get_name()).collect();
+        let names: Vec<&str> = families.iter().map(|f| f.name()).collect();
         let idx = names
             .iter()
             .position(|n| *n == "wacp_grpc_request_duration_seconds")

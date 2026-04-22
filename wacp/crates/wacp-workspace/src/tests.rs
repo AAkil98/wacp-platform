@@ -267,14 +267,12 @@ async fn agent_emit_signal() {
     // Should get StateChanged (Active→Blocked) and Signal.
     let mut got_signal = false;
     for _ in 0..3 {
-        if let Ok(Some(evt)) =
+        if let Ok(Some(WorkspaceEvent::Signal(sig))) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
-            if let WorkspaceEvent::Signal(sig) = evt {
-                assert_eq!(sig.signal_type, SignalType::Blocked);
-                got_signal = true;
-                break;
-            }
+            assert_eq!(sig.signal_type, SignalType::Blocked);
+            got_signal = true;
+            break;
         }
     }
     assert!(got_signal);
@@ -453,9 +451,10 @@ async fn wa3_5_final_checkpoint_does_not_block() {
         {
             match evt {
                 WorkspaceEvent::CheckpointCreated(_) => got_checkpoint = true,
-                WorkspaceEvent::StateChanged { to, .. }
-                    if to == wacp_types::WorkspaceState::Blocked =>
-                {
+                WorkspaceEvent::StateChanged {
+                    to: wacp_types::WorkspaceState::Blocked,
+                    ..
+                } => {
                     saw_block = true;
                 }
                 _ => {}
@@ -491,13 +490,11 @@ async fn wa3_5_checkpoint_approved_resumes_blocked_workspace() {
     for _ in 0..6 {
         if let Ok(Some(evt)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && let WorkspaceEvent::StateChanged { to, .. } = evt
+            && to == wacp_types::WorkspaceState::Blocked
         {
-            if let WorkspaceEvent::StateChanged { to, .. } = evt
-                && to == wacp_types::WorkspaceState::Blocked
-            {
-                blocked = true;
-                break;
-            }
+            blocked = true;
+            break;
         }
     }
     assert!(blocked, "precondition: workspace must reach Blocked");
@@ -515,14 +512,12 @@ async fn wa3_5_checkpoint_approved_resumes_blocked_workspace() {
     for _ in 0..5 {
         if let Ok(Some(evt)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && let WorkspaceEvent::StateChanged { from, to, .. } = evt
+            && from == wacp_types::WorkspaceState::Blocked
+            && to == wacp_types::WorkspaceState::Active
         {
-            if let WorkspaceEvent::StateChanged { from, to, .. } = evt
-                && from == wacp_types::WorkspaceState::Blocked
-                && to == wacp_types::WorkspaceState::Active
-            {
-                resumed = true;
-                break;
-            }
+            resumed = true;
+            break;
         }
     }
     assert!(resumed);
@@ -553,13 +548,11 @@ async fn wa3_5_checkpoint_rejected_fails_blocked_workspace() {
     for _ in 0..6 {
         if let Ok(Some(evt)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && let WorkspaceEvent::StateChanged { to, .. } = evt
+            && to == wacp_types::WorkspaceState::Blocked
         {
-            if let WorkspaceEvent::StateChanged { to, .. } = evt
-                && to == wacp_types::WorkspaceState::Blocked
-            {
-                blocked = true;
-                break;
-            }
+            blocked = true;
+            break;
         }
     }
     assert!(blocked);
@@ -615,13 +608,11 @@ async fn wa3_5_checkpoint_approved_on_active_workspace_emits_error() {
 
     let mut got_error = false;
     for _ in 0..4 {
-        if let Ok(Some(evt)) =
+        if let Ok(Some(WorkspaceEvent::Error { .. })) =
             tokio::time::timeout(std::time::Duration::from_millis(80), event_rx.recv()).await
         {
-            if let WorkspaceEvent::Error { .. } = evt {
-                got_error = true;
-                break;
-            }
+            got_error = true;
+            break;
         }
     }
     assert!(got_error);
@@ -816,9 +807,10 @@ async fn actor_migrate_begin_emits_snapshot() {
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
         {
             match evt {
-                WorkspaceEvent::StateChanged { to, .. }
-                    if to == wacp_types::WorkspaceState::Migrating =>
-                {
+                WorkspaceEvent::StateChanged {
+                    to: wacp_types::WorkspaceState::Migrating,
+                    ..
+                } => {
                     got_state_change = true;
                 }
                 WorkspaceEvent::MigrationSnapshot { workspace_id, .. } => {
@@ -895,11 +887,10 @@ async fn actor_migration_complete_to_active() {
     for _ in 0..3 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && to == wacp_types::WorkspaceState::Active
         {
-            if to == wacp_types::WorkspaceState::Active {
-                found_active = true;
-                break;
-            }
+            found_active = true;
+            break;
         }
     }
     assert!(found_active);
@@ -943,11 +934,10 @@ async fn actor_migration_complete_to_blocked() {
     for _ in 0..3 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && to == wacp_types::WorkspaceState::Blocked
         {
-            if to == wacp_types::WorkspaceState::Blocked {
-                found_blocked = true;
-                break;
-            }
+            found_blocked = true;
+            break;
         }
     }
     assert!(found_blocked);
@@ -1462,11 +1452,10 @@ async fn actor_envelopes_accepted_in_migrating() {
     for _ in 0..5 {
         if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
             tokio::time::timeout(std::time::Duration::from_millis(100), event_rx.recv()).await
+            && to == wacp_types::WorkspaceState::Active
         {
-            if to == wacp_types::WorkspaceState::Active {
-                alive = true;
-                break;
-            }
+            alive = true;
+            break;
         }
     }
     assert!(alive);

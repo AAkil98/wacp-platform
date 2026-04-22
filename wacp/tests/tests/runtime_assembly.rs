@@ -43,7 +43,7 @@ async fn full_initialization_sequence() {
     assert!(
         engine
             .evaluate(&wacp_permissions::Action::EmitSignal {
-                role: "worker".into(),
+                role: "worker",
                 signal_type: SignalType::Ready,
             })
             .is_ok()

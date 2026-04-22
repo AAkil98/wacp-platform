@@ -111,15 +111,10 @@ async fn e2e_single_worker() {
         .await;
 
     // Receive events — workspace should activate.
-    if let Ok(Some(event)) =
+    if let Ok(Some(WorkspaceEvent::StateChanged { to, .. })) =
         tokio::time::timeout(std::time::Duration::from_millis(200), rt.event_rx.recv()).await
     {
-        match event {
-            WorkspaceEvent::StateChanged { to, .. } => {
-                assert_eq!(to, WorkspaceState::Active);
-            }
-            _ => {} // other events are fine
-        }
+        assert_eq!(to, WorkspaceState::Active);
     }
 }
 
@@ -143,10 +138,10 @@ async fn e2e_workspace_lifecycle() {
         if let Ok(Some(event)) =
             tokio::time::timeout(std::time::Duration::from_millis(100), rt.event_rx.recv()).await
         {
-            if let WorkspaceEvent::StateChanged { to, .. } = &event {
-                if *to == WorkspaceState::Failed {
-                    got_failed = true;
-                }
+            if let WorkspaceEvent::StateChanged { to, .. } = &event
+                && *to == WorkspaceState::Failed
+            {
+                got_failed = true;
             }
             rt.coordinator.handle_event(&event).await;
         }

@@ -18,10 +18,12 @@ impl GatewayBackend for MockBackend {
         })
     }
     async fn get_ready_tasks(&self) -> Result<wacp_v1::GetReadyTasksResponse, GatewayError> {
-        let mut task = wacp_v1::TaskView::default();
-        task.task_id = "t-1".into();
-        task.name = "plan".into();
-        task.status = 2;
+        let task = wacp_v1::TaskView {
+            task_id: "t-1".into(),
+            name: "plan".into(),
+            status: 2,
+            ..Default::default()
+        };
         Ok(wacp_v1::GetReadyTasksResponse { tasks: vec![task] })
     }
     async fn dispatch(
@@ -52,18 +54,22 @@ impl GatewayBackend for MockBackend {
         Ok(wacp_v1::ResumeWorkspaceResponse::default())
     }
     async fn get_workspace(&self, id: &str) -> Result<wacp_v1::WorkspaceView, GatewayError> {
-        let mut view = wacp_v1::WorkspaceView::default();
-        view.id = id.into();
-        view.state = wacp_v1::WorkspaceState::Active.into();
-        view.role = "worker".into();
+        let view = wacp_v1::WorkspaceView {
+            id: id.into(),
+            state: wacp_v1::WorkspaceState::Active.into(),
+            role: "worker".into(),
+            ..Default::default()
+        };
         Ok(view)
     }
     async fn inject_envelope(
         &self,
         _req: wacp_v1::InjectEnvelopeRequest,
     ) -> Result<wacp_v1::InjectEnvelopeResponse, GatewayError> {
-        let mut resp = wacp_v1::InjectEnvelopeResponse::default();
-        resp.envelope_id = "env-1".into();
+        let resp = wacp_v1::InjectEnvelopeResponse {
+            envelope_id: "env-1".into(),
+            ..Default::default()
+        };
         Ok(resp)
     }
     async fn trigger_integration(
@@ -229,7 +235,7 @@ async fn submit_goal_returns_created() {
 async fn get_ready_tasks_returns_list() {
     let (status, json) = get_json(&test_app(), "/v1/tasks").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(json.as_array().unwrap().len() > 0);
+    assert!(!json.as_array().unwrap().is_empty());
     assert_eq!(json[0]["task_id"], "t-1");
 }
 

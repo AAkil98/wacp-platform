@@ -295,7 +295,7 @@ mod tests {
 
         // 32 bytes: all zeros (checksum for empty payload is NOT all zeros).
         let path = dir.path().join("ws-ws-exact.snapshot");
-        fs::write(&path, &[0u8; 32]).unwrap();
+        fs::write(&path, [0u8; 32]).unwrap();
 
         let result = storage.read_workspace(&ws);
         assert!(result.is_err());

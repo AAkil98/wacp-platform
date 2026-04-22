@@ -2,7 +2,6 @@
 
 use wacp_recovery::RecoveryEngine;
 use wacp_trail::{ChainHash, InMemoryTrailStorage, TrailStorage, compute_chain_hash};
-use wacp_types::WorkspaceState;
 
 fn append_json(trail: &mut InMemoryTrailStorage, json: &str, prev: &ChainHash) -> ChainHash {
     let bytes = json.as_bytes();

@@ -187,27 +187,23 @@ fn bench_launch(c: &mut Criterion) {
         let harness = rt.block_on(build_harness());
         let launcher = SessionLauncher::new(harness.pool.clone(), harness.db.clone());
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(n),
-            &n,
-            |b, &n_assignments| {
-                b.iter_custom(|iters| {
-                    rt.block_on(async {
-                        let mut total = Duration::ZERO;
-                        for _ in 0..iters {
-                            let seq = sid_counter.fetch_add(1, Ordering::Relaxed);
-                            let sid = format!("bench-n{n_assignments}-s{seq}");
-                            seed_session(&harness.db, &sid, n_assignments).await;
-                            program_coord(&harness.coord, n_assignments);
-                            let start = Instant::now();
-                            black_box(launcher.launch(&sid).await.expect("launch"));
-                            total += start.elapsed();
-                        }
-                        total
-                    })
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n_assignments| {
+            b.iter_custom(|iters| {
+                rt.block_on(async {
+                    let mut total = Duration::ZERO;
+                    for _ in 0..iters {
+                        let seq = sid_counter.fetch_add(1, Ordering::Relaxed);
+                        let sid = format!("bench-n{n_assignments}-s{seq}");
+                        seed_session(&harness.db, &sid, n_assignments).await;
+                        program_coord(&harness.coord, n_assignments);
+                        let start = Instant::now();
+                        black_box(launcher.launch(&sid).await.expect("launch"));
+                        total += start.elapsed();
+                    }
+                    total
+                })
+            });
+        });
     }
     group.finish();
 }

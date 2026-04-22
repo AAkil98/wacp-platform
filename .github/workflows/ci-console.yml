@@ -73,6 +73,7 @@ jobs:
           cargo clippy \
             -p wacp-console -p console-api -p console-core \
             -p console-db -p console-runtime -p console-test-support \
+            --all-targets \
             -- -D warnings
 
       - name: Test

@@ -59,6 +59,7 @@ jobs:
             -p wacp-recovery -p wacp-runtime -p wacp-sdk -p wacp-security \
             -p wacp-taxonomy -p wacp-tools -p wacp-trail -p wacp-transport \
             -p wacp-types -p wacp-workspace -p wacp-integration-tests \
+            --all-targets \
             -- -D warnings
 
       - name: Test

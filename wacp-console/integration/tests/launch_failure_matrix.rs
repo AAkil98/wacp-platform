@@ -263,7 +263,9 @@ impl TestCtx {
 
     async fn build_with_assignments(count: usize) -> Self {
         let rt = RuntimeHarness::spawn_default().await.expect("runtime");
-        let mock = InjectableCoordinator::spawn(&rt).await.expect("mock");
+        let mock = InjectableCoordinator::spawn(rt.coordinator_addr())
+            .await
+            .expect("mock");
         let db = console_db::create_test_pool().await.expect("db");
 
         seed_user(&db, "u-1").await;

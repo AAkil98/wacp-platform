@@ -23,7 +23,9 @@ async fn client_for(addr: &str) -> CoordinatorServiceClient<Channel> {
 #[tokio::test]
 async fn forwards_when_no_injection() {
     let rt = RuntimeHarness::spawn_default().await.expect("runtime");
-    let mock = InjectableCoordinator::spawn(&rt).await.expect("mock");
+    let mock = InjectableCoordinator::spawn(rt.coordinator_addr())
+        .await
+        .expect("mock");
     let mut client = client_for(&mock.addr()).await;
 
     // SubmitGoal against a forwarding mock should reach the real runtime
@@ -45,7 +47,9 @@ async fn forwards_when_no_injection() {
 #[tokio::test]
 async fn injects_status_when_queued() {
     let rt = RuntimeHarness::spawn_default().await.expect("runtime");
-    let mock = InjectableCoordinator::spawn(&rt).await.expect("mock");
+    let mock = InjectableCoordinator::spawn(rt.coordinator_addr())
+        .await
+        .expect("mock");
     let mut client = client_for(&mock.addr()).await;
 
     // Push one injection; the next call fails, a follow-up call forwards.

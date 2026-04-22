@@ -10,6 +10,7 @@ path = "src/bin/wacp_mock_runtime.rs"
 
 [dependencies]
 wacp-proto = { workspace = true }
+wacp-transport = { workspace = true }
 console-runtime = { workspace = true }
 arc-swap = { workspace = true }
 tonic = { workspace = true }

@@ -635,6 +635,7 @@ dependencies = [
  "tracing-subscriber",
  "wacp-proto",
  "wacp-taxonomy",
+ "wacp-transport",
 ]
 
 [[package]]

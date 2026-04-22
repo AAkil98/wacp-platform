@@ -34,8 +34,6 @@ use wacp_transport::wacp_v1::coordinator_service_server::{
     CoordinatorService, CoordinatorServiceServer,
 };
 
-use crate::runtime_harness::RuntimeHarness;
-
 /// Per-RPC queue of scripted outcomes. A `None` element means "let the
 /// next call pass through to the real runtime"; `Some(status)` means
 /// "fail the next call with this status". Elements are popped from the
@@ -62,11 +60,13 @@ pub struct InjectableCoordinator {
 }
 
 impl InjectableCoordinator {
-    /// Spawn the mock service in front of the runtime referenced by
-    /// `rt`. The returned address is what the Console should point its
+    /// Spawn the mock service in front of an upstream coordinator at
+    /// `upstream_coord_addr` (expected form `[::1]:PORT` — no `http://`
+    /// scheme; mirrors `RuntimeHarness::coordinator_addr()`'s return
+    /// shape). The returned address is what the Console should point its
     /// `GrpcPool`'s coordinator channel at.
-    pub async fn spawn(rt: &RuntimeHarness) -> std::io::Result<Self> {
-        let coord_url = format!("http://{}", rt.coordinator_addr());
+    pub async fn spawn(upstream_coord_addr: impl Into<String>) -> std::io::Result<Self> {
+        let coord_url = format!("http://{}", upstream_coord_addr.into());
         let channel = Channel::from_shared(coord_url)
             .map_err(|e| std::io::Error::other(format!("bad coord url: {e}")))?
             .connect()

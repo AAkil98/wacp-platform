@@ -19,11 +19,14 @@
 //! `#[ignore]` with a `// ignored: needs LLM stub` reason.
 
 pub mod console_harness;
-pub mod mock_coordinator;
 pub mod runtime_harness;
 pub mod test_client;
 
 pub use console_harness::ConsoleHarness;
-pub use mock_coordinator::InjectableCoordinator;
+// Re-exported from `console-test-support` so existing
+// `use console_integration::InjectableCoordinator;` paths keep resolving.
+// Home moved there so `session_launcher_bench` can pull the mock without a
+// cyclic dev-dep. See `impl/archive/health-log-residual-plan.md` P1.
+pub use console_test_support::mock_coordinator::{self, InjectableCoordinator};
 pub use runtime_harness::{RuntimeHarness, RuntimeHarnessError};
 pub use test_client::{TestClient, WsClient};

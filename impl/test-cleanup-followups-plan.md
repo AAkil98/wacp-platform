@@ -141,7 +141,7 @@ Verification: `cargo test -p wacp-integration-tests --test recovery_matrix` is 8
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| A.1 | — | — | — |
+| A.1 | `f04f404` | 2026-04-22 | **Risk #1 fired.** §16 enumerated 6 errors; the full `--all-targets` run surfaced 23 across 11 files (wacp-runtime, wacp-coordinator, wacp-workspace, wacp-trail, wacp-transport, wacp-integration-tests, console-db). All fixed in-phase, no allow-lists. Categories: 2 `prometheus::get_name` deprecations (file-attribution corrected from tests.rs → metrics.rs #[cfg(test)] mod), 2 `single_match` + 2 `collapsible_match`, 8 `collapsible_if` (mostly `&&`-let-chain folds), 2 `redundant_guards` (pattern-binding), 1 `needless_borrows_for_generic_args`, 1 `useless_conversion`, 2 `unused_must_use` (real missing `.await` on `coord.handle_event` — tests were coincidentally-green), 1 unused import, 3 `field_reassign_with_default`, 2 `len_zero`, 1 `module_inception` (dedent). Test counts unchanged: wacp-runtime 109/109, wacp-coordinator 387/387, console-db 96/96. |
 | A.2 | — | — | — |
 | B.1 | — | — | — |
 | B.2 | — | — | — |

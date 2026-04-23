@@ -13,7 +13,9 @@ depends_on: [wacp-integration-deferred-scenarios-plan]
 > **Triggering finding:** `ROADMAP.md` §Pre-`v0.1.0` > "UX polish" subsection — three bullets (keyboard-nav a11y sweep; empty-states + error-states normalization; onboarding flow). The first is stale (Track A already closed via `f0527d7`); this plan replaces it with an expanded a11y audit beyond keyboard-nav, folds the other two in, and strikes the stale ROADMAP bullet in closeout.
 > **Target branch:** `refactor/ux-polish-pre-v0.1.0` (topic).
 > **Rough effort:** ~6.5–10.5h across 6 execution phases + closeout — medium confidence. Recon-heavy; P0 calibrates P1–P4 scope.
-> **Not in scope:** color-contrast / theme-level a11y audit (belongs to a future visual-design pass), pre-v0.1.0 items other than the three UX polish bullets (OCI publication + `:latest` regex + coverage floor are independent), LLM-assisted onboarding tutorials, i18n.
+> **Not in scope:** pre-v0.1.0 items other than the three UX polish bullets (OCI publication + `:latest` regex + coverage floor are independent), LLM-assisted onboarding tutorials, i18n.
+>
+> **Scope amendment 2026-04-23 (post-P0, user-authorized):** color-contrast brought into P1 scope after P0 recon showed the root cause is a single design token (`--color-text-muted` in `src/index.css`), not a theme-wide redesign. Two-line token bump + ~2–3 surgical surface fixes absorbs the 16 axe-flagged nodes. Sizing delta ~30–60 min on P1.
 
 ## 1. Goal & Motivation
 
@@ -193,11 +195,11 @@ Artifact: `/tmp/axe-recon.json` (7 surfaces, 9 violations total — 4 distinct r
 |---|---|---|---|---|---|---|
 | A.1 | `button-name` | discovery-roles, discovery-verticals, profiles-list, profile-editor | critical | 4 | **P1** | Icon-only buttons with hover-opacity pattern — need `aria-label` or visible text. Targets are `.p-1.hover\:opacity-70*`. |
 | A.2 | `select-name` | discovery-roles | critical | 2 | **P1** | Two unlabelled `<select>` elements on roles tab. Likely filter/sort dropdowns — add `<label htmlFor>` or `aria-label`. |
-| A.3 | `color-contrast` | discovery-roles (9), discovery-verticals (5), profiles-list (1), profile-editor (1) | serious | 16 | **out-of-scope** | Per plan §Not-in-scope — color-contrast / theme-level a11y is deferred to a future visual-design pass. The `.uppercase` class recurrence suggests one CSS token drives most violations; single-token fix may be cheap but the downstream visual impact isn't something this plan commits to deciding. |
+| A.3 | `color-contrast` | discovery-roles (9), discovery-verticals (5), profiles-list (1), profile-editor (1) | serious | 16 | **P1** (scope amendment, user sign-off 2026-04-23) | Root cause: `--color-text-muted` in `src/index.css:10,28`. Light `#94a3b8` on `#fff` ≈ 2.85:1 (fails AA 4.5:1); dark `#64748b` on `#0f172a` ≈ 4.0:1 (fails AA 4.5:1 small). `.uppercase` Sidebar class at `src/components/Sidebar.tsx:54` + empty-state `<p>` muted-text share the token. **Fix:** bump light `--color-text-muted` → `#64748b` (slate-500, ≈4.83:1) + dark → `#cbd5e1` (slate-300, strong contrast, distinct from secondary). Surgical look for h3 + button-internal residuals. |
 
 **Surfaces with 0 violations:** login, session-wizard, oversight. Wizard + oversight were tested in minimal state (mock-runtime fixture without an active session), so "0 violations" understates true coverage — these surfaces should be re-scanned post-P4 with real content.
 
-**P1 A-fix scope from axe:** 6 nodes across 2 rule-ids. Plus the 2 auth-surface error-banner sites noted in the Error-render inventory below, which use `<ClickCard>` (role=button) instead of `role="alert"` (so screen readers announce them as clickable buttons, not as errors). That adds 2 more fixes. **Total P1 A-scope: ~8 concrete fix sites.**
+**P1 A-fix scope from axe:** 6 nodes across 2 rule-ids (`button-name`, `select-name`) + 16 nodes across `color-contrast` (user-authorized amendment). Plus the 2 auth-surface error-banner sites noted in the Error-render inventory below, which use `<ClickCard>` (role=button) instead of `role="alert"` (so screen readers announce them as clickable buttons, not as errors). That adds 2 more fixes (deferred to P3+P4). **Total P1 A-scope: ~10 concrete fix sites (6 label/naming + 2 token-bump lines + 2–3 residual contrast sites).**
 
 ### A-recon — focus-management infrastructure gaps
 
@@ -258,14 +260,14 @@ Only 4 sites render application-level errors. React Query `isError` is **nowhere
 
 ### P0 scope-freeze summary
 
-- **P1 (A-core fixes):** ~8 sites across 2 axe rule-ids. Under the plan's "8–15" estimate; well under Risk #1's "20-row" threshold. **No re-negotiation needed.**
+- **P1 (A-core fixes):** ~10 sites across 3 axe rule-ids (button-name, select-name, color-contrast — the last brought in post-P0 by user amendment). Under the plan's "8–15" estimate; well under Risk #1's "20-row" threshold. Color-contrast adds ~30–60 min.
 - **P2 (A-focus-infra):** 4 new utilities (`useFocusTrap`, `useFocusOnRouteChange`, `<SkipToContent>`, `<LiveRegion>` + `useAnnounce()`). No existing library; no conflict. Scope matches plan.
 - **P3 (B-component-extract):** 2 components (`<EmptyState>`, `<ErrorBanner>`) + RTL tests. Scope matches plan.
 - **P4 (B-surface-sweep):** 30 sites (26 empty + 4 error), up from plan's 10–12. Per-site diff is trivial; revised estimate 2h (up from 1.5h).
 - **P5 (C onboarding):** scope unchanged — fully known from plan.
-- **Out-of-scope deferred:** `color-contrast` (16 nodes across 4 surfaces) — per plan §Not-in-scope, belongs in a future visual-design pass. Will file as a HEALTH-LOG entry if closeout deems worth persisting.
+- **Out-of-scope deferred:** none after the 2026-04-23 color-contrast amendment. Every P0-surfaced violation is now scoped into a phase.
 
-Revised total: **~7–10h** across P1–P6 (lower bound of original estimate since P1 eslint-sweep is a no-op and P3/P5 are scope-stable, upper bound unchanged).
+Revised total: **~7.5–11h** across P1–P6 (lower bound up from 6.5h because P1 eslint-sweep is a no-op but color-contrast amendment adds ~30–60 min; upper bound up from 10.5h by the same delta).
 
 ### Triage table (superseded by the three inventories above)
 

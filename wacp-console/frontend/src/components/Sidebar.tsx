@@ -36,7 +36,11 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: "var(--color-border)" }}>
         {sidebarOpen && <span className="font-semibold text-sm">WACP Console</span>}
-        <button onClick={toggleSidebar} className="p-1 rounded hover:opacity-70">
+        <button
+          onClick={toggleSidebar}
+          className="p-1 rounded hover:opacity-70"
+          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
           {sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
         </button>
       </div>
@@ -72,6 +76,8 @@ export function Sidebar() {
               onClick={() => setTheme(t)}
               className={`p-1.5 rounded ${theme === t ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
               title={t}
+              aria-label={`Switch to ${t} theme`}
+              aria-pressed={theme === t}
             >
               <Icon size={14} />
             </button>
@@ -82,7 +88,12 @@ export function Sidebar() {
         {user && sidebarOpen && (
           <div className="flex items-center justify-between px-2 py-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>
             <span className="truncate">{user.username}</span>
-            <button onClick={() => void logout()} className="p-1 hover:opacity-70" title="Logout">
+            <button
+              onClick={() => void logout()}
+              className="p-1 hover:opacity-70"
+              title="Logout"
+              aria-label="Log out"
+            >
               <LogOut size={14} />
             </button>
           </div>

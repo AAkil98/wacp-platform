@@ -69,6 +69,7 @@ export function RolesTab() {
           <select
             value={baseRoleFilter}
             onChange={(e) => setBaseRoleFilter(e.target.value)}
+            aria-label="Filter by base role"
             style={{
               padding: "6px 10px",
               fontSize: 13,
@@ -86,6 +87,7 @@ export function RolesTab() {
           <select
             value={verticalFilter}
             onChange={(e) => setVerticalFilter(e.target.value)}
+            aria-label="Filter by vertical"
             style={{
               padding: "6px 10px",
               fontSize: 13,

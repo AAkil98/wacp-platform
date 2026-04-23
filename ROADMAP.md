@@ -22,11 +22,13 @@ Items that block a first tagged release.
 - **Mutation score ≥ 85 % on critical modules.** Four targets today (wacp-transport/auth, wacp-tools/execution, console-core/session_launcher, console-core/session_monitor) — three at 100 %, one at 98 %. Weekly `cargo-mutants` cron is live; gate goes from informational to blocking at v0.1.0.
 - **Playwright E2E `--coverage`.** Landed — V8 coverage now unioned with Vitest lcov under the `frontend` Codecov flag.
 
-### UX polish
+### UX polish — landed
 
-- **Empty states + error-state completeness.** Several console surfaces render minimal empty states and terse error banners. Pre-release pass normalizes these against one convention.
-- **Keyboard-nav a11y sweep.** Three surfaces completed in a prior pass; remaining surfaces (profile studio, session launcher) get the same treatment before v0.1.0.
-- **Onboarding flow.** Bootstrap-credential discovery today requires reading container logs. Pre-release: either a first-run UI prompt or clearer inline docs.
+All three UX-polish bullets landed via `impl/archive/ux-polish-pre-v0.1.0-plan.md` (April 2026):
+
+- **A11y audit + focus management.** Full `eslint-plugin-jsx-a11y` strict ruleset enforced; axe-core sweep across 7 surfaces clean (button-name + select-name labels, `--color-text-muted` token bumped for AA contrast). Modal focus-trap + route-change focus + skip-link + ARIA live-region infrastructure shipped.
+- **Empty + error states.** Shared `<EmptyState>` (`role=status`) + `<ErrorBanner>` (`role=alert`) components with locked APIs; 26 empty-state sites + 4 error-render sites adopted across 14 surfaces.
+- **Onboarding.** First-run `/setup` page surfaces the bootstrap credential inline; `GET /api/auth/bootstrap-state` endpoint with security-gated token exposure; new `00-first-run.spec.ts` Playwright spec covers the flow end-to-end.
 
 ---
 

@@ -19,11 +19,12 @@
 //!   - report_fields: direct `recovery::run` call asserting RecoveryReport
 //!     counters
 //!
-//! **Not covered (deferred, see `HEALTH-LOG.md` §13.2):**
-//! - DB-degraded boot. `FaultyDb::hold_write_lock` holds a WRITE lock, but
-//!   `recovery::run` only reads from sessions on boot — the write lock
-//!   doesn't block the read path. A different fault-injection mode would
-//!   be needed; filed as §13.2 follow-up.
+//! **All §13.2 deferrals now closed.** `db_degraded_boot_returns_empty_
+//! active_sessions` (this file) covers the read-failure arm via an inline
+//! `pool.close()` (sqlx PoolClosed mirrors a dropped connection at the
+//! same error class as the production caller observes); `workspace_failed_
+//! marked_session_failed` covers the `Failed → FAILED` arm in isolation
+//! from `AbortWorkspace` semantics via `MockHighwayServer::script_workspace`.
 
 use std::time::Duration;
 
@@ -442,6 +443,36 @@ async fn workspace_failed_marked_session_failed() {
         "terminal session must not have a monitor"
     );
     assert_eq!(session_state(&db, &sid).await, session_state::FAILED);
+}
+
+/// §13.2 (b) follow-up. Boots the console with a closed DB pool — the
+/// first DB hit in the spawn flow is `recovery::run`'s `sessions::list_
+/// active`, which returns `sqlx::Error::PoolClosed`. recovery handles the
+/// failure gracefully (logs warn, returns the default empty
+/// `RecoveryReport` per recovery.rs:75–81), so the spawn returns Ok with
+/// an empty `active_sessions` map. Proves the boot path is robust to
+/// DB-degraded startup — the failure mode the operator sees when sqlx
+/// drops the underlying connection between pool init and recovery run.
+///
+/// Inlines `pool.close()` rather than depending on a `pub` surface for
+/// `console_db::testing::closed_pool` (which is `pub(crate)`). Same
+/// produced error class — `sqlx::Error::PoolClosed` — and a single line
+/// of test setup, no API expansion of `console-db`.
+#[tokio::test]
+async fn db_degraded_boot_returns_empty_active_sessions() {
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
+
+    let degraded_db = console_db::create_test_pool().await.expect("pool");
+    degraded_db.close().await;
+
+    let console = ConsoleHarness::spawn_with_db(&rt, degraded_db)
+        .await
+        .expect("console boot must tolerate degraded DB (recovery logs + returns empty)");
+
+    assert!(
+        console.state.active_sessions.read().await.is_empty(),
+        "no monitors should spawn when recovery cannot read sessions",
+    );
 }
 
 #[tokio::test]

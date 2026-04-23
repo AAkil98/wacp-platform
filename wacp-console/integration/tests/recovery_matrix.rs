@@ -11,6 +11,10 @@
 //!     → FAILED
 //!   - terminal_closed: ACTIVE + runtime reports `Closed` (via agent Complete
 //!     → WA3.6 auto-integration) → COMPLETED (§11.4 follow-up, 2026-04-22)
+//!   - workspace_failed: ACTIVE + scripted highway reports `Failed` (via
+//!     `MockHighwayServer`) → FAILED — sister to `terminal_aborted`, isolates
+//!     the `Failed → FAILED` arm from runtime abort semantics (§13.2 (a)
+//!     follow-up, 2026-04-23)
 //!   - mixed: three sessions, three distinct outcomes in one pass
 //!   - report_fields: direct `recovery::run` call asserting RecoveryReport
 //!     counters
@@ -390,6 +394,54 @@ async fn terminal_workspace_closed_marked_completed() {
     // `terminal_workspace_aborted_marked_failed` (its coincidentally-green
     // path was actually driving Failed, not Closed — see §11.4).
     assert_eq!(session_state(&db, &sid).await, session_state::COMPLETED);
+}
+
+/// §13.2 (a) follow-up. Sister to `terminal_workspace_aborted_marked_failed`
+/// — both end with `session_state::FAILED` via `recovery::recover_one`'s
+/// `Failed → FAILED` arm, but this one scripts the highway response
+/// directly via `MockHighwayServer` instead of routing through the real
+/// coordinator's `AbortWorkspace`.
+///
+/// Two coverage benefits over the abort-driven sister:
+/// 1. **Isolation.** A future change to `AbortWorkspace`'s terminal-state
+///    output (e.g., introducing a distinct `Aborted` state) would not
+///    silently affect this test's coverage of the recovery state-mapping
+///    table.
+/// 2. **Infrastructure validation.** Exercises `ConsoleHarness::spawn_with
+///    _db_and_highway` + `MockHighwayServer::script_workspace` end-to-end
+///    under real recovery flow — proves the §13.2 mock-highway plumbing
+///    composes correctly for downstream tests that need scripted states
+///    the real runtime can't reach.
+#[tokio::test]
+async fn workspace_failed_marked_session_failed() {
+    let rt = RuntimeHarness::spawn_default().await.expect("runtime");
+
+    let mock = console_test_support::MockHighwayServer::spawn()
+        .await
+        .expect("mock highway");
+    let failed_ws = format!("ws-failed-{}", uuid::Uuid::new_v4());
+    mock.config()
+        .script_workspace(&failed_ws, wacp_v1::WorkspaceState::Failed);
+
+    let db = console_db::create_test_pool().await.expect("db");
+    seed_user(&db, "u-1").await;
+    let sid = format!("s-{}", uuid::Uuid::new_v4());
+    seed_active_session(&db, &sid, "u-1", Some(&failed_ws)).await;
+
+    let console = ConsoleHarness::spawn_with_db_and_highway(&rt, db.clone(), mock.addr())
+        .await
+        .expect("console");
+
+    assert!(
+        !console
+            .state
+            .active_sessions
+            .read()
+            .await
+            .contains_key(&sid),
+        "terminal session must not have a monitor"
+    );
+    assert_eq!(session_state(&db, &sid).await, session_state::FAILED);
 }
 
 #[tokio::test]

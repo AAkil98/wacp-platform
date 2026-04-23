@@ -61,6 +61,8 @@ Verification: `cargo check -p console-integration --tests`. Existing I5 `taxonom
 
 ### 3.2 Phase P2 — scriptable `MockHighwayService`
 
+**Deviation at execution (see §7).** The actual landing extended `HighwayConfig` + `MockHighwayService` rather than introducing a separate `ScriptableHighway` struct. Single highway-mock type to maintain across the existing W4 callers and the new §13.2 callers; cost (a more grab-bag-shaped `HighwayConfig`) documented inline as rustdoc on `HighwayConfig` with an explicit "split trigger". The proposed shape below is preserved as the original design for context.
+
 **Current state.** `wacp-console/crates/console-test-support/src/mock_grpc.rs` has a skeleton `MockHighwayService` with `Unimplemented` for most RPCs. For this plan, only `GetWorkspace` needs real behaviour.
 
 **Target shape.** Mirror `mock_rest::RestState`'s `Arc<ArcSwap<HashMap<WorkspaceId, State>>>` pattern:
@@ -234,8 +236,8 @@ Verification: `cargo test -p console-integration --test recovery_matrix` 10/10.
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| P1 | — | — | — |
-| P2 | — | — | — |
+| P1 | `7e20361` | 2026-04-23 | `ConsoleHarness::spawn_with_db_and_highway` mirrors `spawn_with_db_and_rest` shape; Q1 (grpc-pool override mechanics) resolved at pickup — `GrpcPool::new` already takes highway as a positional arg, no surgery needed. |
+| P2 | `d42e79d` | 2026-04-23 | **Plan deviation:** extended existing `HighwayConfig` + `MockHighwayService` instead of creating a new `ScriptableHighway` struct. Single highway-mock type to maintain; smaller diff; existing W4 callers untouched. Cost documented inline as rustdoc on `HighwayConfig` with a "split trigger" (split if a dimension needs ArcSwap semantics, dimensions exceed ~5, or callers want different defaults for the same field). Also fixed a P1 naming bug — `highway_url` → `highway_addr` (slot expects bare `[::1]:PORT`, not URL). New `MockHighwayServer` re-exported from `console_test_support`. Smoke test 2/2. |
 | P3 | — | — | — |
 | P4 | — | — | — |
 | P5 | — | — | — |

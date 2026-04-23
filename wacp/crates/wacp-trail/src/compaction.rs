@@ -117,7 +117,7 @@ impl CompactionTask {
     /// Returns the number of merge operations performed.
     pub fn merge_warm_segments(&self, threshold_bytes: u64) -> Result<usize, StorageError> {
         let warm = self.tier_manager.list_warm_segments()?;
-        let small: Vec<_> = warm
+        let mut small: Vec<_> = warm
             .iter()
             .filter(|s| s.size_bytes < threshold_bytes)
             .collect();
@@ -125,6 +125,10 @@ impl CompactionTask {
         if small.len() < 2 {
             return Ok(0);
         }
+
+        // readdir order is filesystem-dependent; sort by id so the merged
+        // segment keeps the lower id and warm-tier ordering stays monotonic.
+        small.sort_by_key(|s| s.id);
 
         // Merge pairs of consecutive small segments.
         let mut merged = 0;

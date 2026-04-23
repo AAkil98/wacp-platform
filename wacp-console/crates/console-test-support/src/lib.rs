@@ -6,5 +6,6 @@ pub mod mock_runtime;
 pub mod programmable_coordinator;
 
 pub use mock_coordinator::InjectableCoordinator;
+pub use mock_grpc::MockHighwayServer;
 pub use mock_runtime::{MockAddrs, MockRuntime};
 pub use programmable_coordinator::ProgrammableCoordinator;

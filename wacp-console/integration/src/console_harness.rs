@@ -107,17 +107,20 @@ impl ConsoleHarness {
     }
 
     /// Like [`Self::spawn_with_db`] but routes the console's highway gRPC
-    /// channel at `highway_url` instead of the runtime's. Used by the §13.2
-    /// integration plan to put a `ScriptableHighway` between the console and
-    /// the runtime so recovery can be probed against scripted workspace
-    /// states (e.g. `WorkspaceState::Failed`) the real runtime can't reach
-    /// from a clean seed path.
+    /// channel at `highway_addr` (bare `[::1]:PORT` form, matching
+    /// [`RuntimeHarness::highway_addr`]) instead of the runtime's. Used by
+    /// the §13.2 integration plan to put a [`MockHighwayServer`] between
+    /// the console and the runtime so `recovery::recover_one` can be
+    /// probed against scripted workspace states (e.g. `WorkspaceState::
+    /// Failed`) the real runtime can't reach from a clean seed path.
+    ///
+    /// [`MockHighwayServer`]: console_test_support::MockHighwayServer
     pub async fn spawn_with_db_and_highway(
         rt: &RuntimeHarness,
         db: DbPool,
-        highway_url: String,
+        highway_addr: String,
     ) -> std::io::Result<Self> {
-        let pool = GrpcPool::new(&rt.agent_addr(), &highway_url, &rt.coordinator_addr());
+        let pool = GrpcPool::new(&rt.agent_addr(), &highway_addr, &rt.coordinator_addr());
         pool.connect().await;
 
         let taxonomy = Arc::new(ArcSwap::from_pointee(
@@ -140,7 +143,7 @@ impl ConsoleHarness {
             taxonomy,
             runtime_config: ConsoleRuntimeConfig {
                 agent_address: rt.agent_addr(),
-                highway_address: highway_url,
+                highway_address: highway_addr,
                 coordinator_address: rt.coordinator_addr(),
                 rest_address: rt.rest_url(),
             },

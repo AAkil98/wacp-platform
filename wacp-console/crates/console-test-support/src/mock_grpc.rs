@@ -131,6 +131,30 @@ pub enum HighwayOutcome {
 /// outcomes can be set independently; default is Ok everywhere.
 ///
 /// Also captures the last request seen on each RPC for assertions.
+///
+/// # Design note: scriptability dimensions
+///
+/// This struct grows by adding new dimensions of scriptability (per-RPC
+/// outcomes, captured-last-request, response sequences, scripted
+/// `get_workspace` state map, ...). The §13.2 plan considered splitting
+/// `get_workspace` scripting into a separate `ScriptableHighway` struct
+/// mirroring `mock_rest::RestState`'s `ArcSwap` pattern; we kept it inside
+/// `HighwayConfig` to avoid running two highway-mock types in parallel
+/// (one spawn helper, one shared `MockHighwayService` impl, one set of
+/// existing W4 callers untouched).
+///
+/// **Split trigger** — split into per-concern types if any of the
+/// following becomes true:
+/// 1. A scriptability dimension needs `ArcSwap` semantics (hot-swap
+///    mid-test) rather than `Mutex` (lock-and-replace).
+/// 2. The number of distinct scriptability dimensions exceeds ~5 (today:
+///    gate-outcome, escalation-outcome, inject-outcome, workspace-states;
+///    gate-sequence is a sub-mode of gate-outcome).
+/// 3. Two callers want different default behaviours for the same field
+///    (e.g., one test wants `get_workspace` to return `Unimplemented` for
+///    unscripted IDs, another wants Ok-with-default-state).
+///
+/// Until then, extension is the cheaper option.
 #[derive(Debug, Default)]
 pub struct HighwayConfig {
     pub respond_to_gate: std::sync::Mutex<HighwayOutcome>,
@@ -145,6 +169,13 @@ pub struct HighwayConfig {
     /// non-empty, takes precedence over `respond_to_gate`. Allows tests to
     /// alternate Ok / Err across a batch.
     pub gate_sequence: std::sync::Mutex<std::collections::VecDeque<HighwayOutcome>>,
+
+    /// Map of `workspace_id` → scripted state. When `MockHighwayService::
+    /// get_workspace` is called with an ID in this map, the response uses
+    /// the scripted state. IDs not in the map return `Status::not_found`.
+    /// Set via [`Self::script_workspace`]; cleared via [`Self::clear_workspaces`].
+    pub workspace_states:
+        std::sync::Mutex<std::collections::HashMap<String, proto::WorkspaceState>>,
 }
 
 impl HighwayConfig {
@@ -163,6 +194,21 @@ impl HighwayConfig {
     pub fn push_gate_sequence(&self, items: impl IntoIterator<Item = HighwayOutcome>) {
         let mut q = self.gate_sequence.lock().unwrap();
         q.extend(items);
+    }
+
+    /// Script `get_workspace(workspace_id == id)` to respond with `state`.
+    /// Repeated calls overwrite the prior scripted state for the same id.
+    pub fn script_workspace(&self, id: &str, state: proto::WorkspaceState) {
+        self.workspace_states
+            .lock()
+            .unwrap()
+            .insert(id.into(), state);
+    }
+
+    /// Drop all scripted workspace states. After this call, every
+    /// `get_workspace` returns `Status::not_found` until re-scripted.
+    pub fn clear_workspaces(&self) {
+        self.workspace_states.lock().unwrap().clear();
     }
 }
 
@@ -298,9 +344,24 @@ impl HighwayService for MockHighwayService {
 
     async fn get_workspace(
         &self,
-        _request: Request<proto::GetWorkspaceRequest>,
+        request: Request<proto::GetWorkspaceRequest>,
     ) -> Result<Response<proto::WorkspaceView>, Status> {
-        Err(Status::unimplemented("mock: get_workspace not implemented"))
+        let Some(cfg) = &self.config else {
+            return Err(Status::unimplemented("mock: get_workspace not implemented"));
+        };
+        let req = request.into_inner();
+        let states = cfg.workspace_states.lock().unwrap();
+        match states.get(&req.workspace_id) {
+            Some(state) => Ok(Response::new(proto::WorkspaceView {
+                id: req.workspace_id,
+                state: *state as i32,
+                ..Default::default()
+            })),
+            None => Err(Status::not_found(format!(
+                "mock: unscripted workspace_id `{}`",
+                req.workspace_id
+            ))),
+        }
     }
 
     async fn get_task_graph(
@@ -371,6 +432,66 @@ impl HighwayService for MockHighwayService {
         Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
             rx,
         )))
+    }
+}
+
+/// Mock `HighwayService` server bound to an ephemeral port. The inner
+/// service shares an `Arc<HighwayConfig>` that the caller can inspect /
+/// modify via [`Self::config`] — `script_workspace`, `set_gate`, etc.,
+/// take effect immediately on the running server.
+///
+/// Mirrors [`crate::InjectableCoordinator`]'s shape (Drop aborts the
+/// underlying `tokio::spawn`). Used by §13.2 integration tests to put a
+/// scripted highway between the console and the runtime.
+pub struct MockHighwayServer {
+    addr: std::net::SocketAddr,
+    config: Arc<HighwayConfig>,
+    handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl MockHighwayServer {
+    /// Spawn on an ephemeral port. The OS picks the port, eliminating the
+    /// port-collision concern §14.1 covers for the runtime harness.
+    pub async fn spawn() -> std::io::Result<Self> {
+        let config = Arc::new(HighwayConfig::default());
+        let svc = MockHighwayService::with_config(config.clone());
+
+        let listener = tokio::net::TcpListener::bind("[::1]:0").await?;
+        let addr = listener.local_addr()?;
+        let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+        let handle = tokio::spawn(async move {
+            let _ = tonic::transport::Server::builder()
+                .add_service(HighwayServiceServer::new(svc))
+                .serve_with_incoming(incoming)
+                .await;
+        });
+
+        Ok(MockHighwayServer {
+            addr,
+            config,
+            handle: Some(handle),
+        })
+    }
+
+    /// Address in `[::1]:PORT` form — drop into the Console's
+    /// `GrpcPool::new(.., highway_addr=…)` slot or pass to
+    /// `ConsoleHarness::spawn_with_db_and_highway`.
+    pub fn addr(&self) -> String {
+        format!("[::1]:{}", self.addr.port())
+    }
+
+    /// Shared handle to the config — call `script_workspace`, etc., on
+    /// this `Arc` to script behaviour for the running server.
+    pub fn config(&self) -> Arc<HighwayConfig> {
+        self.config.clone()
+    }
+}
+
+impl Drop for MockHighwayServer {
+    fn drop(&mut self) {
+        if let Some(h) = self.handle.take() {
+            h.abort();
+        }
     }
 }
 

@@ -106,6 +106,63 @@ impl ConsoleHarness {
         })
     }
 
+    /// Like [`Self::spawn_with_db`] but routes the console's highway gRPC
+    /// channel at `highway_url` instead of the runtime's. Used by the §13.2
+    /// integration plan to put a `ScriptableHighway` between the console and
+    /// the runtime so recovery can be probed against scripted workspace
+    /// states (e.g. `WorkspaceState::Failed`) the real runtime can't reach
+    /// from a clean seed path.
+    pub async fn spawn_with_db_and_highway(
+        rt: &RuntimeHarness,
+        db: DbPool,
+        highway_url: String,
+    ) -> std::io::Result<Self> {
+        let pool = GrpcPool::new(&rt.agent_addr(), &highway_url, &rt.coordinator_addr());
+        pool.connect().await;
+
+        let taxonomy = Arc::new(ArcSwap::from_pointee(
+            taxonomy_builder::build_index(None, &[], &[]).index,
+        ));
+        let active_sessions = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
+
+        let _report = recovery::run(
+            db.clone(),
+            pool.clone(),
+            console_core::event_enricher::EventEnricher::new(taxonomy.clone()),
+            console_core::refusal_synthesizer::RefusalSynthesizer::new(),
+            active_sessions.clone(),
+            MonitorConfig::default(),
+        )
+        .await;
+
+        let state = Arc::new(AppState {
+            db,
+            taxonomy,
+            runtime_config: ConsoleRuntimeConfig {
+                agent_address: rt.agent_addr(),
+                highway_address: highway_url,
+                coordinator_address: rt.coordinator_addr(),
+                rest_address: rt.rest_url(),
+            },
+            grpc_pool: pool,
+            active_sessions,
+        });
+
+        let listener = TcpListener::bind("[::1]:0").await?;
+        let addr = listener.local_addr()?;
+        let state_for_router = (*state).clone();
+        let app = api_router(state_for_router);
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        Ok(ConsoleHarness {
+            addr,
+            state,
+            handle: Some(handle),
+        })
+    }
+
     pub fn base_url(&self) -> String {
         format!("http://{}", self.addr)
     }

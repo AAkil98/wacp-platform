@@ -1,8 +1,9 @@
 ---
 id: wacp-integration-deferred-scenarios-plan
 type: impl
-status: draft
+status: final
 created: 2026-04-22T17:00:00
+revised: 2026-04-23T01:30:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, integration, testing, chaos, mock-highway]
 depends_on: [wacp-test-cleanup-followups-plan]
@@ -197,16 +198,16 @@ Verification: `cargo test -p console-integration --test recovery_matrix` 10/10.
 
 ## 4. Acceptance Criteria
 
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean.
-- [ ] `cargo test -p console-integration --test recovery_matrix` 10/10 (up from 8/8).
-- [ ] `cargo test -p console-integration --test mock_highway_smoke` passes.
-- [ ] `cargo test -p console-integration --test taxonomy_reload` unaffected (4/4).
-- [ ] `ConsoleHarness::spawn_with_db_and_highway` API exists + documented in module doc.
-- [ ] `ScriptableHighway` (or extended `MockHighwayService`) exposes `script_workspace` + `spawn` helpers.
-- [ ] HEALTH-LOG §13.2 "Not covered" bullets struck with resolution notes.
-- [ ] `recovery_matrix.rs` module doc updated — at most §13.5/§13.3 deferrals remain.
-- [ ] AUDIT §13.9 has closure row; §13.7.8 closeout prose updated.
-- [ ] Plan moved to `impl/archive/integration-deferred-scenarios-plan.md`.
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` clean. (verified per phase on touched crates)
+- [x] `cargo test -p console-integration --test recovery_matrix` 10/10 (up from 8/8). (P3 → 9/9, P4 → 10/10)
+- [x] `cargo test -p console-integration --test mock_highway_smoke` passes. (2/2 in P2)
+- [x] `cargo test -p console-integration --test taxonomy_reload` unaffected (4/4). (verified after P1 + P2)
+- [x] `ConsoleHarness::spawn_with_db_and_highway` API exists + documented in module doc. (P1 `7e20361`)
+- [x] ~~`ScriptableHighway`~~ extended `MockHighwayService` exposes `script_workspace` + `spawn` helpers. (P2 `d42e79d`; deviation)
+- [x] HEALTH-LOG §13.2 "Not covered" bullets struck with resolution notes. (P5 closeout)
+- [x] `recovery_matrix.rs` module doc updated — at most §13.5/§13.3 deferrals remain. (P3 + P4 in-file edits — DB-degraded line struck in P4, both deferrals replaced with "all closed" summary)
+- [x] AUDIT §13.9 has closure row; §13.7.8 closeout prose updated. (§13.9.10 added; §12.5 + §13.7.8 row + footer updated in P5)
+- [x] Plan moved to `impl/archive/integration-deferred-scenarios-plan.md`. (next commit via `git mv`)
 
 ## 5. Risks / Open Questions
 
@@ -238,6 +239,6 @@ Verification: `cargo test -p console-integration --test recovery_matrix` 10/10.
 |---|---|---|---|
 | P1 | `7e20361` | 2026-04-23 | `ConsoleHarness::spawn_with_db_and_highway` mirrors `spawn_with_db_and_rest` shape; Q1 (grpc-pool override mechanics) resolved at pickup — `GrpcPool::new` already takes highway as a positional arg, no surgery needed. |
 | P2 | `d42e79d` | 2026-04-23 | **Plan deviation:** extended existing `HighwayConfig` + `MockHighwayService` instead of creating a new `ScriptableHighway` struct. Single highway-mock type to maintain; smaller diff; existing W4 callers untouched. Cost documented inline as rustdoc on `HighwayConfig` with a "split trigger" (split if a dimension needs ArcSwap semantics, dimensions exceed ~5, or callers want different defaults for the same field). Also fixed a P1 naming bug — `highway_url` → `highway_addr` (slot expects bare `[::1]:PORT`, not URL). New `MockHighwayServer` re-exported from `console_test_support`. Smoke test 2/2. |
-| P3 | — | — | — |
-| P4 | — | — | — |
-| P5 | — | — | — |
+| P3 | `907d43e` | 2026-04-23 | `workspace_failed_marked_session_failed` — recovery_matrix 8 → 9. **Framing-stale finding** captured in commit body + P5 HEALTH-LOG strike: `terminal_workspace_aborted_marked_failed` already exercises the `Failed → FAILED` arm via real `AbortWorkspace` (cascade_failure sets `WorkspaceState::Failed` at `wacp-coordinator/src/tree.rs:256`). The new test still adds value (isolation from runtime abort semantics + integration-level proof of P1+P2 plumbing) but is not raw branch-coverage gain. |
+| P4 | `358e1ef` | 2026-04-23 | `db_degraded_boot_returns_empty_active_sessions` — recovery_matrix 9 → 10. **Two plan deviations:** (1) inlined `pool.close()` instead of using `console_db::testing::closed_pool` since that helper is `pub(crate)`; same produced error class (`sqlx::Error::PoolClosed`), three lines of test setup, no API expansion of `console-db`. (2) Test collapsed to pure composition since Q2 confirmed (b) "logs + empty" at `recovery.rs:75–81` — `drop_reads` alternative + Err arm both unnecessary. |
+| P5 | (this commit) | 2026-04-23 | Closeout: HEALTH-LOG §13.2 strikes for both deferred scenarios (with framing-stale note about `terminal_aborted` already covering `Failed → FAILED`); AUDIT §12.5 prose updated (3 → 1 deferred sub-scenario); §13.7.8 row updated; §13.9.10 closure row added; footer appended; plan §7 + acceptance ticked + status final. Archive move follows in next commit per repo convention. |

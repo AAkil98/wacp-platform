@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useVerticals, useVertical } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
 
 interface VerticalSummary {
   id: string;
@@ -147,7 +148,7 @@ export function VerticalsTab() {
       ))}
 
       {!isLoading && verticals.length === 0 && (
-        <p style={{ color: "var(--color-text-muted)" }}>No verticals found.</p>
+        <EmptyState title="No verticals found." size="compact" />
       )}
     </div>
   );
@@ -180,7 +181,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["context"]}
         onToggle={() => toggleSection("context")}
       >
-        {contextEntries.length === 0 && <Muted>No context fields defined.</Muted>}
+        {contextEntries.length === 0 && <EmptyState title="No context fields defined." size="compact" />}
         <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ color: "var(--color-text-muted)", textAlign: "left" }}>
@@ -214,7 +215,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["policies"]}
         onToggle={() => toggleSection("policies")}
       >
-        {policyEntries.length === 0 && <Muted>No tool policies defined.</Muted>}
+        {policyEntries.length === 0 && <EmptyState title="No tool policies defined." size="compact" />}
         {policyEntries.map(([toolName, policy]) => (
           <div
             key={toolName}
@@ -253,7 +254,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["checkpoints"]}
         onToggle={() => toggleSection("checkpoints")}
       >
-        {checkpointEntries.length === 0 && <Muted>No checkpoint types defined.</Muted>}
+        {checkpointEntries.length === 0 && <EmptyState title="No checkpoint types defined." size="compact" />}
         {checkpointEntries.map(([name, cp]) => (
           <div
             key={name}
@@ -304,7 +305,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["quality"]}
         onToggle={() => toggleSection("quality")}
       >
-        {detail.quality_criteria.length === 0 && <Muted>No quality criteria defined.</Muted>}
+        {detail.quality_criteria.length === 0 && <EmptyState title="No quality criteria defined." size="compact" />}
         {detail.quality_criteria.map((qc) => (
           <div
             key={qc.id}
@@ -331,7 +332,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["tasks"]}
         onToggle={() => toggleSection("tasks")}
       >
-        {detail.task_types.length === 0 && <Muted>No task types defined.</Muted>}
+        {detail.task_types.length === 0 && <EmptyState title="No task types defined." size="compact" />}
         {detail.task_types.map((tt) => (
           <div
             key={tt.id}
@@ -378,7 +379,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["workflows"]}
         onToggle={() => toggleSection("workflows")}
       >
-        {detail.workflows.length === 0 && <Muted>No workflows defined.</Muted>}
+        {detail.workflows.length === 0 && <EmptyState title="No workflows defined." size="compact" />}
         {detail.workflows.map((wf) => (
           <div
             key={wf.id}
@@ -407,7 +408,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["profiles"]}
         onToggle={() => toggleSection("profiles")}
       >
-        {detail.default_profiles.length === 0 && <Muted>No default profiles defined.</Muted>}
+        {detail.default_profiles.length === 0 && <EmptyState title="No default profiles defined." size="compact" />}
         {detail.default_profiles.map((p) => (
           <div
             key={p.role_id}
@@ -431,7 +432,7 @@ function VerticalDetailPanel({ verticalId }: { verticalId: string }) {
         open={!!openSections["tools"]}
         onToggle={() => toggleSection("tools")}
       >
-        {detail.tools.length === 0 && <Muted>No tools defined.</Muted>}
+        {detail.tools.length === 0 && <EmptyState title="No tools defined." size="compact" />}
         {detail.tools.map((tool) => (
           <div
             key={tool.name}
@@ -489,6 +490,3 @@ function CollapsibleSection({
   );
 }
 
-function Muted({ children }: { children: React.ReactNode }) {
-  return <p style={{ color: "var(--color-text-muted)", fontSize: 12 }}>{children}</p>;
-}

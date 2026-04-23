@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { TableVirtuoso } from "react-virtuoso";
 import { useSessions } from "../../api/hooks/index";
 import { Wizard } from "./Wizard";
+import { EmptyState } from "../../components/EmptyState";
 
 // HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
 const VIRTUOSO_THRESHOLD = 50;
@@ -152,10 +153,10 @@ export function SessionsPage() {
         )}
 
         {!sessionsQuery.isLoading && sessions.length === 0 && (
-          <div style={{ textAlign: "center", paddingTop: 64, color: "var(--color-text-secondary)" }}>
-            <p style={{ fontSize: 16 }}>No sessions yet.</p>
-            <p style={{ fontSize: 14, marginTop: 4 }}>Click "New Session" to launch your first coordination session.</p>
-          </div>
+          <EmptyState
+            title="No sessions yet."
+            description='Click "New Session" to launch your first coordination session.'
+          />
         )}
 
         {sessions.length > 0 &&

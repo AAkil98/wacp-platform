@@ -5,6 +5,7 @@ import { useUsers, useCreateUser } from "../../api/hooks/index";
 import { api } from "../../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClickCard } from "../../components/ClickCard";
+import { ErrorBanner } from "../../components/ErrorBanner";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 // HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
@@ -143,6 +144,7 @@ export function UsersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ username: "", display_name: "", password: "", console_role: "operator" });
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionInfo, setActionInfo] = useState<string | null>(null);
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [newRole, setNewRole] = useState("");
 
@@ -183,10 +185,10 @@ export function UsersPage() {
 
   async function resetPassword(userId: string) {
     setActionError(null);
+    setActionInfo(null);
     try {
       await api.post(`/api/users/${userId}/reset-password`);
-      setActionError(null);
-      alert("Password has been reset. The user must change it on next login.");
+      setActionInfo("Password has been reset. The user must change it on next login.");
     } catch {
       setActionError("Failed to reset password.");
     }
@@ -286,8 +288,13 @@ export function UsersPage() {
       </div>
 
       {actionError && (
-        <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--color-danger)", color: "#fff", borderRadius: 4, fontSize: 13 }}>
-          {actionError}
+        <div style={{ marginBottom: 12 }}>
+          <ErrorBanner variant="error" title={actionError} onDismiss={() => setActionError(null)} />
+        </div>
+      )}
+      {actionInfo && (
+        <div style={{ marginBottom: 12 }}>
+          <ErrorBanner variant="info" title={actionInfo} onDismiss={() => setActionInfo(null)} />
         </div>
       )}
 

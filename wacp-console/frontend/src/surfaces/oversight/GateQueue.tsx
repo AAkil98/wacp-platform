@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useSessionStore } from "../../store/session";
 import { api } from "../../api/client";
+import { EmptyState } from "../../components/EmptyState";
 
 const URGENCY_ORDER: Record<string, number> = {
   critical: 0,
@@ -104,7 +105,7 @@ export function GateQueue({ sessionId }: GateQueueProps) {
   }
 
   if (sorted.length === 0) {
-    return <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>No pending gates.</p>;
+    return <EmptyState title="No pending gates." size="compact" />;
   }
 
   return (

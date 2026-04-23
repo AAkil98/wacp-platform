@@ -1,4 +1,5 @@
 import type React from "react";
+import { EmptyState } from "../../components/EmptyState";
 
 // --- Types ---
 
@@ -69,11 +70,7 @@ export function ContextForm({ schema, values, onChange }: ContextFormProps) {
   }
 
   if (keys.length === 0) {
-    return (
-      <p style={{ color: "var(--color-text-secondary)" }}>
-        No context fields required for this vertical.
-      </p>
-    );
+    return <EmptyState title="No context fields required for this vertical." size="compact" />;
   }
 
   return (

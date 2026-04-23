@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useSessionStore } from "../../store/session";
 import { ClickCard } from "../../components/ClickCard";
+import { EmptyState } from "../../components/EmptyState";
 
 function formatTimestamp(iso: string): string {
   try {
@@ -96,11 +97,7 @@ export function TrailStream() {
       </div>
 
       {/* Trail list */}
-      {filtered.length === 0 && (
-        <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>
-          No trail entries yet.
-        </p>
-      )}
+      {filtered.length === 0 && <EmptyState title="No trail entries yet." size="compact" />}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {filtered.map((entry) => {

@@ -5,6 +5,8 @@ import { api } from "../../api/client";
 import type { ApiError } from "../../api/client";
 import { ContextForm } from "./ContextForm";
 import { ClickCard } from "../../components/ClickCard";
+import { EmptyState } from "../../components/EmptyState";
+import { ErrorBanner } from "../../components/ErrorBanner";
 
 // --- Types ---
 
@@ -240,15 +242,6 @@ const summaryLabel: React.CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
-const errorBox: React.CSSProperties = {
-  marginTop: 12,
-  padding: 12,
-  border: "1px solid var(--color-danger)",
-  borderRadius: 6,
-  background: "var(--color-bg-secondary)",
-  color: "var(--color-danger)",
-  fontSize: 13,
-};
 
 // --- Step labels ---
 
@@ -507,7 +500,11 @@ export function Wizard({ onClose }: WizardProps) {
       {/* Body */}
       <div style={body}>
         {renderStepContent()}
-        {stepError && <div style={errorBox}>{stepError}</div>}
+        {stepError && (
+          <div style={{ marginTop: 12 }}>
+            <ErrorBanner variant="error" title={stepError} onDismiss={() => setStepError(null)} />
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -575,7 +572,7 @@ function SelectVerticalStep({
         ))}
       </div>
       {verticals.length === 0 && !isLoading && (
-        <p style={{ color: "var(--color-text-secondary)" }}>No verticals available.</p>
+        <EmptyState title="No verticals available." />
       )}
     </div>
   );
@@ -615,9 +612,7 @@ function SelectWorkflowStep({
         ))}
       </div>
       {workflows.length === 0 && (
-        <p style={{ color: "var(--color-text-secondary)" }}>
-          No workflows available for this vertical.
-        </p>
+        <EmptyState title="No workflows available for this vertical." />
       )}
     </div>
   );
@@ -654,9 +649,7 @@ function AssignProfilesStep({
         );
       })}
       {roles.length === 0 && (
-        <p style={{ color: "var(--color-text-secondary)" }}>
-          No roles defined for this vertical.
-        </p>
+        <EmptyState title="No roles defined for this vertical." />
       )}
     </div>
   );
@@ -861,10 +854,12 @@ function ReviewLaunchStep({
         </div>
 
         {launchError && (
-          <div style={errorBox}>
-            {launchError.split("\n").map((line, i) => (
-              <div key={i}>{line}</div>
-            ))}
+          <div style={{ marginTop: 12 }}>
+            <ErrorBanner
+              variant="error"
+              title="Launch failed"
+              description={launchError}
+            />
           </div>
         )}
       </div>

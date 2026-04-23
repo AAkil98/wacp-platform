@@ -1,6 +1,7 @@
 import type React from "react";
 import { useState } from "react";
 import { useAuditLog } from "../../api/hooks/index";
+import { EmptyState } from "../../components/EmptyState";
 
 // --- Styles ---
 
@@ -170,7 +171,7 @@ export function AuditLogPage() {
       {auditQuery.isLoading ? (
         <p style={{ color: "var(--color-text-secondary)" }}>Loading audit log...</p>
       ) : entries.length === 0 ? (
-        <p style={{ color: "var(--color-text-secondary)" }}>No audit log entries found.</p>
+        <EmptyState title="No audit log entries found." />
       ) : (
         <table style={table}>
           <thead>

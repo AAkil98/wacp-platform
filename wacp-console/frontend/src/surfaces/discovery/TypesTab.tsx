@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useEnvelopeTypes, useCheckpointTypes, useVerticals, useVertical } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
 
 interface EnvelopeType {
   name: string;
@@ -75,7 +76,7 @@ export function TypesTab() {
             </div>
           ))}
           {!envelopeLoading && envelopeTypes.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)" }}>No envelope types found.</p>
+            <EmptyState title="No envelope types found." size="compact" />
           )}
         </div>
       </section>
@@ -106,7 +107,7 @@ export function TypesTab() {
             </div>
           ))}
           {!checkpointLoading && checkpointTypes.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)" }}>No protocol checkpoint types found.</p>
+            <EmptyState title="No protocol checkpoint types found." size="compact" />
           )}
         </div>
       </section>
@@ -115,7 +116,7 @@ export function TypesTab() {
       <section>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Vertical Checkpoint Types</h2>
         {verticals.length === 0 && (
-          <p style={{ color: "var(--color-text-muted)" }}>No verticals loaded.</p>
+          <EmptyState title="No verticals loaded." size="compact" />
         )}
         {verticals.map((v) => (
           <VerticalCheckpoints key={v.id} verticalId={v.id} verticalName={v.name} />
@@ -157,9 +158,7 @@ function VerticalCheckpoints({ verticalId, verticalName }: { verticalId: string;
       {expanded && (
         <div style={{ marginLeft: 16, marginTop: 8 }}>
           {entries.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)", fontSize: 12 }}>
-              No checkpoint types defined.
-            </p>
+            <EmptyState title="No checkpoint types defined." size="compact" />
           )}
           {entries.map(([name, cp]) => (
             <div

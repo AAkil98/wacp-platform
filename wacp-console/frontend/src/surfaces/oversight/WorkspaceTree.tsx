@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useSessionStore } from "../../store/session";
+import { EmptyState } from "../../components/EmptyState";
 
 function stateColor(state: string): string {
   switch (state.toUpperCase()) {
@@ -19,7 +20,7 @@ export function WorkspaceTree() {
   }, [workspaces]);
 
   if (entries.length === 0) {
-    return <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>No workspaces active.</p>;
+    return <EmptyState title="No workspaces active." size="compact" />;
   }
 
   return (

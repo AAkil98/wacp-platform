@@ -138,7 +138,7 @@ describe("LoginPage", () => {
 
   // --- clearError on error click ---
 
-  it("calls clearError when clicking the error banner", () => {
+  it("calls clearError when clicking the error banner's dismiss button", () => {
     const clearErrorSpy = vi.fn();
     useAuthStore.setState({
       user: null,
@@ -148,7 +148,7 @@ describe("LoginPage", () => {
     });
 
     renderLogin();
-    fireEvent.click(screen.getByText("Some error"));
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(clearErrorSpy).toHaveBeenCalled();
   });
 

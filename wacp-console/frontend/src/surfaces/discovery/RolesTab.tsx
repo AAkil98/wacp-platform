@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useRoles, useRole, useVerticals } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
 
 interface RoleListItem {
   name: string;
@@ -169,7 +170,7 @@ export function RolesTab() {
         ))}
 
         {!isLoading && roles.length === 0 && (
-          <p style={{ color: "var(--color-text-muted)" }}>No roles found.</p>
+          <EmptyState title="No roles found." size="compact" />
         )}
       </div>
 

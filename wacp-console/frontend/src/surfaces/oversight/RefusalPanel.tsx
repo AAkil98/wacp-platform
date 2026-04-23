@@ -1,4 +1,5 @@
 import { useSessionStore } from "../../store/session";
+import { EmptyState } from "../../components/EmptyState";
 
 function errorCodeColor(code: string): string {
   if (code.startsWith("POLICY_")) return "var(--color-warning)";
@@ -10,7 +11,7 @@ export function RefusalPanel() {
   const refusals = useSessionStore((s) => s.refusals);
 
   if (refusals.length === 0) {
-    return <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>No refusals recorded.</p>;
+    return <EmptyState title="No refusals recorded." size="compact" />;
   }
 
   return (

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useSessionStore } from "../../store/session";
 import { api } from "../../api/client";
 import { ClickCard } from "../../components/ClickCard";
+import { EmptyState } from "../../components/EmptyState";
 
 function timeAgo(timestamp: string | undefined): string {
   if (!timestamp) return "--";
@@ -50,7 +51,7 @@ export function EscalationInbox({ sessionId }: EscalationInboxProps) {
   }
 
   if (escalations.length === 0) {
-    return <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>No escalations.</p>;
+    return <EmptyState title="No escalations." size="compact" />;
   }
 
   return (

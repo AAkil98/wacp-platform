@@ -1,4 +1,5 @@
 import type { VersionEntry } from "./ProfilesPage.types";
+import { EmptyState } from "../../components/EmptyState";
 
 interface ProfileVersionsPanelProps {
   versions: VersionEntry[];
@@ -21,9 +22,7 @@ export function ProfileVersionsPanel({ versions, isLoading }: ProfileVersionsPan
         <p style={{ color: "var(--color-text-secondary)" }}>Loading versions...</p>
       )}
       {versions.length === 0 && !isLoading && (
-        <p style={{ color: "var(--color-text-secondary)" }}>
-          No version history available.
-        </p>
+        <EmptyState title="No version history available." size="compact" />
       )}
       {versions.map((v) => (
         <div

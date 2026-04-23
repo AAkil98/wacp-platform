@@ -4,6 +4,7 @@ import { RolesTab } from "./RolesTab";
 import { ToolsTab } from "./ToolsTab";
 import { TypesTab } from "./TypesTab";
 import { VerticalsTab } from "./VerticalsTab";
+import { EmptyState } from "../../components/EmptyState";
 
 const TABS = ["Roles", "Tools", "Types", "Verticals"] as const;
 type Tab = (typeof TABS)[number];
@@ -87,7 +88,7 @@ export function DiscoveryPage() {
             <p style={{ color: "var(--color-text-muted)" }}>Searching...</p>
           )}
           {!searchLoading && searchGroups.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)" }}>No results found.</p>
+            <EmptyState title="No results found." size="compact" />
           )}
           {searchGroups.map((group) => (
             <div key={group.type} style={{ marginBottom: 12 }}>

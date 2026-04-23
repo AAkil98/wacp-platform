@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTools, useTool, useVerticals } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
 
 interface ToolListItem {
   name: string;
@@ -134,7 +135,7 @@ export function ToolsTab() {
         ))}
 
         {!isLoading && tools.length === 0 && (
-          <p style={{ color: "var(--color-text-muted)" }}>No tools found.</p>
+          <EmptyState title="No tools found." size="compact" />
         )}
       </div>
 

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useSessionStore } from "../../store/session";
 import { api } from "../../api/client";
+import { EmptyState } from "../../components/EmptyState";
 
 interface InjectionBarProps {
   sessionId: string;
@@ -76,9 +77,7 @@ export function InjectionBar({ sessionId }: InjectionBarProps) {
           ))}
         </select>
         {activeWorkspaces.length === 0 && (
-          <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 4 }}>
-            No active workspaces available.
-          </p>
+          <EmptyState title="No active workspaces available." size="compact" />
         )}
       </div>
 

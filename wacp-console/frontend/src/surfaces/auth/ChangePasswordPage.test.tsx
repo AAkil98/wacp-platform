@@ -100,7 +100,7 @@ describe("ChangePasswordPage", () => {
 
   // --- clearError on error click ---
 
-  it("calls clearError when clicking the error banner", () => {
+  it("calls clearError when clicking the error banner's dismiss button", () => {
     const clearErrorSpy = vi.fn();
     useAuthStore.setState({
       user: { user_id: "u1", username: "admin", console_role: "admin" },
@@ -111,7 +111,7 @@ describe("ChangePasswordPage", () => {
     });
 
     renderChangePw();
-    fireEvent.click(screen.getByText("Password change failed"));
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(clearErrorSpy).toHaveBeenCalled();
   });
 

@@ -450,9 +450,8 @@ describe("UsersPage", () => {
       });
     });
 
-    it("shows alert on successful password reset", async () => {
+    it("shows info banner on successful password reset", async () => {
       mockedApi.post.mockResolvedValue({});
-      const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
       renderUsersPage(USERS);
       await waitFor(() => {
         expect(screen.getByText("admin_one")).toBeInTheDocument();
@@ -462,9 +461,9 @@ describe("UsersPage", () => {
       fireEvent.click(resetButtons[0]!);
 
       await waitFor(() => {
-        expect(alertSpy).toHaveBeenCalledWith(
-          "Password has been reset. The user must change it on next login.",
-        );
+        expect(
+          screen.getByText(/Password has been reset\. The user must change it on next login\./i),
+        ).toBeInTheDocument();
       });
     });
 

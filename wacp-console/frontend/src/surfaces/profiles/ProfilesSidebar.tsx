@@ -1,5 +1,6 @@
 import { Virtuoso } from "react-virtuoso";
 import { ClickCard } from "../../components/ClickCard";
+import { EmptyState } from "../../components/EmptyState";
 import type { ProfileSummary } from "./ProfilesPage.types";
 import {
   sidebar,
@@ -106,9 +107,7 @@ export function ProfilesSidebar({
           <div style={{ padding: 16, color: "var(--color-text-secondary)" }}>Loading...</div>
         )}
         {!isLoading && profiles.length === 0 && (
-          <div style={{ padding: 16, color: "var(--color-text-secondary)" }}>
-            No profiles found.
-          </div>
+          <EmptyState title="No profiles found." size="compact" />
         )}
         {profiles.length > 0 &&
           (profiles.length > VIRTUOSO_THRESHOLD ? (

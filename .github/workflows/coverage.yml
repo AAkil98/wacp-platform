@@ -51,8 +51,11 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run coverage
+        # --branch enables branch-coverage emission in the lcov output (BRF/BRH
+        # lines). Required by codecov.yml's per-component branch floors —
+        # see v0.1.0-gate-enforcement-plan §3.2 P1.a + §5.A.
         run: |
-          cargo llvm-cov --lcov --output-path lcov-wacp.info \
+          cargo llvm-cov --lcov --branch --output-path lcov-wacp.info \
             -p wacp-clock -p wacp-coordinator -p wacp-coordinator-sdk \
             -p wacp-fsm -p wacp-llm -p wacp-permissions -p wacp-proto \
             -p wacp-recovery -p wacp-runtime -p wacp-sdk -p wacp-security \
@@ -115,8 +118,9 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run coverage
+        # --branch — see comment on the rust-runtime job above.
         run: |
-          cargo llvm-cov --lcov --output-path lcov-console.info \
+          cargo llvm-cov --lcov --branch --output-path lcov-console.info \
             -p wacp-console -p console-api -p console-core \
             -p console-db -p console-runtime -p console-test-support
 

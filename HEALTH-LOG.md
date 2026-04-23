@@ -649,6 +649,39 @@ Adding `--all-targets` to the existing CI clippy steps would catch this class go
 
 **Cross-refs.** §15 (other CI-gap drift from this era). `impl/archive/console-db-schema-alignment-plan.md` §3.5.5 Phase D gate narrowed to match CI's actual invocation.
 
+## 17. Production readdir-order non-determinism in `wacp-trail` warm-tier merge (observed 2026-04-23)
+
+**Status: RESOLVED 2026-04-23** via `fix(wacp-trail): sort warm segments by id before merge — readdir non-determinism` (`f391239`) on `dev`, ff'd to `main` same session. One-line fix: `small.sort_by_key(|s| s.id)` before the pair-merge loop in `wacp/crates/wacp-trail/src/compaction.rs::merge_warm_segments`.
+
+**Context.** Surfaced as a CI fix-forward immediately after the 23rd-pass plan-1 ff to main (2026-04-23 00:47 UTC, main `f2f486a` → `95e7d03`). Both `ci-coverage` (Coverage — wacp Rust, ~1m) and `ci-wacp` (Rust — build, clippy, test, ~5m) failed on main with the same panic:
+
+```
+thread 'compaction::tests::merge_warm_combines_files' panicked at wacp/crates/wacp-trail/src/compaction.rs:300:9:
+assertion failed: warm_dir.join("segment-000001.trail.zst").exists()
+```
+
+The same SHA `95e7d03` had run green on dev a few hours earlier (path-filtered to ci-lint + ci-coverage on the docs-only push; ci-coverage happened to pass that run). The push to main re-ran all 4 workflows under the cross-branch promotion and the same test failed in two of them on the GH ubuntu-latest runner. Local reproduction (WSL ext4 in `~/mada/`) passed.
+
+**Observation.** `tiered::list_warm_segments` (`wacp/crates/wacp-trail/src/tiered.rs:78` → `:140` `list_segments_in`) returns `SegmentInfo` entries in `fs::read_dir` order, which is filesystem-dependent (depends on directory inode allocation, varies by FS state and volume). The sibling `transition_hot_to_warm` at `tiered.rs:91` explicitly does `hot.sort_by_key(|s| s.id)` before iterating; `merge_warm_segments` at `compaction.rs:118` did **not**. The pair-merge loop took `(a, b) = (small[i], small[i+1])`, wrote merged contents to `&a.path`, removed `&b.path`. When readdir returned the two segments in reverse name order, the merge wrote to segment-000002 and removed segment-000001 — `merged == 1` returned true (the merge happened), but warm-tier id ordering silently inverted.
+
+The test at `compaction.rs:282` exposed it because the assertion at `:300` checks `segment-000001` specifically; production paths assume the same monotonic-by-id invariant but don't assert it. Local WSL ext4 happened to return name-sorted readdir for a directory that hadn't churned, which is why the test was green on every prior local run + every prior CI run.
+
+**Why it matters.** Not just a test flake — a real production bug. In real warm-tier compaction, two consecutive small segments could merge into the higher-id file, breaking the monotonic id-by-time invariant downstream readers rely on. `transition_warm_to_cold` at `tiered.rs:117` iterates by `seg.created` time (not by id) and would still work, but any reader that iterates by id (chronological replay, segment-range queries) would skip the merged content or replay it twice. The bug existed since the warm-merge feature landed and shipped through every CI run that happened to get sorted readdir from the runner volume.
+
+**Audit of the family.** Production callers of `list_*_segments` after the fix:
+
+| Caller | List variant | Sort? | Safe? |
+|---|---|---|---|
+| `compaction::merge_warm_segments` (was the bug) | warm | now sorts by id | ✅ fixed |
+| `tiered::transition_hot_to_warm` | hot | sorts by id | ✅ |
+| `tiered::transition_warm_to_cold` | warm | no sort, iterates by `seg.created` (time-based) | ✅ functionally, latent risk if changed |
+
+No other broken callers today. Test callers (`tests.rs:987`, `tiered.rs:246/247/268/313`) assert on length only — order doesn't matter.
+
+**Prevention (defensive, not landed).** The conservative move is to lift the sort into `list_segments_in` itself so all callers get id-sorted output by default. No current caller wants raw readdir order; centralizing eliminates the foot-gun and makes `transition_warm_to_cold`'s latent risk go away. Not landed as part of this fix-forward (would expand the diff beyond the CI-unblock scope); filed here for follow-up. Adjacent work: any other production code in the repo that calls `fs::read_dir` and assumes name-order is the same class of bug — quick `grep -rn 'read_dir\|read_dir_all' --include='*.rs'` audit recommended before the next release-tagging round.
+
+**Cross-refs.** Companion to §14.1 (also a nondeterminism flake, but in test-infra port allocation). Distinct from §15 (CI workflow path drift) and §16 (clippy gap in test code). Bug class: production code consuming `fs::read_dir` without explicit sort. Fix-forward sibling to `7166cb3` (rustfmt) + `e65c8ea` (rustls-webpki bump) — three inline fix-forwards on top of plan 1 this session.
+
 ---
 
 *Working document. Update as optimizations land or new signals appear. Not a spec — intent is to guide attention, not fix scope.*

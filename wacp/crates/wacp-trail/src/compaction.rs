@@ -128,6 +128,7 @@ impl CompactionTask {
 
         // readdir order is filesystem-dependent; sort by id so the merged
         // segment keeps the lower id and warm-tier ordering stays monotonic.
+        // See HEALTH-LOG.md §17 for full root-cause analysis.
         small.sort_by_key(|s| s.id);
 
         // Merge pairs of consecutive small segments.

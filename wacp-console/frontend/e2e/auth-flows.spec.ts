@@ -1,8 +1,13 @@
 // §13.7.7 D2 — auth-flows E2E.
 //
-// Covers: bad password, bootstrap-credential login, forced password change,
-// logout, and re-login with the rotated password. Runs serially because later
-// tests depend on the admin state set up by earlier ones.
+// Covers: bad password, logout, re-login with rotated password. Runs
+// serially because later tests depend on the admin state set up by earlier ones.
+//
+// **Bootstrap-credential login + forced password change** were originally
+// in this file. They've been folded into `00-first-run.spec.ts` (P5.C
+// onboarding plan) which exercises the same flow with the additional
+// /setup-screen entry point. Removing the duplicate here avoids the
+// double-consume-bootstrap conflict.
 //
 // Deferred to a later pass (see skipped `test.skip` at the bottom):
 //   - 5-failed-attempts lockout path (requires per-test DB reset to stay
@@ -15,13 +20,12 @@ import {
   ADMIN_USERNAME,
   FINAL_ADMIN_PASSWORD,
   expectLoginError,
-  readBootstrapToken,
   submitLogin,
 } from "./helpers/admin";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("Admin bootstrap → login → rotate password → logout → re-login", () => {
+test.describe("Admin logout → re-login (post-rotation)", () => {
   test("bad password shows the login error banner", async ({ page }) => {
     await page.goto("/login");
     await submitLogin(page, ADMIN_USERNAME, "definitely-not-the-password");
@@ -31,31 +35,6 @@ test.describe("Admin bootstrap → login → rotate password → logout → re-l
     // red banner above the form.
     await expectLoginError(page, "authentication required");
     await expect(page).toHaveURL(/\/login$/);
-  });
-
-  test("bootstrap credential logs in and routes to /change-password", async ({ page }) => {
-    await page.goto("/login");
-    const token = readBootstrapToken();
-    await submitLogin(page, ADMIN_USERNAME, token);
-    // Forced-change because users.must_change_password is true at bootstrap.
-    await page.waitForURL(/\/change-password/, { timeout: 5_000 });
-    await expect(page.getByText(/you must change your password/i)).toBeVisible();
-  });
-
-  test("change-password form rotates to FINAL_ADMIN_PASSWORD and routes to /discovery", async ({
-    page,
-  }) => {
-    const token = readBootstrapToken();
-    // Re-enter via login since each test gets a fresh browser context.
-    await page.goto("/login");
-    await submitLogin(page, ADMIN_USERNAME, token);
-    await page.waitForURL(/\/change-password/);
-
-    await page.getByLabel("Current Password").fill(token);
-    await page.getByLabel("New Password").fill(FINAL_ADMIN_PASSWORD);
-    await page.getByRole("button", { name: /change password/i }).click();
-
-    await page.waitForURL(/\/discovery/, { timeout: 5_000 });
   });
 
   test("logout clears the session and routes back to /login", async ({ page }) => {

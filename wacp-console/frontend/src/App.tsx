@@ -14,6 +14,9 @@ const LoginPage = lazy(() => import("./surfaces/auth/LoginPage").then((m) => ({ 
 const ChangePasswordPage = lazy(() =>
   import("./surfaces/auth/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })),
 );
+const SetupPage = lazy(() =>
+  import("./surfaces/auth/SetupPage").then((m) => ({ default: m.SetupPage })),
+);
 const ProfilesPage = lazy(() =>
   import("./surfaces/profiles/ProfilesPage").then((m) => ({ default: m.ProfilesPage })),
 );
@@ -73,6 +76,7 @@ export function App() {
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
+            <Route path="/setup" element={<SetupPage />} />
 
             {/* Authenticated routes */}
             <Route element={<Layout />}>

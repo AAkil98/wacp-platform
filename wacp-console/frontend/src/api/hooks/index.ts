@@ -10,6 +10,21 @@ export function useHealth() {
   return useQuery({ queryKey: ["health"], queryFn: () => api.get("/api/health"), refetchInterval: 30000 });
 }
 
+// --- Bootstrap state (pre-login first-run UI) ---
+export interface BootstrapState {
+  has_admin_user: boolean;
+  bootstrap_token_path: string | null;
+  bootstrap_token: string | null;
+}
+export function useBootstrapState() {
+  return useQuery<BootstrapState>({
+    queryKey: ["bootstrap-state"],
+    queryFn: () => api.get<BootstrapState>("/api/auth/bootstrap-state"),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 // --- Discovery ---
 export function useRoles(params?: { base_role?: string; vertical?: string }) {
   const qs = new URLSearchParams();

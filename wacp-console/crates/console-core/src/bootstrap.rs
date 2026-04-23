@@ -56,14 +56,22 @@ pub async fn bootstrap_if_needed(pool: &DbPool) -> Result<BootstrapResult, Conso
     })
 }
 
-/// Write the bootstrap token to the XDG state directory.
-pub fn write_bootstrap_token(password: &str) -> Result<std::path::PathBuf, ConsoleError> {
+/// XDG state-dir path for the bootstrap token. Pure derivation — does not
+/// touch the filesystem. Used by both `write_bootstrap_token` and the
+/// `/api/auth/bootstrap-state` endpoint.
+pub fn bootstrap_token_path() -> std::path::PathBuf {
     let state_dir = directories::ProjectDirs::from("", "", "wacp-console")
         .and_then(|dirs| dirs.state_dir().map(|p| p.to_path_buf()))
         .unwrap_or_else(|| std::path::PathBuf::from("."));
+    state_dir.join("bootstrap-token")
+}
 
-    std::fs::create_dir_all(&state_dir).ok();
-    let path = state_dir.join("bootstrap-token");
+/// Write the bootstrap token to the XDG state directory.
+pub fn write_bootstrap_token(password: &str) -> Result<std::path::PathBuf, ConsoleError> {
+    let path = bootstrap_token_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
     std::fs::write(&path, password)
         .map_err(|e| ConsoleError::Internal(format!("failed to write bootstrap token: {e}")))?;
 

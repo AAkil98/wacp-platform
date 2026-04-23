@@ -46,7 +46,9 @@ First boot compiles two Rust binaries + the React SPA from scratch — expect **
 docker compose logs -f wacp-console
 ```
 
-First-run credential: the console emits a one-time bootstrap token at startup; look for `BOOTSTRAP TOKEN: <43-char-base64>` in the `wacp-console` container logs. Sign in with that, then set a real password at the forced change-password prompt.
+First-run credential: open **<http://localhost:8080>** — a fresh install lands on the **/setup** screen, which displays the one-time admin password generated on first boot. Sign in with it, then set a real password at the forced change-password prompt.
+
+If `/setup` shows "bootstrap token file not found", the file lives on disk at `$XDG_STATE_HOME/wacp-console/bootstrap-token` (containers: `~/.local/share/wacp-console/bootstrap-token`); you can also tail the container log for `bootstrap admin created — one-time credential written` and read the file at the path it logs.
 
 Tear down with `docker compose down` (add `-v` to wipe the sqlite + runtime data volumes).
 

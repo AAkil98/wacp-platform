@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use console_core::audit::{AuditAction, AuditEntry, log_audit};
 use console_core::authenticator::hash_token;
+use console_core::bootstrap::bootstrap_token_path;
 use console_core::error::ConsoleError;
 use console_core::password::{hash_password, validate_password_strength, verify_password};
 use console_core::rate_limit::{check_login_rate_limit, record_login_attempt};
@@ -32,6 +33,53 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/whoami", get(whoami))
         .route("/api/auth/change-password", post(change_password))
+        .route("/api/auth/bootstrap-state", get(bootstrap_state))
+}
+
+/// Pre-login state probe used by the frontend's first-run UI.
+///
+/// Returns:
+/// - `has_admin_user`: true if at least one **setup-complete** admin exists
+///   (active + `must_change_password=0`). The freshly-bootstrapped admin
+///   does NOT count — they're inserted with the flag set, so this stays
+///   false until the operator completes the `/change-password` rotation.
+///   This semantic is what gates the first-run UI: the endpoint returns
+///   `false` for the entire window between binary boot and operator's
+///   first successful change-password POST.
+/// - `bootstrap_token_path`: XDG state-dir path where the token file lives.
+///   Surfaced regardless of `has_admin_user` so operators can locate the file
+///   for support purposes; the path itself is not a credential.
+/// - `bootstrap_token`: the actual token value, **only** returned when
+///   `has_admin_user == false` AND the file still exists. Once a setup-
+///   complete admin is present, the endpoint refuses to leak the token
+///   even if the file is still on disk — the security gate from plan §4
+///   acceptance #3.
+///
+/// Unauthenticated by design: pre-login by definition. Login + change-
+/// password are also unauthenticated for the same reason.
+async fn bootstrap_state(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let admin_count = users::count_active_admins_setup_complete(&state.db)
+        .await
+        .map_err(|e| ApiError::from(ConsoleError::Database(e.to_string())))?;
+    let has_admin = admin_count > 0;
+
+    let path = bootstrap_token_path();
+    let path_str = path.to_string_lossy().to_string();
+    let file_exists = path.exists();
+
+    let token = if !has_admin && file_exists {
+        std::fs::read_to_string(&path).ok().map(|s| s.trim().to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(serde_json::json!({
+        "has_admin_user": has_admin,
+        "bootstrap_token_path": path_str,
+        "bootstrap_token": token,
+    })))
 }
 
 #[derive(Deserialize)]

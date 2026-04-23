@@ -167,6 +167,26 @@ pub async fn count_active_admins(pool: &DbPool) -> Result<i64, sqlx::Error> {
     Ok(row.0)
 }
 
+/// Count active admins who have completed the forced-change rotation —
+/// i.e., admins with `must_change_password=0`. The fresh bootstrap admin
+/// inserted by `bootstrap_if_needed` has the flag set, so this returns
+/// 0 until the operator finishes onboarding via `/change-password`.
+///
+/// Used by `/api/auth/bootstrap-state` to gate the first-run UI: once
+/// at least one admin has rotated, the /setup screen is no longer the
+/// landing surface.
+pub async fn count_active_admins_setup_complete(pool: &DbPool) -> Result<i64, sqlx::Error> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM users
+         WHERE console_role = 'admin'
+           AND disabled_at IS NULL
+           AND must_change_password = 0",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 /// Count total users (for bootstrap detection).
 pub async fn count_users(pool: &DbPool) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")

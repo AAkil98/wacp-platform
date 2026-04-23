@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router";
 import { useAuthStore } from "../../store/auth";
+import { useBootstrapState } from "../../api/hooks/index";
 import { ErrorBanner } from "../../components/ErrorBanner";
 
 export function LoginPage() {
   const { user, error, loading, mustChangePassword, login, clearError } = useAuthStore();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const bootstrapQuery = useBootstrapState();
 
   if (user && !mustChangePassword) {
     return <Navigate to="/discovery" replace />;
@@ -14,6 +16,13 @@ export function LoginPage() {
 
   if (user && mustChangePassword) {
     return <Navigate to="/change-password" replace />;
+  }
+
+  // First-run branch: zero admin users → redirect to onboarding screen.
+  // Skip while loading (avoid flicker) and on error (login still works as
+  // a fallback if the bootstrap-state endpoint is unreachable).
+  if (bootstrapQuery.data && !bootstrapQuery.data.has_admin_user) {
+    return <Navigate to="/setup" replace />;
   }
 
   async function handleSubmit(e: FormEvent) {

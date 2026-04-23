@@ -1,17 +1,25 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LoginPage } from "./LoginPage.tsx";
 import { useAuthStore } from "../../store/auth.ts";
 
 /**
- * Helper: render LoginPage inside a MemoryRouter so Navigate works.
+ * Helper: render LoginPage inside a MemoryRouter + a fresh QueryClient
+ * so the useBootstrapState hook (P5.B) has the React Query context it
+ * needs. Bootstrap state isn't seeded — the query stays loading and
+ * LoginPage renders the form per its `if (bootstrapQuery.data && ...)`
+ * guard (data is undefined while loading).
  */
 function renderLogin(initialEntries = ["/login"]) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <LoginPage />
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <LoginPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

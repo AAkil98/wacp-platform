@@ -70,7 +70,9 @@ async fn bootstrap_state(
     let file_exists = path.exists();
 
     let token = if !has_admin && file_exists {
-        std::fs::read_to_string(&path).ok().map(|s| s.trim().to_string())
+        std::fs::read_to_string(&path)
+            .ok()
+            .map(|s| s.trim().to_string())
     } else {
         None
     };

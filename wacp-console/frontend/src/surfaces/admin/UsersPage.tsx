@@ -1,10 +1,11 @@
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TableVirtuoso } from "react-virtuoso";
 import { useUsers, useCreateUser } from "../../api/hooks/index";
 import { api } from "../../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClickCard } from "../../components/ClickCard";
+import { useFocusTrap } from "../../hooks/useFocusTrap";
 
 // HEALTH-LOG §4 item 7 / frontend-perf-plan F7 — threshold-gated virtualization.
 // Below the threshold, render a plain <table>; above, TableVirtuoso. Wired now
@@ -330,20 +331,8 @@ export function UsersPage() {
 
       {/* Create user dialog */}
       {showCreate && (
-        <ClickCard aria-label="Close dialog" style={dialogOverlay} onClick={() => setShowCreate(false)}>
-          {/* Inner dialog surface — stops propagation so clicks/keys inside
-              don't dismiss the modal via the outer ClickCard's handler.
-              eslint-disable: role="dialog" is correct; the stop-propagation
-              handlers are structural, not interactive affordances. */}
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-          <div
-            style={dialogBox}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Create user"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
+        <CreateUserDialog onClose={() => setShowCreate(false)}>
+          <>
             <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700 }}>Create User</h2>
             <div style={fieldGroup}>
               <label htmlFor="cu-username" style={fieldLabel}>Username</label>
@@ -371,9 +360,42 @@ export function UsersPage() {
               </button>
               <button style={{ ...btnSecondary }} onClick={() => setShowCreate(false)}>Cancel</button>
             </div>
-          </div>
-        </ClickCard>
+          </>
+        </CreateUserDialog>
       )}
     </div>
+  );
+}
+
+// Dialog wrapper — full-screen overlay that traps focus, closes on Escape,
+// and restores focus to the trigger on unmount. Split out so useFocusTrap's
+// container ref is paired with the actual `role="dialog"` element.
+function CreateUserDialog({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useFocusTrap(ref);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <ClickCard aria-label="Close dialog" style={dialogOverlay} onClick={onClose}>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div
+        ref={ref}
+        style={dialogBox}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create user"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </ClickCard>
   );
 }

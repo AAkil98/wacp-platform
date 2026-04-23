@@ -1,9 +1,13 @@
 import { Outlet, Navigate } from "react-router";
 import { useAuthStore } from "../store/auth";
 import { Sidebar } from "./Sidebar";
+import { SkipToContent } from "./SkipToContent";
+import { LiveRegion } from "./LiveRegion";
+import { useFocusOnRouteChange } from "../hooks/useFocusOnRouteChange";
 
 export function Layout() {
   const { user, loading, mustChangePassword } = useAuthStore();
+  useFocusOnRouteChange();
 
   if (loading) {
     return (
@@ -23,10 +27,16 @@ export function Layout() {
 
   return (
     <div className="flex h-screen">
+      <SkipToContent />
       <Sidebar />
-      <main className="flex-1 overflow-auto p-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex-1 overflow-auto p-6 outline-none"
+      >
         <Outlet />
       </main>
+      <LiveRegion />
     </div>
   );
 }

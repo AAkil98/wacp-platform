@@ -23,7 +23,10 @@ export default tseslint.config(
       "jsx-a11y": jsxA11y,
     },
     rules: {
-      ...jsxA11y.configs.recommended.rules,
+      // P0 recon — promote jsx-a11y from recommended → strict to surface
+      // tighter variants (6 rules differ; see plan §5.A). Revert to
+      // recommended if P1 triage deems strict-only violations out of scope.
+      ...jsxA11y.configs.strict.rules,
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },

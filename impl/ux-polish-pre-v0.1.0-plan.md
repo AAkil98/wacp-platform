@@ -181,23 +181,95 @@ Should the `/setup` screen offer a "rotate token before continuing" button for o
 
 If v0.1.0 is imminent (per ROADMAP, gated on Codecov baseline + mutation-score flip-to-blocking + this plan's closure), coordination with other pre-v0.1.0 work (OCI tag push, `:latest` regex fix) may be needed. **Default: proceed independently** — this plan's output is on a topic branch that can ff into the release batch cleanly. No coordination needed.
 
-### Triage table (populated by P0)
+### P0 finding — eslint static analysis is already at ceiling
 
-| # | Issue | Surface | Severity | Bucket |
-|---|---|---|---|---|
-| A.1 | _(P0 fills this)_ | _(P0)_ | _(P0)_ | _(P0)_ |
+Diffing `jsx-a11y` `recommended` vs `strict` presets shows all 33 strict rules are already enabled (via the `recommended` spread at `eslint.config.js:26`). Strict differs from recommended only in that 6 rules drop their per-tag allow-lists — these are `interactive-supports-focus`, `no-interactive-element-to-noninteractive-role`, `no-noninteractive-element-interactions`, `no-noninteractive-element-to-interactive-role`, `no-noninteractive-tabindex`, `no-static-element-interactions`. Promoted the spread to `strict` in `eslint.config.js`; `pnpm lint` still clean — no violations surfaced by the tightening. **Implication:** the A-recon "expand eslint ruleset" lever has nothing left to pull. P1 scope is driven by axe-core + keyboard-traversal findings, not eslint.
 
-### Empty-state inventory (populated by P0)
+### A-recon — axe-core triage table
+
+Artifact: `/tmp/axe-recon.json` (7 surfaces, 9 violations total — 4 distinct rule-ids, all critical/serious).
+
+| # | Rule | Surface(s) | Severity | Nodes | Bucket | Note |
+|---|---|---|---|---|---|---|
+| A.1 | `button-name` | discovery-roles, discovery-verticals, profiles-list, profile-editor | critical | 4 | **P1** | Icon-only buttons with hover-opacity pattern — need `aria-label` or visible text. Targets are `.p-1.hover\:opacity-70*`. |
+| A.2 | `select-name` | discovery-roles | critical | 2 | **P1** | Two unlabelled `<select>` elements on roles tab. Likely filter/sort dropdowns — add `<label htmlFor>` or `aria-label`. |
+| A.3 | `color-contrast` | discovery-roles (9), discovery-verticals (5), profiles-list (1), profile-editor (1) | serious | 16 | **out-of-scope** | Per plan §Not-in-scope — color-contrast / theme-level a11y is deferred to a future visual-design pass. The `.uppercase` class recurrence suggests one CSS token drives most violations; single-token fix may be cheap but the downstream visual impact isn't something this plan commits to deciding. |
+
+**Surfaces with 0 violations:** login, session-wizard, oversight. Wizard + oversight were tested in minimal state (mock-runtime fixture without an active session), so "0 violations" understates true coverage — these surfaces should be re-scanned post-P4 with real content.
+
+**P1 A-fix scope from axe:** 6 nodes across 2 rule-ids. Plus the 2 auth-surface error-banner sites noted in the Error-render inventory below, which use `<ClickCard>` (role=button) instead of `role="alert"` (so screen readers announce them as clickable buttons, not as errors). That adds 2 more fixes. **Total P1 A-scope: ~8 concrete fix sites.**
+
+### A-recon — focus-management infrastructure gaps
+
+Grep of `wacp-console/frontend/src/` for `focus\(|FocusTrap|SkipToContent|LiveRegion|aria-live|role="alert"|role="status"|tabIndex` returns only `ClickCard.tsx:5,27` (the keyboard-nav sweep product). **Zero focus-trap hooks, zero route-change focus, zero skip-link, zero live regions** exist today. All four P2 utilities are new-build.
+
+No focus-trap library in `package.json` (checked `axe`, `playwright`, `focus`, `aria` substrings; only `@playwright/test` matched). Risk #5 is null — `useFocusTrap` will be hand-rolled.
+
+### B-recon — empty-state inventory
+
+26 distinct sites across 14 files. Three dominant variants; no variant-count explosion (Risk #2 not fired).
 
 | # | File:Line | Current variant | Proposed component |
 |---|---|---|---|
-| B.1 | _(P0 fills this)_ | _(P0)_ | _(P0)_ |
+| B.1 | `oversight/InjectionBar.tsx:78–80` | V3 inline "No active workspaces available" | `<EmptyState>` |
+| B.2 | `oversight/WorkspaceTree.tsx:22` | V1 muted `<p>` "No workspaces active." | `<EmptyState>` |
+| B.3 | `oversight/RefusalPanel.tsx:13` | V1 muted `<p>` "No refusals recorded." | `<EmptyState>` |
+| B.4 | `oversight/GateQueue.tsx:106–107` | V1 muted `<p>` "No pending gates." | `<EmptyState>` |
+| B.5 | `oversight/TrailStream.tsx:99–101` | V3 inline "No trail entries yet." | `<EmptyState>` |
+| B.6 | `oversight/EscalationInbox.tsx:52` | V1 muted `<p>` (pattern) | `<EmptyState>` |
+| B.7 | `admin/AuditLogPage.tsx:172–173` | V1 muted `<p>` "No audit log entries found." | `<EmptyState>` |
+| B.8 | `sessions/SessionsPage.tsx:154–156` | V3 centered "No sessions yet." | `<EmptyState>` |
+| B.9 | `sessions/Wizard.tsx:577–578` | V1 muted `<p>` "No verticals available." | `<EmptyState>` |
+| B.10 | `sessions/Wizard.tsx:617–619` | V3 inline "No workflows available for this vertical." | `<EmptyState>` |
+| B.11 | `sessions/Wizard.tsx:656` | V3 inline (roles empty state) | `<EmptyState>` |
+| B.12 | `sessions/Wizard.tsx:933` | V3 inline (profiles empty state) | `<EmptyState>` |
+| B.13 | `sessions/ContextForm.tsx:71` | V3 early-return (small) | `<EmptyState>` |
+| B.14 | `profiles/ProfileVersionsPanel.tsx:23–25` | V3 inline "No version history available." | `<EmptyState>` |
+| B.15 | `profiles/ProfilesSidebar.tsx:108–110` | V3 inline "No profiles found." | `<EmptyState>` |
+| B.16 | `discovery/TypesTab.tsx:77–78` | V1 muted `<p>` "No envelope types found." | `<EmptyState>` |
+| B.17 | `discovery/TypesTab.tsx:107–109` | V1 muted `<p>` "No protocol checkpoint types found." | `<EmptyState>` |
+| B.18 | `discovery/TypesTab.tsx:117,159` | V1 muted `<p>` (2 additional) | `<EmptyState>` |
+| B.19 | `discovery/ToolsTab.tsx:136–137` | V1 muted `<p>` "No tools found." | `<EmptyState>` |
+| B.20–B.28 | `discovery/VerticalsTab.tsx:150,183,217,256,307,334,381,410,434` | V1 muted `<p>` "No verticals found." + V2 `<Muted>` wrapper ×8 | `<EmptyState>` — also delete file-local `Muted` function at `:492` (no longer needed) |
+| B.29 | `discovery/RolesTab.tsx:169–170` | V1 muted `<p>` "No roles found." | `<EmptyState>` |
+| B.30 | `discovery/DiscoveryPage.tsx:89–90` | V1 muted `<p>` "No results found." | `<EmptyState>` |
 
-### Error-render inventory (populated by P0)
+**Variant breakdown:**
+- V1 (muted `<p style={{ color: "var(--color-text-muted)" }}>`) — ~16 sites, dominant pattern.
+- V2 (`<Muted>` local wrapper in VerticalsTab) — 8 sites, same visual shape as V1.
+- V3 (inline text / ad-hoc container) — ~8 sites, minor variation on V1/V2.
+
+All three collapse cleanly into a single `<EmptyState>` API. **Risk #2 disarmed.** Plan §3.4's API shape (`{ icon?, title, description?, action? }`) fits all three — most sites use only `title`.
+
+### B-recon — error-render inventory
+
+Only 4 sites render application-level errors. React Query `isError` is **nowhere rendered** across any surface (grep `status === "error"|queryResult\.error|\.error\s*\?|\.error\s*&&` in `src/` returns one hit in `api/client.ts` — the error-code extractor, not a render site). Silent-fail is the default error pattern today — surfaces that fail-to-load show as empty.
 
 | # | File:Line | Current variant | Proposed component |
 |---|---|---|---|
-| B.E.1 | _(P0 fills this)_ | _(P0)_ | _(P0)_ |
+| B.E.1 | `auth/LoginPage.tsx:33–40` | `{error && (<ClickCard aria-label="Dismiss error" ... onClick={clearError}>{error}</ClickCard>)}` — role=button, red bg | `<ErrorBanner variant="error" title={error} onDismiss={clearError}>` |
+| B.E.2 | `auth/ChangePasswordPage.tsx:33–35` | Same pattern — mirror of LoginPage. | `<ErrorBanner variant="error" title={error} onDismiss={clearError}>` |
+| B.E.3 | `admin/UsersPage.tsx:188` | Native browser `alert("Password has been reset. …")` | `<ErrorBanner variant="info">` + toast-like dismiss (or keep inline success-banner above form) |
+| B.E.4 | `sessions/Wizard.tsx:355` (`setStepError`) + `:768` (`launchError` state) | `launchError: string \| null` rendered inline at step 6 — exact shape needs look-up but pattern is "render inline string with red color" | `<ErrorBanner variant="error">` |
+
+**P1 A-scope extension:** B.E.1 + B.E.2's current `ClickCard` pattern announces as `role="button"` — screen reader hears "Dismiss error, button" instead of "Error: {message}". Migrating to `<ErrorBanner>` (with `role="alert"`) fixes that. These are **part of P3's ErrorBanner extraction + P4's adoption sweep**, not P1 — the correct fix is delete-and-replace when the component lands, not patch-in-place.
+
+**P4 B-scope:** 26 `<EmptyState>` replacements + 4 `<ErrorBanner>` replacements = **30 component-adoption sites.** Above the plan's "10–12 surfaces" estimate but concentrated in surfaces already on the list; the per-site diff is tiny (2–5 lines). Net effort still within the P4 ~1.5h window; revise estimate to ~2h.
+
+### P0 scope-freeze summary
+
+- **P1 (A-core fixes):** ~8 sites across 2 axe rule-ids. Under the plan's "8–15" estimate; well under Risk #1's "20-row" threshold. **No re-negotiation needed.**
+- **P2 (A-focus-infra):** 4 new utilities (`useFocusTrap`, `useFocusOnRouteChange`, `<SkipToContent>`, `<LiveRegion>` + `useAnnounce()`). No existing library; no conflict. Scope matches plan.
+- **P3 (B-component-extract):** 2 components (`<EmptyState>`, `<ErrorBanner>`) + RTL tests. Scope matches plan.
+- **P4 (B-surface-sweep):** 30 sites (26 empty + 4 error), up from plan's 10–12. Per-site diff is trivial; revised estimate 2h (up from 1.5h).
+- **P5 (C onboarding):** scope unchanged — fully known from plan.
+- **Out-of-scope deferred:** `color-contrast` (16 nodes across 4 surfaces) — per plan §Not-in-scope, belongs in a future visual-design pass. Will file as a HEALTH-LOG entry if closeout deems worth persisting.
+
+Revised total: **~7–10h** across P1–P6 (lower bound of original estimate since P1 eslint-sweep is a no-op and P3/P5 are scope-stable, upper bound unchanged).
+
+### Triage table (superseded by the three inventories above)
+
+The plan's original plan-§5 empty triage tables (Issue, Empty-state, Error-render) have been populated above. The §3.1 P0 deliverable is complete.
 
 ## 6. References
 

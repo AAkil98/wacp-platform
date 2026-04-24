@@ -1,9 +1,9 @@
 ---
 id: wacp-context-schema-evolution-plan
 type: impl
-status: draft
+status: final
 created: 2026-04-24T15:14:19
-revised: 2026-04-24T15:30:00
+revised: 2026-04-24T16:00:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, integration, testing, taxonomy, session-validation]
 depends_on: [wacp-integration-deferred-scenarios-plan]
@@ -161,16 +161,16 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 
 ## 4. Acceptance Criteria
 
-- [ ] P0 recon committed: Q1–Q4 answered in plan §3.0 edit or P0 commit body; scope frozen; any §13.5 framing-stale findings documented.
-- [ ] `fixtures::fixture_context_v1()` + `fixture_context_v2()` present in `wacp-console/crates/console-test-support/src/fixtures.rs` with docstrings explaining the evolution intent.
-- [ ] `fixtures::tests::context_evolution_fixtures_differ_on_required_set` (or equivalent) passes as part of `cargo test -p console-test-support`.
-- [ ] `wacp-console/integration/tests/session_lifecycle_with_schema_change.rs` exists and `cargo test -p console-integration --test session_lifecycle_with_schema_change` is 4/4 (or the frozen P0 count) green.
-- [ ] `cargo test -p console-integration --test taxonomy_reload` unaffected (still 4/4).
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean across the touched crates.
-- [ ] HEALTH-LOG §13.5 "Deferred" block struck and replaced with resolution pointer.
-- [ ] `taxonomy_reload.rs` module doc `:19–22` edited — §13.5 deferred-pointer removed, see-also added.
-- [ ] AUDIT §13.9.N closure row added + footer appended.
-- [ ] Plan moved to `impl/archive/context-schema-evolution-plan.md`; status: final; §7 execution log completed with per-phase SHAs.
+- [x] P0 recon committed: Q1–Q4 answered in plan §3.0; scope frozen; framing correction landed (validation on `/launch` not `/sessions`). (`7c42659`)
+- [x] `fixtures::fixture_context_v1()` + `fixture_context_v2_breaking()` + `fixture_context_v2_additive()` trio present in `wacp-console/crates/console-test-support/src/fixtures.rs` with docstrings. (`4c6e083`; plan deviation: three fixtures, not two)
+- [x] Three new round-trip tests in `fixtures::tests` pass as part of `cargo test -p console-test-support` (6/6 total). (`4c6e083`)
+- [x] `wacp-console/integration/tests/session_lifecycle_with_schema_change.rs` exists and `cargo test -p console-integration --test session_lifecycle_with_schema_change` is 4/4 green in 0.27 s. (`1225d7f`)
+- [x] `cargo test -p console-integration --test taxonomy_reload` unaffected (4/4). (`1225d7f` verification)
+- [x] `cargo clippy -p console-test-support --all-targets` + `cargo clippy -p console-integration --all-targets` both clean under `-D warnings`. (`4c6e083` + `1225d7f`)
+- [x] HEALTH-LOG §13.5 "Deferred" block struck and replaced with resolution pointer. (this commit)
+- [x] `taxonomy_reload.rs` module doc — §13.5 deferred-pointer removed, see-also added pointing at `session_lifecycle_with_schema_change.rs`. (this commit)
+- [x] AUDIT §13.9.11 closure row added; §12.5 prose updated (52/52 → 56/56, "all sub-scenario deferrals now closed"); §13.7.8 Blockers row updated; footer appended. (this commit)
+- [ ] Plan moved to `impl/archive/context-schema-evolution-plan.md`; status: final. (follows in next commit via `archive-plan` skill)
 
 ## 5. Risks / Open Questions
 
@@ -209,5 +209,5 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 |---|---|---|---|
 | P0 | `7c42659` | 2026-04-24 | Recon complete. Q1–Q4 resolved inline in §3.0. Framing correction in §1: validation fires on `/launch` not `/sessions` create (`routes/sessions.rs:418`, single call site). Q2 confirmed atomic `ArcSwap::store` with no settle delay. Q3 confirmed no schema snapshot — context stored verbatim. Q4 froze 4 scenarios; all use containment-on-violations assertions so no profile seeding is needed. Risks #1, #5, #6 resolved to ~; risk #7 (vertical-id collision in reload) newly surfaced. |
 | P1 | `4c6e083` | 2026-04-24 | **Plan deviation — three fixtures, not two.** P0 Q4's scenario freeze needs one v1 + two distinct v2s: `v2_breaking` (narrows priority to Number + adds required `region`, exercises tests 1+2+3) and `v2_additive` (adds optional `notes`, exercises test 4). Consolidating both evolutions into a single v2 would conflate the additive-vs-breaking signal. Added `evolution_skeleton()` helper so all three fixtures share identical non-schema surface (task_types, workflows, profiles, tools) — only `context_schema` differs. Three fixtures + three round-trip tests; `cargo test -p console-test-support --lib fixtures` 6/6 (3 pre-existing + 3 new). Clippy + fmt clean. |
-| P2 | (this commit) | 2026-04-24 | New integration file `session_lifecycle_with_schema_change.rs` (~330 LOC) with 4 tests, all green in 0.27 s. **Bug caught during first test run:** `violations` live under `details.violations` in the ApiError body (see `console-api/src/error.rs:49–63`), not top-level — `violation_codes` helper fixed to read `body["details"]["violations"]`. Before the fix: 2/4 pass, 2/4 fail with empty `violations`. After: 4/4. `cargo test -p console-integration --test taxonomy_reload` unaffected (4/4). Clippy + fmt clean. DB-seed helper `seed_active_session_with_context` mirrors `recovery_matrix.rs:174` pattern, inlined here since it takes a `context_json` parameter the sibling helper doesn't (no factor-out yet — rule of three not met). |
-| P3 | — | — | Closeout commits (HEALTH-LOG strike + AUDIT row + taxonomy_reload.rs doc edit + archive move). |
+| P2 | `1225d7f` | 2026-04-24 | New integration file `session_lifecycle_with_schema_change.rs` (~330 LOC) with 4 tests, all green in 0.27 s. **Bug caught during first test run:** `violations` live under `details.violations` in the ApiError body (see `console-api/src/error.rs:49–63`), not top-level — `violation_codes` helper fixed to read `body["details"]["violations"]`. Before the fix: 2/4 pass, 2/4 fail with empty `violations`. After: 4/4. `cargo test -p console-integration --test taxonomy_reload` unaffected (4/4). Clippy + fmt clean. DB-seed helper `seed_active_session_with_context` mirrors `recovery_matrix.rs:174` pattern, inlined here since it takes a `context_json` parameter the sibling helper doesn't (no factor-out yet — rule of three not met). |
+| P3 | (this commit) | 2026-04-24 | Closeout: HEALTH-LOG §13.5 struck with resolution pointer; `taxonomy_reload.rs` module doc `:19–24` updated (pointer → closed, see-also added); AUDIT §12.5 prose updated (52/52 → 56/56, "all sub-scenario deferrals now closed"); AUDIT §13.7.8 Blockers row updated; AUDIT §13.9.11 closure row added; AUDIT footer appended. Plan §4 acceptance ticked (9/10 — archive-move is the sole remaining unticked box, done in the next commit per convention). Plan frontmatter status draft → final. Archive move follows via `archive-plan` skill. |

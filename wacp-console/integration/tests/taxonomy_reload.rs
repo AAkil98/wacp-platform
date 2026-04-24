@@ -16,10 +16,12 @@
 //! 4. **repeated_reload_is_idempotent** — two consecutive reloads against
 //!    the same mock state return identical counts.
 //!
-//! **Not covered (deferred, see `HEALTH-LOG.md` §13.5):**
-//! - `context_schema` change affects new sessions but not running ones.
-//!   Requires a second runtime process + SubmitGoal flow + a schema
-//!   evolution in the fixture; multi-step and outside integration scope.
+//! **Previously deferred (§13.5) — closed 2026-04-24.** `context_schema`
+//! evolution landed as a dedicated sibling suite; see
+//! `session_lifecycle_with_schema_change.rs` for the four-scenario
+//! evolution matrix (rejection on added required field, rejection on
+//! type narrowing, active-session preservation across reload, additive
+//! evolution absence-assertion).
 
 use std::collections::HashMap;
 use std::net::SocketAddr;

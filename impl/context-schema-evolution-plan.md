@@ -3,6 +3,7 @@ id: wacp-context-schema-evolution-plan
 type: impl
 status: draft
 created: 2026-04-24T15:14:19
+revised: 2026-04-24T15:30:00
 authors: [AAkil98, Claude Opus 4.7 (1M context)]
 tags: [plan, integration, testing, taxonomy, session-validation]
 depends_on: [wacp-integration-deferred-scenarios-plan]
@@ -23,7 +24,7 @@ Close the last deferred sub-scenario from the §13.7.8 integration + chaos works
 
 **Cost of inaction.** The validation branch itself is covered by `session_validation`'s in-crate `#[cfg(test)]` unit tests (line ~241+ in the same file). What's uncovered: the *composition* of mock-REST fixture swap + `/api/taxonomy/reload` + new session creation + existing-session inspection across the full harness. A future change that accidentally coupled validation to a stale cached schema (e.g., a `lazy_static!` or an `OnceCell` that captures the first-loaded schema and never refreshes) would not be caught by any existing test — the in-crate tests build a fresh `VerticalManifest` per call; the reload suite only checks that the served vertical *list* updates. This plan adds the integration-level glue.
 
-**Framing check (to confirm in P0).** The deferral wording in §13.5 sketches a flow starting with `SubmitGoal`. In practice, session creation via `POST /api/sessions` goes: validate → launch (`session_launcher::launch` which internally drives `SubmitGoal → Decompose → Dispatch`). Validation fires before the launcher, so the scenario does *not* require a full runtime coordination path — the mock-highway + mock-coordinator infrastructure added by the prior plan is not needed here. The "multi-step" aspect is the fixture evolution, not the launcher depth. P0 confirms this.
+**Framing check — confirmed in P0 (2026-04-24).** Validation fires ONLY at `POST /api/sessions/:id/launch` (handler at `wacp-console/crates/console-api/src/routes/sessions.rs:405–445`), not at `POST /api/sessions` (create, `:117–176`). The create endpoint stores `vertical, workflow, context` verbatim into the session row in `CONFIGURING` state without taxonomy lookup. `validate_session` at the launch handler reads `state.taxonomy.load()` fresh every call — no caching, no per-request lazy path. So the test shape is: create (always 201) → launch (422 with violations containing context codes). The "multi-step" language in §13.5 referring to `SubmitGoal` was approximately accurate — the launcher's first step internally is `SubmitGoal` — but the rejection we're testing happens *before* the launcher runs, so no mock-highway / mock-coordinator infrastructure is needed.
 
 ## 2. Phases
 
@@ -38,18 +39,20 @@ Close the last deferred sub-scenario from the §13.7.8 integration + chaos works
 
 ### 3.0 Phase P0 — recon + scope freeze
 
-Open questions to resolve, each with a concrete answer recorded in the plan or in the P0 commit body:
+**Resolved 2026-04-24.** All four questions answered; scope frozen.
 
-- **Q1:** Is `session_validation::validate_session` the only validator that reads `context_schema` on `POST /api/sessions`? Grep trace: `routes/sessions.rs::create_session` → `session_validation::validate_session` → `taxonomy::VerticalManifest`. Confirm no second validator (e.g., a profile-level schema validator) pre-screens the context.
-- **Q2:** When does the indexed taxonomy refresh? Two candidates: (a) `taxonomy_builder::build_index` at boot, re-built only on `/api/taxonomy/reload`; (b) something lazier on a per-request basis. Confirmed (a) is expected; P0 grep verifies. If (b) were true, the test would need different pacing.
-- **Q3:** Does the console store any schema snapshot alongside a session at creation time (e.g., copy required-field set into `session_context` or a sibling table)? If yes, "existing session unaffected" needs to check that the session's stored context survives the evolution; if no, "unaffected" just means the session row is untouched by the reload code path. Expected: no snapshot — validation is a boolean gate, the accepted context is stored verbatim.
-- **Q4:** Final scenario list (scope freeze). Proposed four tests:
-  1. `new_session_rejected_after_field_added_as_required` — v1 has no `region` field; v2 adds `region: string, required=true`. A session created under v1 with no `region` succeeds. After reload to v2, a new POST without `region` returns 422 with `MISSING_CONTEXT`.
-  2. `new_session_rejected_after_field_type_narrowed` — v1 has `amount: string`; v2 narrows to `amount: number`. A POST under v2 with `amount: "100"` (string) returns 422 with `INVALID_CONTEXT`.
-  3. `existing_active_session_preserved_across_schema_evolution` — create a session under v1, then reload to v2 (which would have rejected it), then assert the session is still `active` in DB and still in `active_sessions` map, and its `session_context` is unchanged. Complements (1)+(2): proves evolution isn't retroactive.
-  4. `additive_evolution_accepts_new_optional_field` — v1 has two fields; v2 adds a third optional field. Sessions that omit the new field under v2 succeed. Proves the common safe-evolution path explicitly.
+- **Q1 ✓ Single validator.** `session_validation::validate_session` is the sole reader of `context_schema` on the launch path. Grep confirms two call sites in `routes/sessions.rs`: `:22` (import) and `:418` (invocation inside `launch_session`). The create endpoint `create_session:117–176` writes the session row without touching the taxonomy index. No second validator (no profile-level context pre-screen, no runtime-side context validation — wacp-runtime's `Bind` does not inspect `context_schema`).
+- **Q2 ✓ Eager swap, no caching.** Index lives in `AppState.taxonomy: Arc<ArcSwap<TaxonomyIndex>>`. `sessions.rs:407` does `state.taxonomy.load()` fresh on every launch — no memoization, no per-request lazy path. `/api/taxonomy/reload` calls `build_index(...)` + `state.taxonomy.store(new)` atomically; subsequent launches see new schema with no settle delay. Risk #6 (reload atomicity) effectively resolved — it's an `ArcSwap::store`, synchronous from the caller's perspective.
+- **Q3 ✓ No snapshot.** Session rows store `vertical, workflow, context: Option<String>` verbatim. No schema snapshot, no required-field copy. `build_index` + reload only writes to `state.taxonomy`; zero DB-table touches. `create_session:134–153` stores context as a JSON string with no validation. "Existing session unaffected" = session row fields unchanged + DB state column unchanged.
+- **Q4 ✓ Four tests frozen:**
+  1. **`launch_rejected_after_field_added_as_required`** — v1 schema with 2 fields; session created + context populated for v1. Reload to v2 (adds `region: string, required=true`). Launch the already-created session → 422 with violations array containing `{code: "MISSING_CONTEXT"}`. (We assert *containment* not *equality* on the violations list because absent assignments add `MISSING_ASSIGNMENT` noise — by design; see §3.2 note.)
+  2. **`launch_rejected_after_field_type_narrowed`** — v1: `priority: string`. v2: narrows to `priority: number`. Session created with `"priority": "high"` under v1. Reload to v2. Launch → 422 with violations containing `{code: "INVALID_CONTEXT"}`.
+  3. **`active_session_preserved_across_schema_evolution`** — seed a session row directly via `seed_active_session`-style helper (pattern lifted from `recovery_matrix.rs:174`) in state=`active` with a context that v1 allowed. Reload to a breaking v2. Assert `sessions::get_by_id(&db, &sid)` returns the same state + same context string (no row mutation). Reload path cannot touch the sessions table.
+  4. **`additive_evolution_accepts_session_without_new_optional_field`** — v1 2 fields; v2 adds 3rd optional field. Session created with v1-shaped context. Reload to v2. Launch the session → 422 (MISSING_ASSIGNMENT only, since no profiles seeded) *but* violations list does NOT contain `MISSING_CONTEXT` or `INVALID_CONTEXT`. Absence-assertion documents the "safe evolution" contract.
 
-Drop (4) if scope creep appears — (1)+(2)+(3) are the load-bearing trio. Add (5) `schema_removed_vertical_rejects_new_sessions_with_unknown_vertical_id` only if the verticals-removal path is genuinely different from §13.5's `reload_with_removed_vertical_updates_list`; likely redundant.
+Scenario (5) `schema_removed_vertical` dropped — indistinguishable from the existing `taxonomy_reload::reload_with_removed_vertical_updates_list` at the validation-path level.
+
+**Risk resolutions in P0:** Risk #1 (pre-validation profile deps) dissolved — `validate_session` accumulates all violations without short-circuiting, so tests assert *containment* on the violations list rather than launch success; no profile seeding required. Risk #5 (validation-vs-launcher order) resolved — launch handler at `:395–456` does CONFIGURING→VALIDATING→[validate]→[on-fail back to CONFIGURING; on-pass LAUNCHING→launcher]. Validation strictly before any runtime RPC.
 
 ### 3.1 Phase P1 — fixture pair
 
@@ -92,45 +95,54 @@ New file: `wacp-console/integration/tests/session_lifecycle_with_schema_change.r
 - `admin_client(&console)` seeder — copy from `taxonomy_reload.rs`.
 - `reload(&client)` + `create_session(&client, context: Value)` helper — the latter is new; POSTs to `/api/sessions` and returns the response for the caller to assert on.
 
-**Test skeletons (P0 freezes shapes):**
+**Test skeletons (P0-corrected shape — validation fires on `/launch`, not `/sessions`):**
 
 ```rust
 #[tokio::test]
-async fn new_session_rejected_after_field_added_as_required() {
+async fn launch_rejected_after_field_added_as_required() {
     let rt = RuntimeHarness::spawn_default().await.expect("runtime");
-    let mock_rest = spawn_mock_rest_with(fixtures::fixture_context_v1()).await;
+    let mock_rest = spawn_mock_rest_with([fixtures::fixture_context_v1()]).await;
     let db = console_db::create_test_pool().await.expect("db");
     let console = ConsoleHarness::spawn_with_db(&rt, db.clone()).await.expect("console");
     point_settings_at_mock(&console, &mock_rest).await;
     let client = admin_client(&console).await;
     reload(&client).await; // pick up v1
 
-    // Create under v1 — succeeds.
-    let resp_v1 = create_session(
+    // Step 1 — create session under v1 (no validation at create time; always 201).
+    let sid = create_session(
         &client,
+        "evolution", // vertical id
+        "debug",     // workflow id
         serde_json::json!({"project_id": "p-1", "priority": "high"}),
     ).await;
-    assert!(resp_v1.status().is_success(), "v1 creation: {:?}", resp_v1.status());
 
-    // Evolve: swap to v2 (adds required `region` field).
-    mock_rest.state.set_verticals(map(fixtures::fixture_context_v2()));
+    // Step 2 — evolve schema to v2 (adds required `region`).
+    mock_rest.state.set_verticals(map([fixtures::fixture_context_v2()]));
     reload(&client).await;
 
-    // Create under v2 without `region` — 422 with MISSING_CONTEXT.
-    let resp_v2 = create_session(
-        &client,
-        serde_json::json!({"project_id": "p-2", "priority": 5}),
-    ).await;
-    assert_eq!(resp_v2.status(), 422);
-    let body: serde_json::Value = resp_v2.json().await.unwrap();
+    // Step 3 — attempt launch; validator reads NEW index, rejects on missing `region`.
+    let resp = launch_session(&client, &sid).await;
+    assert_eq!(resp.status(), 422);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let codes: Vec<_> = body["violations"]
+        .as_array().unwrap()
+        .iter()
+        .filter_map(|v| v["code"].as_str())
+        .collect();
     assert!(
-        body["violations"].as_array().unwrap().iter().any(|v| v["code"] == "MISSING_CONTEXT"),
-        "expected MISSING_CONTEXT in: {body:?}",
+        codes.contains(&"MISSING_CONTEXT"),
+        "expected MISSING_CONTEXT in violations (containment assertion — \
+         other codes like MISSING_ASSIGNMENT are expected noise since no \
+         profiles were seeded); got: {body:?}",
     );
 }
 ```
 
-Tests 2 + 3 + 4 follow the same harness shape with different before/after schemas and different assertions. Test 3 inspects DB row state via `console_db::sessions::get(&db, &sid)` + the `active_sessions` map on `console.state`.
+**Why containment rather than equality on violations.** `validate_session` accumulates all 12 checks without short-circuiting (confirmed P0 Q4). A session launched without seeded profiles emits `MISSING_ASSIGNMENT` per vertical role plus whatever context violations apply. Tests assert the *context* codes are present — ignoring assignment noise — which matches the "am I testing the schema-evolution contract" intent. Pre-seeding profiles to clear the assignment violations would quadruple the setup cost for zero additional signal (profiles are exercised in `recovery_matrix` + `launch_failure_matrix`).
+
+**Test 3 uses DB-direct seed** (no create/launch roundtrip) — `seed_active_session(&db, &sid, "u-1", ctx)` pattern lifted from `recovery_matrix.rs:174`. After reload, assert `sessions::get_by_id(&db, &sid)` returns row with unchanged `state == "active"` and unchanged `context`. No `active_sessions` map assertion (the seeded session has no monitor spawned; that would require recovery to run).
+
+**Test 4 absence-assertion** — assert `codes.contains(&"MISSING_CONTEXT") == false && codes.contains(&"INVALID_CONTEXT") == false`. The 422 response still fires because `MISSING_ASSIGNMENT` accumulates; the test's point is that the optional-field evolution did not add a *context* violation.
 
 **Performance target.** 4 tests × ~(runtime-spawn 200 ms + mock-rest-spawn 10 ms + 2 reloads + 2–3 POSTs) ≈ ~1 s total. Well within the 5 s per-file stretch target.
 
@@ -162,12 +174,16 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 
 ## 5. Risks / Open Questions
 
-1. **Session creation pre-validation dependencies.** `POST /api/sessions` may require a seeded profile + verticals + task_type that references `evolution` as a vertical. If the creation flow short-circuits on missing-profile before reaching `session_validation`, the test's assertions about `MISSING_CONTEXT` won't fire — the response would be a different 422 first. Mitigation: P0 traces `routes/sessions.rs::create_session` to confirm validation order; if profile-lookup fires first, P1 fixtures must include a paired profile setup in the mock-rest state or via DB seed.
-2. **Reload atomicity under concurrent session creation.** If test (3)'s "existing session preserved" runs against a reload that fires mid-validation, a race could surface. In practice the test is strictly sequential (create → reload → inspect), so this is a theoretical concern. Worth noting in the file's module doc so future contributors don't add parallelism without thinking about it.
+1. ~~**Session creation pre-validation dependencies.**~~ **Resolved P0.** Create endpoint (`/api/sessions`) does not validate context_schema — only launch does. `validate_session` accumulates violations without short-circuiting, so tests use containment assertions on `MISSING_CONTEXT` / `INVALID_CONTEXT` and tolerate coexisting `MISSING_ASSIGNMENT` noise from absent profiles. Zero profile seeding needed.
+2. **Reload atomicity under concurrent session creation.** If test (3)'s "existing session preserved" runs against a reload that fires mid-validation, a race could surface. In practice the test is strictly sequential (seed → reload → inspect), so this is a theoretical concern. Worth noting in the file's module doc so future contributors don't add parallelism without thinking about it. P0 Q2 confirmed the swap is `ArcSwap::store` (atomic, synchronous from caller's view) — even a concurrent launch would either see v1 fully or v2 fully, never partial.
 3. **Fixture coupling to `wacp-taxonomy::VerticalManifest` shape.** The fixture helpers construct `VerticalManifest` directly, so any field addition to that struct breaks the fixtures the same way it breaks all other fixtures (prior art: `fixture_simple`, `fixture_complex`). Standard mechanical update; not a new risk class.
 4. **Helper duplication between `taxonomy_reload.rs` and `session_lifecycle_with_schema_change.rs`.** `MockRest`, `admin_client`, `reload` would be duplicated across the two files. Two paths: (a) duplicate and accept; (b) factor into `console-test-support/src/mock_rest_spawn.rs` as a first cut. Recommend (a) unless the duplication becomes painful — two integration files is below the "rule of three" threshold and the shapes may legitimately diverge as more scenarios land. If a third file lands, factor then.
-5. **"Multi-step" may or may not need a real launcher roundtrip.** §13.5's framing sentence includes `SubmitGoal` in the step list. If P0 confirms validation fires before the launcher (expected per `routes/sessions.rs:418`), the test's `create_session` can assert on the 422 from validation without ever hitting a coordinator — simpler shape. If validation fires *after* launch begins (unexpected but possible), the test needs `InjectableCoordinator` setup. P0 resolves.
-6. **Taxonomy reload settling time.** After `POST /api/taxonomy/reload` returns 200, is the new index immediately visible to the next `POST /api/sessions`, or is there an async swap boundary? `taxonomy_reload.rs` tests implicitly assume synchronous visibility (the following `list_verticals` call returns updated content). Should hold here; P0 cross-checks.
+5. ~~**"Multi-step" may or may not need a real launcher roundtrip.**~~ **Resolved P0.** Validation fires strictly before the launcher (handler `:405–456` does CONFIGURING→VALIDATING→validate→(on-pass) LAUNCHING→launcher). No `InjectableCoordinator` / mock-highway needed; the 422 returns with the runtime never touched.
+6. ~~**Taxonomy reload settling time.**~~ **Resolved P0.** `ArcSwap::store` is synchronous and atomic. `/api/taxonomy/reload` returning 200 means the next `.load()` sees the new index. No settle delay.
+
+**New risk surfaced in P0:**
+
+7. **Vertical id collision in reload.** The evolved fixture v1/v2 share `id: "evolution"` (by design — they hot-swap in place). But any test that also seeds additional verticals via `fixture_simple` / `fixture_complex` must ensure the mock's `RestState::set_verticals` call passes a HashMap that includes or excludes the target id deliberately. Cost if wrong: schema evolution silently doesn't happen because v2's id changed. Mitigation: use a dedicated `id: "evolution"` in both v1 and v2; other scenarios' verticals either use different ids or are absent from the schema-evolution tests.
 
 ## 6. References
 
@@ -191,7 +207,7 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| P0 | — | — | Recon + Q1–Q4 answers; scope freeze. |
+| P0 | (this commit) | 2026-04-24 | Recon complete. Q1–Q4 resolved inline in §3.0. Framing correction in §1: validation fires on `/launch` not `/sessions` create (`routes/sessions.rs:418`, single call site). Q2 confirmed atomic `ArcSwap::store` with no settle delay. Q3 confirmed no schema snapshot — context stored verbatim. Q4 froze 4 scenarios; all use containment-on-violations assertions so no profile seeding is needed. Risks #1, #5, #6 resolved to ~; risk #7 (vertical-id collision in reload) newly surfaced. |
 | P1 | — | — | Fixture pair `fixture_context_v1/v2` + round-trip test. |
 | P2 | — | — | Integration file + 4 (or frozen-N) scenarios. |
 | P3 | — | — | Closeout commits (HEALTH-LOG strike + AUDIT row + taxonomy_reload.rs doc edit + archive move). |

@@ -1,18 +1,22 @@
 name: CI — mutation testing
 
-# Weekly mutation testing across critical modules. Triggered Mondays at
-# 04:00 UTC + manual dispatch. Surfaces mutation scores per target +
-# the surviving-mutants list. ≥85 % per module is the pass bar; below
-# threshold the per-target job fails but the workflow continues so the
-# aggregator can publish a summary.
+# Mutation testing across critical modules. PR-trigger blocks merge into
+# main on regression; cron + workflow_dispatch retained as defense-in-
+# depth (catches silent CI-runner / cargo-mutants drift between PRs).
+# ≥90 % per module is the pass bar — tightened from 85 % per v0.1.0-gate-
+# enforcement-plan §3.3 P2 after the 2026-04-23 baseline showed 3 of 4
+# targets at 100 % and the 4th (session_monitor) at 98.2 %; 90 % preserves
+# fast-fail on small targets (12-14 mutants → 1 new survivor fails).
 #
 # Spec: wacp-console/specs/coding/wcon-mutation-testing.md
-# Audit: AUDIT-2026-04-15.md §12.6 + §13.7.9
-#
-# Does NOT block PRs — the pipeline runs on its own cadence and surfaces
-# regressions for triage.
+# Audit: AUDIT-2026-04-15.md §12.6 + §13.7.9 (closed)
 
 on:
+  # PR trigger added 2026-04-24 per plan §3.3 P2 (Path A: full PR-gate).
+  # Total parallel wall ≈ 11 min on the 2026-04-23 baseline (longest
+  # target session_monitor at 10m41s; others 2-8m).
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "0 4 * * 1"
   workflow_dispatch:
@@ -68,7 +72,7 @@ jobs:
         continue-on-error: true
 
       - name: Compute score (≥85 % required)
-        run: python3 scripts/mutation-score.py --target wacp-transport-auth --threshold 85 mutants.out
+        run: python3 scripts/mutation-score.py --target wacp-transport-auth --threshold 90 mutants.out
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -108,7 +112,7 @@ jobs:
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)
-        run: python3 scripts/mutation-score.py --target wacp-tools-execution --threshold 85 mutants.out
+        run: python3 scripts/mutation-score.py --target wacp-tools-execution --threshold 90 mutants.out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -147,7 +151,7 @@ jobs:
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)
-        run: python3 scripts/mutation-score.py --target console-core-session_launcher --threshold 85 mutants.out
+        run: python3 scripts/mutation-score.py --target console-core-session_launcher --threshold 90 mutants.out
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -186,7 +190,7 @@ jobs:
             --no-shuffle
         continue-on-error: true
       - name: Compute score (≥85 % required)
-        run: python3 scripts/mutation-score.py --target console-core-session_monitor --threshold 85 mutants.out
+        run: python3 scripts/mutation-score.py --target console-core-session_monitor --threshold 90 mutants.out
       - uses: actions/upload-artifact@v4
         if: always()
         with:

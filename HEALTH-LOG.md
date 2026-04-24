@@ -682,7 +682,18 @@ The test at `compaction.rs:282` exposed it because the assertion at `:300` check
 
 No other broken callers today. Test callers (`tests.rs:987`, `tiered.rs:246/247/268/313`) assert on length only — order doesn't matter.
 
-**Prevention (defensive, not landed).** The conservative move is to lift the sort into `list_segments_in` itself so all callers get id-sorted output by default. No current caller wants raw readdir order; centralizing eliminates the foot-gun and makes `transition_warm_to_cold`'s latent risk go away. Not landed as part of this fix-forward (would expand the diff beyond the CI-unblock scope); filed here for follow-up. Adjacent work: any other production code in the repo that calls `fs::read_dir` and assumes name-order is the same class of bug — quick `grep -rn 'read_dir\|read_dir_all' --include='*.rs'` audit recommended before the next release-tagging round.
+~~**Prevention (defensive, not landed).** The conservative move is to lift the sort into `list_segments_in` itself so all callers get id-sorted output by default. No current caller wants raw readdir order; centralizing eliminates the foot-gun and makes `transition_warm_to_cold`'s latent risk go away. Not landed as part of this fix-forward (would expand the diff beyond the CI-unblock scope); filed here for follow-up. Adjacent work: any other production code in the repo that calls `fs::read_dir` and assumes name-order is the same class of bug — quick `grep -rn 'read_dir\|read_dir_all' --include='*.rs'` audit recommended before the next release-tagging round.~~
+
+**Prevention — RESOLVED 2026-04-24** via `fix(readdir): P3 — sort 4 fs::read_dir sites + lift list_segments_in default` (`534f52c`) on `ci/v0.1.0-gate-enforcement`, per plan `impl/archive/v0.1.0-gate-enforcement-plan.md` P3. Seven total `fs::read_dir` production callers audited:
+- `wacp-trail/compaction.rs:85` — already fixed in `f391239` (the original §17 finding). Sort now redundant since lifted into `list_segments_in`.
+- `wacp-trail/tiered.rs::list_segments_in` — **sort lifted to default**; all callers get id-monotonic ordering without per-call-site sort.
+- `wacp-trail/fs_trail.rs::list_segments` — same shape as compaction; `ids.sort_unstable()` before return.
+- `console-core/taxonomy_parser.rs` — sort by file_name before first-match-wins iteration (silent bug class: undefined winner on duplicate taxonomy files).
+- `wacp-tools/discovery.rs` — sort by file_name for log/test stability.
+- `wacp-runtime/init.rs:773` — documented no-sort-needed (HashMap-keyed downstream).
+- `wacp-trail/fs_snapshot.rs:121` — no-change (explicit max-tracking is correct regardless of order).
+
+2 new regression tests added (`first_match_wins_is_alphabetically_deterministic` in taxonomy_parser, `discover_returns_descriptors_in_alphabetical_order` in discovery). `cargo test --workspace --lib --tests`: 2400 passed, 0 failed.
 
 **Cross-refs.** Companion to §14.1 (also a nondeterminism flake, but in test-infra port allocation). Distinct from §15 (CI workflow path drift) and §16 (clippy gap in test code). Bug class: production code consuming `fs::read_dir` without explicit sort. Fix-forward sibling to `7166cb3` (rustfmt) + `e65c8ea` (rustls-webpki bump) — three inline fix-forwards on top of plan 1 this session.
 

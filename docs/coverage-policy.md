@@ -13,8 +13,8 @@ Per-component absolute floors plus a workspace-wide guardrail. Failing either fa
 | Flag | Line floor | Branch floor | Source baseline (line / branch) | Buffer |
 |---|---|---|---|---|
 | _workspace `default`_ | **70 %** | — | weighted ~74 % across all flags | 4 pt |
-| `rust-wacp` | **83 %** | **TBD** (set post-P1.a re-baseline) | 85.3 % / TBD | 2 pt |
-| `rust-console` | **60 %** | **TBD** (set post-P1.a re-baseline) | 62.2 % / TBD | 2 pt |
+| `rust-wacp` | **83 %** | **TBD** (set post-P1.a baseline measurement) | 85.3 % / TBD | 2 pt |
+| `rust-console` | **60 %** | **TBD** (set post-P1.a baseline measurement) | 62.2 % / TBD | 2 pt |
 | `frontend` | **65 %** | **50 %** | 69.2 % / 54.6 % | 4 / 4 pt |
 | `python` | **78 %** | **38 %** | 80.2 % / 41.5 % | 2 / 3 pt |
 | `frontend-e2e` | _no gate_ | _no gate_ | 0 % when `E2E_COVERAGE` unset | — |
@@ -66,6 +66,12 @@ P1.d of the original plan verified the gate fires by deleting one high-impact te
 - After any `codecov.yml` edit that changes target numbers.
 - After a CI infrastructure change that touches the coverage pipeline (e.g., switching `cargo-llvm-cov` major version).
 - Quarterly spot-check (drop a token test, verify red, revert).
+
+## Toolchain notes
+
+The Rust coverage jobs (`rust-runtime`, `rust-console` in `coverage.yml`) run on **nightly Rust** because `cargo llvm-cov --branch` passes `-Z coverage-options=branch` under the hood, and `-Z` flags require nightly. **Production builds, ci-wacp, and ci-console all stay on stable** — only the coverage jobs use nightly, and only for branch-coverage emission.
+
+Long-term tradeoff (decided 2026-04-24, plan §3.2 P1.a): the alternative was to defer Rust branch coverage entirely until `cargo-llvm-cov` stabilizes the flag (no timeline). Deferral would have left ~85 % of production code (Rust runtime + console) under weaker coverage gates than Python/JS — structural and permanent. Nightly drift is mitigatable: pin to a known-good nightly date if a drift incident bites. Track upstream stabilization at <https://github.com/rust-lang/rust/issues/79649>; revert to stable once branch coverage stabilizes.
 
 ## Cross-refs
 

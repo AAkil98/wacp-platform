@@ -29,13 +29,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Nightly required for `cargo llvm-cov --branch` (passes -Z coverage-
+      # options=branch under the hood; -Z requires nightly). The nightly
+      # requirement is for the coverage job ONLY — production builds, ci-wacp,
+      # and ci-console all stay on stable. See v0.1.0-gate-enforcement-plan
+      # §3.2 P1.a + docs/coverage-policy.md for context. If nightly drift breaks
+      # this job, escalation: pin to a specific nightly date.
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: coverage-wacp
+          key: coverage-wacp-nightly
 
       # Repo .cargo/config.toml sets `-C link-arg=-fuse-ld=mold`; install
       # mold so rustc can link during coverage instrumentation.
@@ -82,13 +88,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Nightly required for `cargo llvm-cov --branch` — see comment on the
+      # rust-runtime job above.
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: coverage-console
+          key: coverage-console-nightly
 
       - uses: rui314/setup-mold@v1
 

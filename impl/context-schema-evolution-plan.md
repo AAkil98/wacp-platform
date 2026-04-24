@@ -31,7 +31,7 @@ Close the last deferred sub-scenario from the §13.7.8 integration + chaos works
 | Phase | Deliverable | Effort | Blocker | Success signal |
 |---|---|---|---|---|
 | P0 | Recon + scope-freeze gate — confirm validation-only path, final scenario list, fixture-pair shape | ~30 min | — | Plan §3.0 notes written with Q1–Q3 resolved; acceptance scenarios frozen; deviations from §13.5 framing (if any) documented |
-| P1 | `fixtures::fixture_context_v1()` + `fixture_context_v2()` pair (evolved schema with one additive + one breaking change) | ~45 min | P0 | `cargo check -p console-test-support` clean; helpers compile; fixture round-trip test updated |
+| P1 | `fixtures::fixture_context_v1()` + `fixture_context_v2_breaking()` + `fixture_context_v2_additive()` trio (see §7 deviation) + `evolution_skeleton()` shared helper | ~45 min | P0 | `cargo check -p console-test-support` clean; 3 round-trip tests pass |
 | P2 | `session_lifecycle_with_schema_change.rs` integration file — 4 scenario tests | ~2h | P1 | `cargo test -p console-integration --test session_lifecycle_with_schema_change` is 4/4 green; existing `--test taxonomy_reload` unaffected (4/4) |
 | P3 | Closeout — HEALTH-LOG §13.5 strike, SEED open follow-up #3 strike, `taxonomy_reload.rs` module doc edit, AUDIT closure row, plan archive | ~20 min | P0+P1+P2 | Plan moved to `impl/archive/`; `grep -n "context_schema" HEALTH-LOG.md` shows only resolved text; SEED follow-up list down to 4 items |
 
@@ -207,7 +207,7 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 
 | Phase | Commit | Date | Note |
 |---|---|---|---|
-| P0 | (this commit) | 2026-04-24 | Recon complete. Q1–Q4 resolved inline in §3.0. Framing correction in §1: validation fires on `/launch` not `/sessions` create (`routes/sessions.rs:418`, single call site). Q2 confirmed atomic `ArcSwap::store` with no settle delay. Q3 confirmed no schema snapshot — context stored verbatim. Q4 froze 4 scenarios; all use containment-on-violations assertions so no profile seeding is needed. Risks #1, #5, #6 resolved to ~; risk #7 (vertical-id collision in reload) newly surfaced. |
-| P1 | — | — | Fixture pair `fixture_context_v1/v2` + round-trip test. |
-| P2 | — | — | Integration file + 4 (or frozen-N) scenarios. |
+| P0 | `7c42659` | 2026-04-24 | Recon complete. Q1–Q4 resolved inline in §3.0. Framing correction in §1: validation fires on `/launch` not `/sessions` create (`routes/sessions.rs:418`, single call site). Q2 confirmed atomic `ArcSwap::store` with no settle delay. Q3 confirmed no schema snapshot — context stored verbatim. Q4 froze 4 scenarios; all use containment-on-violations assertions so no profile seeding is needed. Risks #1, #5, #6 resolved to ~; risk #7 (vertical-id collision in reload) newly surfaced. |
+| P1 | (this commit) | 2026-04-24 | **Plan deviation — three fixtures, not two.** P0 Q4's scenario freeze needs one v1 + two distinct v2s: `v2_breaking` (narrows priority to Number + adds required `region`, exercises tests 1+2+3) and `v2_additive` (adds optional `notes`, exercises test 4). Consolidating both evolutions into a single v2 would conflate the additive-vs-breaking signal. Added `evolution_skeleton()` helper so all three fixtures share identical non-schema surface (task_types, workflows, profiles, tools) — only `context_schema` differs. Three fixtures + three round-trip tests; `cargo test -p console-test-support --lib fixtures` 6/6 (3 pre-existing + 3 new). Clippy + fmt clean. |
+| P2 | — | — | Integration file + 4 scenarios (2 rejection via /launch, 1 DB-seeded preservation, 1 additive absence-assertion). |
 | P3 | — | — | Closeout commits (HEALTH-LOG strike + AUDIT row + taxonomy_reload.rs doc edit + archive move). |

@@ -93,15 +93,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Nightly required for `cargo llvm-cov --branch` — see comment on the
-      # rust-runtime job above.
-      - uses: dtolnay/rust-toolchain@nightly
+      # NOTE on toolchain: rust-wacp runs nightly so it can pass --branch
+      # (see comment on that job). rust-console can NOT — `llvm-cov export`
+      # SIGSEGVs on the wacp-console object set under nightly+--branch
+      # (upstream LLVM bug; reproducible on llvm-cov export both -format=lcov
+      # and -format=text). Until the upstream bug is fixed, rust-console
+      # stays on stable + line-only coverage. Codecov gates rust-console on
+      # line% only; branch% gating is deferred per docs/coverage-policy.md.
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: coverage-console-nightly
+          key: coverage-console
 
       - uses: rui314/setup-mold@v1
 
@@ -131,28 +136,24 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run coverage
-        # --branch + RUSTUP_TOOLCHAIN=nightly — see comment on the rust-runtime
-        # job above.
-        # --codecov instead of --lcov: bypasses an upstream `llvm-cov export
-        # -format=lcov` SIGSEGV that fires on the wacp-console object set
-        # under nightly + --branch. The codecov-format output goes through a
-        # different llvm-cov code path; codecov-action accepts both formats.
-        env:
-          RUSTUP_TOOLCHAIN: nightly
+        # No --branch: rust-console stays on stable + line-only coverage until
+        # the upstream LLVM SIGSEGV in llvm-cov export (under nightly+--branch
+        # against the wacp-console object set) is fixed. See toolchain
+        # comment above + docs/coverage-policy.md "Toolchain notes".
         run: |
-          cargo llvm-cov --codecov --branch --output-path codecov-console.json \
+          cargo llvm-cov --lcov --output-path lcov-console.info \
             -p wacp-console -p console-api -p console-core \
             -p console-db -p console-runtime -p console-test-support
 
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-console
-          path: codecov-console.json
+          path: lcov-console.info
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: codecov-console.json
+          files: lcov-console.info
           flags: rust-console
           fail_ci_if_error: false
         env:

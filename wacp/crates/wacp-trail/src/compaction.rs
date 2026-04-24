@@ -117,7 +117,7 @@ impl CompactionTask {
     /// Returns the number of merge operations performed.
     pub fn merge_warm_segments(&self, threshold_bytes: u64) -> Result<usize, StorageError> {
         let warm = self.tier_manager.list_warm_segments()?;
-        let mut small: Vec<_> = warm
+        let small: Vec<_> = warm
             .iter()
             .filter(|s| s.size_bytes < threshold_bytes)
             .collect();

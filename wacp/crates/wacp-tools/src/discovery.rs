@@ -299,11 +299,7 @@ capabilities:
 
         let result = discover_descriptors(dir.path());
         assert_eq!(result.descriptors.len(), 3);
-        let names: Vec<&str> = result
-            .descriptors
-            .iter()
-            .map(|d| d.name.as_str())
-            .collect();
+        let names: Vec<&str> = result.descriptors.iter().map(|d| d.name.as_str()).collect();
         assert_eq!(names, vec!["a_tool", "m_tool", "z_tool"]);
     }
 }

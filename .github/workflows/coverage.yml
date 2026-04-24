@@ -60,6 +60,11 @@ jobs:
         # --branch enables branch-coverage emission in the lcov output (BRF/BRH
         # lines). Required by codecov.yml's per-component branch floors —
         # see v0.1.0-gate-enforcement-plan §3.2 P1.a + §5.A.
+        # RUSTUP_TOOLCHAIN=nightly overrides the workspace's rust-toolchain.toml
+        # (stable) for this step only — `cargo llvm-cov --branch` passes
+        # -Z coverage-options=branch which requires nightly rustc.
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: |
           cargo llvm-cov --lcov --branch --output-path lcov-wacp.info \
             -p wacp-clock -p wacp-coordinator -p wacp-coordinator-sdk \
@@ -126,7 +131,10 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run coverage
-        # --branch — see comment on the rust-runtime job above.
+        # --branch + RUSTUP_TOOLCHAIN=nightly — see comment on the rust-runtime
+        # job above.
+        env:
+          RUSTUP_TOOLCHAIN: nightly
         run: |
           cargo llvm-cov --lcov --branch --output-path lcov-console.info \
             -p wacp-console -p console-api -p console-core \

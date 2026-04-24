@@ -133,22 +133,26 @@ jobs:
       - name: Run coverage
         # --branch + RUSTUP_TOOLCHAIN=nightly — see comment on the rust-runtime
         # job above.
+        # --codecov instead of --lcov: bypasses an upstream `llvm-cov export
+        # -format=lcov` SIGSEGV that fires on the wacp-console object set
+        # under nightly + --branch. The codecov-format output goes through a
+        # different llvm-cov code path; codecov-action accepts both formats.
         env:
           RUSTUP_TOOLCHAIN: nightly
         run: |
-          cargo llvm-cov --lcov --branch --output-path lcov-console.info \
+          cargo llvm-cov --codecov --branch --output-path codecov-console.json \
             -p wacp-console -p console-api -p console-core \
             -p console-db -p console-runtime -p console-test-support
 
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-console
-          path: lcov-console.info
+          path: codecov-console.json
 
       - name: Upload to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: lcov-console.info
+          files: codecov-console.json
           flags: rust-console
           fail_ci_if_error: false
         env:

@@ -1,21 +1,24 @@
 # Codecov configuration for wacp-platform.
 #
 # Implements the audit's testing-coverage initiative (AUDIT-2026-04-15.md
-# §12.7). Per-language flags carve coverage by surface so that a regression
-# in one component cannot hide behind a rise in another.
+# §12.7) and the v0.1.0-gate-enforcement-plan §3.2 P1.b absolute floors.
+# Per-language flags carve coverage by surface so that a regression in
+# one component cannot hide behind a rise in another.
 #
-# Threshold posture (start strict on patch, sensible on project):
-#   - patch:   new lines must be ≥ 95% covered
-#   - project: project-wide may not drop more than 0.5 pt vs. main
+# **Source of truth for floor numbers + ratchet schedule + handling:
+# `docs/coverage-policy.md`.** Edit there first; mirror here.
 #
-# Threshold floor starts at the day-1 baseline (recorded in TASKS.md and
-# the artifacts produced by .github/workflows/coverage.yml on first run).
-# Monthly ratchets tighten the project floor toward the end-state targets:
-#   - Rust 95% line / 95% branch
-#   - Frontend 95% branch
-#   - Python 95% branch
+# Gate shape (Option C from plan §5.A): per-component absolute floors PLUS
+# a workspace `default: 70%` guardrail. Both must hold. Per-component
+# catches narrow regressions; workspace catches the failure mode where one
+# component silently slides while others mask the aggregate decline.
 #
-# Codecov status checks block merge once the baseline has settled.
+# Patch posture: new lines must be ≥ 95% covered (regression-prevention
+# on incoming change, separate from the project-wide floor).
+#
+# End-state targets (post-v0.1.0 ratchets): Rust 95% line / 95% branch,
+# Frontend 95% branch, Python 95% branch. Distance from current floors
+# is intentional; ratchet schedule in docs/coverage-policy.md.
 
 codecov:
   require_ci_to_pass: true
@@ -29,26 +32,57 @@ coverage:
 
   status:
     project:
+      # Workspace-wide guardrail — Option C. Catches the failure mode where
+      # one component is allowed to silently slide while others mask the
+      # decline at the aggregate. Weighted current-state ~74%; floor 70%
+      # gives a 4pt buffer.
       default:
-        target: auto
+        target: 70%
         threshold: 0.5%
         if_no_uploads: error
+      # Per-component absolute floors. Baseline measurements + buffer
+      # rationale in docs/coverage-policy.md. NOTE: branch coverage
+      # gating is configured separately below (rust-wacp-branches etc.)
+      # for components that emit branch data.
       rust-wacp:
-        target: auto
+        target: 83%
         threshold: 0.5%
         flags: [rust-wacp]
+        if_no_uploads: error
       rust-console:
-        target: auto
+        target: 60%
         threshold: 0.5%
         flags: [rust-console]
+        if_no_uploads: error
       frontend:
-        target: auto
+        target: 65%
         threshold: 0.5%
         flags: [frontend]
+        if_no_uploads: error
       python:
-        target: auto
+        target: 78%
         threshold: 0.5%
         flags: [python]
+        if_no_uploads: error
+      # Branch-coverage gates: separate status entries with coverage_type:
+      # branches. rust-console branch is deferred-on-tool-failure (LLVM
+      # SIGSEGV under nightly+--branch on the wacp-console object set);
+      # see docs/coverage-policy.md "Toolchain notes".
+      rust-wacp-branches:
+        target: 72%
+        threshold: 0.5%
+        flags: [rust-wacp]
+        coverage_type: branches
+      frontend-branches:
+        target: 50%
+        threshold: 0.5%
+        flags: [frontend]
+        coverage_type: branches
+      python-branches:
+        target: 38%
+        threshold: 0.5%
+        flags: [python]
+        coverage_type: branches
 
     patch:
       default:

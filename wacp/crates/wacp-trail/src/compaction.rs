@@ -126,10 +126,10 @@ impl CompactionTask {
             return Ok(0);
         }
 
-        // readdir order is filesystem-dependent; sort by id so the merged
-        // segment keeps the lower id and warm-tier ordering stays monotonic.
-        // See HEALTH-LOG.md §17 for full root-cause analysis.
-        small.sort_by_key(|s| s.id);
+        // Note: `tier_manager.list_warm_segments()` sorts by id since v0.1.0-
+        // gate-enforcement-plan §3.4 P3.d (lifted from the call-site sort
+        // originally added by `f391239` per HEALTH-LOG §17). Iteration here is
+        // implicitly id-monotonic.
 
         // Merge pairs of consecutive small segments.
         let mut merged = 0;

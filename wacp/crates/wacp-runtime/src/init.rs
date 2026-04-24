@@ -778,6 +778,15 @@ impl Runtime {
             }
         };
 
+        // readdir order is filesystem-dependent. Downstream consumers index
+        // manifests by `manifest.id` into HashMap-keyed structures, so order
+        // doesn't affect lookup correctness. Not sorting here is intentional —
+        // adding a sort would only matter for log-emission ordering and
+        // first-load-wins on duplicate ids (the latter is itself a misuse;
+        // operators should ensure unique vertical ids in the manifests dir).
+        // Documented per v0.1.0-gate-enforcement-plan §5.C-C.5 to inoculate
+        // against future "should we sort here?" review questions.
+
         let mut manifests: Vec<VerticalManifest> = entries
             .flatten()
             .filter_map(|entry| {

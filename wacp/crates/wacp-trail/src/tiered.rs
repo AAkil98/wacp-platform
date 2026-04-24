@@ -174,6 +174,15 @@ impl TierManager {
             }
         }
 
+        // Sort by id so all callers get monotonic-id ordering by default.
+        // Original §17 follow-up — pre-fix, `compaction::merge_warm_segments`
+        // assumed callers' iteration order matched id order; fix `f391239`
+        // sorted at the call-site, but lifting the sort here makes
+        // `transition_warm_to_cold` (currently sorts by `seg.created`) and
+        // any future caller safe-by-default. See v0.1.0-gate-enforcement-plan
+        // §5.C-C.6 + HEALTH-LOG §17 "Prevention".
+        segments.sort_by_key(|s| s.id);
+
         Ok(segments)
     }
 }

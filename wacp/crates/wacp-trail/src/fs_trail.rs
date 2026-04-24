@@ -213,6 +213,11 @@ fn list_segments(dir: &Path) -> Result<Vec<u64>, StorageError> {
             ids.push(n);
         }
     }
+    // Sort by id so callers (chronological replay, range queries) see
+    // monotonic ordering regardless of filesystem readdir order. Same
+    // root-cause class as the §17 wacp-trail compaction bug (`f391239`)
+    // — see v0.1.0-gate-enforcement-plan §5.C-C.4.
+    ids.sort_unstable();
     Ok(ids)
 }
 

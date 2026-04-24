@@ -55,12 +55,16 @@ pub fn discover_descriptors(dir: &Path) -> DiscoveryResult {
         }
     };
 
-    for entry in entries {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+    // Collect + sort by file_name so descriptors land in the result vec in a
+    // deterministic order. Order doesn't affect downstream correctness (callers
+    // index by descriptor name into HashMap-keyed structures), but stable
+    // ordering matters for log output and for tests that assert on
+    // `result.descriptors[0]`. Same defensive pattern as taxonomy_parser.rs
+    // and wacp-trail/src/{compaction,fs_trail,tiered}.rs (§17 + plan §5.C).
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|e| e.file_name());
 
+    for entry in entries {
         let path = entry.path();
         if !path.is_file() {
             continue;
@@ -278,5 +282,28 @@ capabilities:
         let result = discover_descriptors(dir.path());
         assert_eq!(result.descriptors.len(), 1); // only top-level
         assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn discover_returns_descriptors_in_alphabetical_order() {
+        // Regression guard for v0.1.0-gate-enforcement-plan §5.C-C.3: descriptors
+        // should land in the result vec in deterministic order regardless of
+        // filesystem readdir behavior. The sort-by-file_name added in P3.b
+        // makes this stable for log output + test assertions.
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write in non-alphabetical order; result should still be sorted.
+        write_json_descriptor(dir.path(), "z_tool");
+        write_json_descriptor(dir.path(), "a_tool");
+        write_json_descriptor(dir.path(), "m_tool");
+
+        let result = discover_descriptors(dir.path());
+        assert_eq!(result.descriptors.len(), 3);
+        let names: Vec<&str> = result
+            .descriptors
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["a_tool", "m_tool", "z_tool"]);
     }
 }

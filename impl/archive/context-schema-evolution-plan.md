@@ -170,7 +170,7 @@ Verification: `cargo test -p console-integration --test session_lifecycle_with_s
 - [x] HEALTH-LOG §13.5 "Deferred" block struck and replaced with resolution pointer. (this commit)
 - [x] `taxonomy_reload.rs` module doc — §13.5 deferred-pointer removed, see-also added pointing at `session_lifecycle_with_schema_change.rs`. (this commit)
 - [x] AUDIT §13.9.11 closure row added; §12.5 prose updated (52/52 → 56/56, "all sub-scenario deferrals now closed"); §13.7.8 Blockers row updated; footer appended. (this commit)
-- [ ] Plan moved to `impl/archive/context-schema-evolution-plan.md`; status: final. (follows in next commit via `archive-plan` skill)
+- [x] Plan moved to `impl/archive/context-schema-evolution-plan.md`; status: final. (this commit via `archive-plan` skill)
 
 ## 5. Risks / Open Questions
 
